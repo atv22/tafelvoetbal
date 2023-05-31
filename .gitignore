@@ -10,3 +10,6 @@ Archief/
 /.streamlit
 secrets.toml
 /External Libraries
+.idea
+.DS_Store
+
