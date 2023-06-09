@@ -5,6 +5,7 @@ import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
+Versie = "Beta versie 0.2 - 9 juni 2023"
 
 # CSS to inject contained in a string
 hide_dataframe_row_index = """
@@ -73,6 +74,36 @@ def get_download_filename(filename, extension):
                                 datetime.datetime.now().strftime("%d/%m/%Y_%H%M%S"),
                                 extension)
 
+def add_request(request):
+    """
+    Add a request to the Google Sheet
+
+    Args:
+        request (str): The request to be added.
+
+    Returns:
+        None
+    """
+
+    # Check if the length of the reqeust is between 2 and 250 characters
+    if len(request) < 2 or len(request) > 250:
+        st.error("De lengte van het verzoek moet tussen de 2 en de 250 tekens zijn. Pas de lengte van het verzoek aan.")
+    else:
+        # Check if the name already exists
+        existing_requests_sheet = client.open('Tafelvoetbal').worksheet("Verzoeken")
+        existing_requests = existing_requests_sheet.col_values(1)[1:]
+        if request in existing_requests:
+            st.error("Verzoek bestaat al! Vul een andere verzoek in.")
+        else:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            new_row = [request, timestamp]
+            # Add the new name to the Google Sheet
+            existing_requests_sheet.append_row(new_row)
+            st.success(f"Verzoek is toegevoegd.")
+            time.sleep(2)
+            # Rerun the Streamlit app to refresh the state
+            st.experimental_rerun()
+
 
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -93,13 +124,13 @@ data = Uitslag.get_all_values()
 
 
 # Define the Streamlit app
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Invullen", "Ranglijst", "Spelers", "Ruwe data", "Colofon"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Invullen", "Ranglijst", "Spelers", "Ruwe data", "Verzoeken", "Colofon"])
 
 # Tabblad 1 #
 
 with tab1:
     st.title("Tafelvoetbal Competitie ⚽")
-    st.header("Beta versie 0.1 - 31 mei 2023")
+    st.header(Versie)
     st.write("Vul de resultaten in:")
 
     # Define dictionary to keep track of selected names
@@ -197,7 +228,7 @@ with tab2:
         df_result.loc[player, 'Ratio'] = ((punten_home + punten_away) / (sum(is_home) + sum(is_away))).round(2)
 
     # df_result['Ratio'] = df_result['Ratio'].round(2)
-    df_result = df_result.sort_values(by=['Punten'], ascending=False)
+    df_result = df_result.sort_values(by=['Ratio', 'Gespeeld', 'Doelsaldo'], ascending=False)
     st.dataframe(df_result)
 
     st.markdown("""<hr style="height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity: 0.8;" /> """, unsafe_allow_html=True)
@@ -222,7 +253,7 @@ with tab3:
     # Get the name from the user
     name = st.text_input("Vul een naam in:")
     # Add the name to the Google Sheet if the user clicks the button
-    if st.button("Voeg toe"):
+    if st.button("Voeg naam toe"):
         add_name(name)
 
     st.markdown("""<hr style="height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity: 0.8;" /> """, unsafe_allow_html=True)
@@ -230,10 +261,10 @@ with tab3:
     # Display current known names
     st.header("Huidige namelijst")
     Namenlijst = client.open('Tafelvoetbal').worksheet("Namen")
-    df = pd.DataFrame(Namenlijst.col_values(1)[1:], columns=['Naam'])
-    df = df.sort_values(by=['Naam'])
-    df.columns = ["Huidige namen"]
-    st.table(df)
+    df_namen = pd.DataFrame(Namenlijst.col_values(1)[1:], columns=['Naam'])
+    df_namen = df_namen.sort_values(by=['Naam'])
+    df_namen.columns = ["Huidige namen"]
+    st.table(df_namen)
 
 # Tabblad 4 #
 
@@ -242,14 +273,44 @@ with tab4:
     st.download_button(label="💾 Download volledige log", data = df.to_csv().encode('utf-8'),
                        file_name=get_download_filename('Tafelvoetbal_volledige_log', 'csv'), mime='text/csv')
 
+    st.markdown("""<hr style="height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity: 0.8;" /> """,
+                unsafe_allow_html=True)
+
+
     url = st.secrets["private_gsheets_url"].public_gsheets_url
     html = f'<iframe src="{url}" width="100%" height="100%" frameborder="0" scrolling="yes"></iframe>'
 
     st.markdown(html, unsafe_allow_html=True)
 
 # Tabblad 5 #
-
 with tab5:
+    st.title("Verzoeken")
+    st.write("Vul hier je verzoeken in voor extra functionaliteit")
+    # Get the name from the user
+    request = st.text_input("Vul een verzoek in:")
+    # Add the name to the Google Sheet if the user clicks the button
+    if st.button("Voeg verzoek toe"):
+        add_request(request)
+
+    st.markdown("""<hr style="height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity: 0.8;" /> """,
+                unsafe_allow_html=True)
+
+    # Display current known names
+    st.header("Huidige verzoeken")
+    # Access the worksheet
+    verzoeken_lijst = client.open('Tafelvoetbal').worksheet("Verzoeken")
+    all_values_verz = verzoeken_lijst.get_all_values()
+
+    # Create a pandas DataFrame
+    df_verzoeken = pd.DataFrame(all_values_verz[1:], columns=all_values_verz[0])
+
+    # Display the DataFrame in a table
+    st.table(df_verzoeken)
+
+
+# Tabblad 6 #
+
+with tab6:
     st.title("Colofon")
-    st.write("Beta versie 0.1 - 31 mei 2023")
+    st.write(Versie)
     st.write("Deze webapp is gemaakt met behulp van ChatGPT door Rick en Arthur")
