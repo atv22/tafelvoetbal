@@ -5,7 +5,9 @@ import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-Versie = "Beta versie 0.2 - 9 juni 2023"
+Versie = "Beta versie 0.2.1 - 13 juni 2023"
+
+st.set_page_config(page_title="Tafelvoetbal", page_icon="⚽", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
 # CSS to inject contained in a string
 hide_dataframe_row_index = """
@@ -133,16 +135,25 @@ with tab1:
     st.header(Versie)
     st.write("Vul de resultaten in:")
 
-    # Define dictionary to keep track of selected names
-    selected_names = {'Thuis speler 1': None, 'Thuis speler 2': None, 'Uit speler 1': None, 'Uit speler 2': None}
+    # Define dictionary to keep track of selected names and klinkers
+    selected_names = {
+        'Thuis speler 1': {'name': None, 'klinkers': None},
+        'Thuis speler 2': {'name': None, 'klinkers': None},
+        'Uit speler 1': {'name': None, 'klinkers': None},
+        'Uit speler 2': {'name': None, 'klinkers': None}
+    }
 
     with st.form("formulier"):
+        c1, c2 = st.columns([4,2])
         players = sorted(complete_list_of_players)
 
-        # Create dropdowns for each player
+        # Create dropdowns and number inputs for each player
         for title in selected_names:
-            selected_name = st.selectbox(title, players) # if name not in selected_names.values()])
-            selected_names[title] = selected_name
+            with c1:
+                selected_name = st.selectbox(title, players)
+            with c2:
+                selected_klinkers = st.number_input(f"Aantal klinkers {title}:", min_value=0, max_value=10, step=1)
+            selected_names[title] = {'name': selected_name, 'klinkers': selected_klinkers}
 
         # Get the scores from the user
         home_score = st.number_input("Score Thuis team:", min_value=0, max_value=10, step=1)
@@ -155,14 +166,24 @@ with tab1:
                 st.error('Wijzig de einduitslag. Beide scores kunnen niet 10 zijn.')
             elif home_score != 10 and away_score != 10:
                 st.error('Wijzig de einduitslag. Eén van de scores moet 10 zijn.')
-            elif len(set(selected_names.values())) < len(selected_names):
+            elif len(set(player['name'] for player in selected_names.values())) < len(selected_names):
                 st.error("Selecteer elke speler slechts één keer.")
             else:
                 time.sleep(1)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                values = [selected_names['Thuis speler 1'], selected_names['Thuis speler 2'],
-                          selected_names['Uit speler 1'], selected_names['Uit speler 2'], home_score,
-                          away_score, timestamp]
+                values = [
+                    selected_names['Thuis speler 1']['name'],
+                    selected_names['Thuis speler 2']['name'],
+                    selected_names['Uit speler 1']['name'],
+                    selected_names['Uit speler 2']['name'],
+                    home_score,
+                    away_score,
+                    timestamp,
+                    selected_names['Thuis speler 1']['klinkers'],
+                    selected_names['Thuis speler 2']['klinkers'],
+                    selected_names['Uit speler 1']['klinkers'],
+                    selected_names['Uit speler 2']['klinkers']
+                    ]
                 Uitslag.append_row(values)
                 st.success("Uitslag toegevoegd!")
 
@@ -179,6 +200,10 @@ with tab2:
 
     df['Thuis_score'] = df['Thuis_score'].astype(int)
     df['Uit_score'] = df['Uit_score'].astype(int)
+    df['Klinkers_thuis_1'] = df['Klinkers_thuis_1'].astype(int)
+    df['Klinkers_thuis_2'] = df['Klinkers_thuis_2'].astype(int)
+    df['Klinkers_uit_1'] = df['Klinkers_uit_1'].astype(int)
+    df['Klinkers_uit_2'] = df['Klinkers_uit_2'].astype(int)
 
     # Punten per wedstrijd berekenen
     df['Thuis_punten'] = df.apply(lambda row:
@@ -198,11 +223,15 @@ with tab2:
     scores = ['Thuis_score', 'Uit_score']
     teams = ['Thuis_1', 'Thuis_2', 'Uit_1', 'Uit_2']
     punten = ['Thuis_punten', 'Uit_punten']
+    klinkers = ['Klinkers_thuis_1', 'Klinkers_thuis_2', 'Klinkers_uit_1', 'Klinkers_uit_2']
     df_players = df[teams].apply(lambda x: x.str.strip())
 
     df_scores = df[scores].apply(pd.to_numeric)
     df_punten = df[punten].apply(pd.to_numeric)
-    df_result = pd.DataFrame(index=players, columns=['Gespeeld', 'Punten', 'Ratio', 'Voor', 'Tegen', 'Doelsaldo'])
+    df_klinkers = df[klinkers].apply(pd.to_numeric)
+    df_result = pd.DataFrame(index=players, columns=[
+        'Gespeeld', 'Punten', 'Ratio', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers'
+    ])
 
     for player in players:
         is_home = df_players['Thuis_1'] == player
@@ -220,12 +249,18 @@ with tab2:
         punten_home = df_punten['Thuis_punten'][is_home].sum()
         punten_away = df_punten['Uit_punten'][is_away].sum()
 
+        klinkers_home_1 = df_klinkers['Klinkers_thuis_1'][df_players['Thuis_1'] == player].sum()
+        klinkers_home_2 = df_klinkers['Klinkers_thuis_2'][df_players['Thuis_2'] == player].sum()
+        klinkers_away_1 = df_klinkers['Klinkers_uit_1'][df_players['Uit_1'] == player].sum()
+        klinkers_away_2 = df_klinkers['Klinkers_uit_2'][df_players['Uit_2'] == player].sum()
+
         df_result.loc[player, 'Voor'] = score_home + score_away
         df_result.loc[player, 'Tegen'] = score_not_home + score_not_away
         df_result.loc[player, 'Doelsaldo'] = score_home + score_away - score_not_home - score_not_away
         df_result.loc[player, 'Punten'] = punten_home + punten_away
         df_result.loc[player, 'Gespeeld'] = sum(is_home) + sum(is_away)
         df_result.loc[player, 'Ratio'] = ((punten_home + punten_away) / (sum(is_home) + sum(is_away))).round(2)
+        df_result.loc[player, 'Klinkers'] = klinkers_home_1+klinkers_home_2+klinkers_away_1+klinkers_away_2
 
     # df_result['Ratio'] = df_result['Ratio'].round(2)
     df_result = df_result.sort_values(by=['Ratio', 'Gespeeld', 'Doelsaldo'], ascending=False)
