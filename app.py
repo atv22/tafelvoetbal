@@ -5,7 +5,7 @@ import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-Versie = "Beta versie 0.2.1 - 13 juni 2023"
+Versie = "Beta versie 0.2.2 - 14 juni 2023"
 
 st.set_page_config(page_title="Tafelvoetbal", page_icon="⚽", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
@@ -134,7 +134,7 @@ with tab1:
     st.title("Tafelvoetbal Competitie ⚽")
     st.header(Versie)
     st.write("Vul de resultaten in:")
-
+    klink = st.radio("Zijn er klinkers gescoord? (Als ja, draai dan je scherm op 📱)", ("Nee", "Ja"))
     # Define dictionary to keep track of selected names and klinkers
     selected_names = {
         'Thuis speler 1': {'name': None, 'klinkers': None},
@@ -144,17 +144,22 @@ with tab1:
     }
 
     with st.form("formulier"):
-        c1, c2 = st.columns([4,2])
+        if klink == "Ja":
+            c1, c2 = st.columns([2,1])
         players = sorted(complete_list_of_players)
 
         # Create dropdowns and number inputs for each player
-        for title in selected_names:
-            with c1:
+        if klink == "Ja":
+            for title in selected_names:
+                with c1:
+                    selected_name = st.selectbox(title, players)
+                with c2:
+                    selected_klinkers = st.number_input(f"Aantal klinkers {title}:", min_value=0, max_value=10, step=1)
+                selected_names[title] = {'name': selected_name, 'klinkers': selected_klinkers}
+        else:
+            for title in selected_names:
                 selected_name = st.selectbox(title, players)
-            with c2:
-                selected_klinkers = st.number_input(f"Aantal klinkers {title}:", min_value=0, max_value=10, step=1)
-            selected_names[title] = {'name': selected_name, 'klinkers': selected_klinkers}
-
+                selected_names[title] = {'name': selected_name, 'klinkers': 0}
         # Get the scores from the user
         home_score = st.number_input("Score Thuis team:", min_value=0, max_value=10, step=1)
         away_score = st.number_input("Score Uit team:", min_value=0, max_value=10, step=1)
