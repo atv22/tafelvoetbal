@@ -269,12 +269,22 @@ with tab2:
 
     # df_result['Ratio'] = df_result['Ratio'].round(2)
     df_result = df_result.sort_values(by=['Ratio', 'Gespeeld', 'Doelsaldo'], ascending=False)
-    st.dataframe(df_result)
+
+    filter = st.number_input("Selecteer een minimum aantal wedstrijden",
+                              min_value=0, max_value=20, value=3)
+
+    # Filter the DataFrame based on the selected minimum number of points
+    filtered_df_result = df_result[df_result['Gespeeld'] >= filter]
+
+    # Display the filtered DataFrame
+    st.dataframe(filtered_df_result)
 
     st.markdown("""<hr style="height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity: 0.8;" /> """, unsafe_allow_html=True)
 
     st.header("Alle uitslagen")
+    players.sort()
     players.insert(0, 'Alle spelers')
+
     search_name = st.selectbox('Selecteer alle wedstrijden of van één specifieke speler:', players)
 
     # Filter the DataFrame based on the searched name
