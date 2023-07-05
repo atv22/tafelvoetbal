@@ -5,7 +5,7 @@ import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 
-Versie = "Beta versie 0.2.2 - 14 juni 2023"
+Versie = "Beta versie 0.2.3 - 6 juli 2023"
 
 st.set_page_config(page_title="Tafelvoetbal", page_icon="⚽", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
