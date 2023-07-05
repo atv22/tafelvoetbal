@@ -225,6 +225,7 @@ with tab2:
 
     # calculate the score per player
     players = Namen['Naam'].tolist()
+    players = [player for player in players if player not in ['Niemand', 'Niemanduit']]
     scores = ['Thuis_score', 'Uit_score']
     teams = ['Thuis_1', 'Thuis_2', 'Uit_1', 'Uit_2']
     punten = ['Thuis_punten', 'Uit_punten']
