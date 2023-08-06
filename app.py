@@ -4,8 +4,9 @@ import streamlit as st
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
+import numpy as np
 
-Versie = "Beta versie 0.2.3 - 6 juli 2023"
+Versie = "Beta versie 0.2.4 - 6 augustus 2023"
 
 st.set_page_config(page_title="Tafelvoetbal", page_icon="⚽", layout="centered", initial_sidebar_state="auto", menu_items=None)
 
@@ -190,7 +191,12 @@ with tab1:
                     selected_names['Uit speler 2']['klinkers']
                     ]
                 Uitslag.append_row(values)
+                for team, player in selected_names.items():
+                    if player['name'] == 'Kwint':
+                        if ('Thuis' in team and away_score > home_score) | ('Uit' in team and home_score > away_score):
+                            st.balloons()                
                 st.success("Uitslag toegevoegd!")
+
 
 # Tabblad 2 #
 
@@ -236,7 +242,7 @@ with tab2:
     df_punten = df[punten].apply(pd.to_numeric)
     df_klinkers = df[klinkers].apply(pd.to_numeric)
     df_result = pd.DataFrame(index=players, columns=[
-        'Gespeeld', 'Punten', 'Ratio', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers'
+        'Gespeeld', 'Punten', 'Ratio', 'Voor', 'Tegen', 'Doelsaldo', 'Doelpunten gem.', 'Klinkers'
     ])
 
     for player in players:
@@ -263,13 +269,14 @@ with tab2:
         df_result.loc[player, 'Voor'] = score_home + score_away
         df_result.loc[player, 'Tegen'] = score_not_home + score_not_away
         df_result.loc[player, 'Doelsaldo'] = score_home + score_away - score_not_home - score_not_away
+        df_result.loc[player, 'Doelpunten gem.'] = ((score_home + score_away) / (sum(is_home) + sum(is_away))).round(2)
         df_result.loc[player, 'Punten'] = punten_home + punten_away
         df_result.loc[player, 'Gespeeld'] = sum(is_home) + sum(is_away)
         df_result.loc[player, 'Ratio'] = ((punten_home + punten_away) / (sum(is_home) + sum(is_away))).round(2)
         df_result.loc[player, 'Klinkers'] = klinkers_home_1+klinkers_home_2+klinkers_away_1+klinkers_away_2
 
     # df_result['Ratio'] = df_result['Ratio'].round(2)
-    df_result = df_result.sort_values(by=['Ratio', 'Gespeeld', 'Doelsaldo'], ascending=False)
+    df_result = df_result.sort_values(by=['Ratio', 'Doelpunten gem.', 'Gespeeld'], ascending=False)
 
     filter = st.number_input("Selecteer een minimum aantal wedstrijden",
                               min_value=0, max_value=20, value=3)
