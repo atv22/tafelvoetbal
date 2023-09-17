@@ -173,6 +173,19 @@ def calculate_elo_ratings(selected_names, player_ratings, home_score, away_score
                                           score_factor)
         player_ratings.loc[idx, 'Rating'] = new_rating
 
+#Define function to get number of klinkers per player
+def get_klinkers_for_player(player, row):
+    if player in row['Thuis_1']:
+        return row['Klinkers_thuis_1']
+    elif player in row['Thuis_2']:
+        return row['Klinkers_thuis_2']
+    elif player in row['Uit_1']:
+        return row['Klinkers_uit_1']
+    elif player in row['Uit_2']:
+        return row['Klinkers_uit_2']
+    else:
+        return 0
+
 
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -399,7 +412,6 @@ with tab4:
 
     df_elo = df[~df[['Thuis_1', 'Thuis_2', 'Uit_1', 'Uit_2']].isin(['Niemand', 'Niemanduit']).any(axis=1)]
 
-
     # Define the ELO calculation function
     def elo_calculation(player_elo, opponent_elo, score, score_opp):
 
@@ -464,9 +476,24 @@ with tab4:
                 # Calculate average goals per match
                 avg_goals_per_match = round(total_goals / total_matches, 2)
 
+                # Calculate opposing goals
+                total_goals_opposing = sum(stats[7] for stats in player_stats[player]) + opposing_score
+
+                # Calculate goal difference per match and overall
+                goal_diff = score - opposing_score
+                goal_diff_total = sum(stats[8] for stats in player_stats[player]) + goal_diff
+                avg_goal_diff = round(goal_diff_total/total_matches, 2)
+
+                # Calculate klinkers
+                klinkers = get_klinkers_for_player(player, row)
+                klinkers_total = sum(stats[12] for stats in player_stats[player]) + klinkers
+                avg_klinkers = round(klinkers_total / total_matches, 2)
+
                 player_stats[player].append(
-                    [match_index, timestamp, elo, total_matches, score, total_goals, avg_goals_per_match])
-                # player_stats[player][-1].append(opponents)
+                    [match_index, timestamp, elo, total_matches, score, total_goals, avg_goals_per_match,
+                     opposing_score, goal_diff, goal_diff_total, avg_goal_diff, total_goals_opposing,
+                     klinkers, klinkers_total, avg_klinkers]
+                )
         match_ind += 1
 
     # Create a DataFrame 'df_player' with the latest stats for each player
@@ -475,41 +502,71 @@ with tab4:
         latest_stat = stats[-1]  # Get the latest stats
         player_rows.append([player] + latest_stat)
 
-    col = ['Speler', 'Wedstrijd Index', 'Timestamp', 'ELO', 'Totaal aantal wedstrijden', 'Doelpunten laatste wedstrijd',
-           'Totaal aantal doelpunten', 'Gem aantal doelpunten per wedstrijd']
+    col = ['Speler', 'Wedstrijd Index', 'Timestamp', 'ELO', 'Gespeeld', 'Doelpunten laatste wedstrijd',
+           'Voor', 'Gem aantal doelpunten per wedstrijd',
+           'Score tegenstander', 'Doelsaldo wedstrijd', 'Doelsaldo', 'Gem. doelsaldo', 'Tegen',
+           'Klinkers wedstrijd', 'Klinkers', 'Gem. klinkers']
     df_player = pd.DataFrame(player_rows, columns=col)
 
     df_player = df_player.sort_values(by='ELO', ascending=False)
 
+    # Display the ELO rating for all players
+    df_player = df_player[["Speler", "ELO", "Gespeeld", "Voor", "Tegen", "Doelsaldo", "Gem. doelsaldo", "Klinkers"]]
+
+    st.title("ELO rating (bèta)")
+    st.header("Huidige ELO rating van alle spelers")
+
     # Display the player statistics DataFrame
+    st.write(df_player)
+
+    st.header("Ontwikkeling ELO rating per speler")
     # Select a player using a Streamlit widget
     players_elo = sorted(list(player_stats.keys()))
-    selected_player_elo = st.selectbox("Select a player:", players_elo)
+    selected_player_elo = st.selectbox("Selecteer een speler:", players_elo)
 
-    # Define a function to plot ELO development for a selected player
+    # Define a function to plot ELO development or gem. doelsaldo for a selected player
 
     def plot_elo_development(player_stat, selected_player_elo_f):
         elo_data = {
             "Match Index": [stats[3] for stats in player_stat[selected_player_elo_f]],
             "ELO Rating": [stats[2] for stats in player_stat[selected_player_elo_f]],
-            "Doelpunten laatste wedstrijd": [stats[4] for stats in player_stat[selected_player_elo_f]]
+            "Doelsaldo laatste wedstrijd": [stats[8] for stats in player_stat[selected_player_elo_f]],
+            "Gem. doelsaldo": [stats[10] for stats in player_stat[selected_player_elo_f]]
         }
 
         df_elo = pd.DataFrame(elo_data)
 
         st.write(df_elo)
 
-        st.line_chart(df_elo.set_index("Match Index"))
+        selected_statistic = st.selectbox("Select a Statistic", ['ELO Rating', 'Gem. doelsaldo'])
+
+        st.line_chart(df_elo[selected_statistic])
 
 
     # Plot ELO development for the selected player
     if selected_player_elo:
         plot_elo_development(player_stats, selected_player_elo)
+    st.divider()
+    st.header("Achterliggende data")
+    st.write("Per speler per wedstrijd:")
+    st.markdown("""
+    0. Wedstrijd ID (doorlopend nummer over alle wedstrijden)
+    1. Tijdstip van invoeren
+    2. Nieuwe ELO rating
+    3. Aantal gespeelde wedstrijden
+    4. Doelpunten voor laatste wedstrijd
+    5. Totaal aantal doelpunten over alle wedstrijden
+    6. Gemiddeld aantal doelpunten per wedstrijden
+    7. Doelpunten tegen laatste wedstrijd
+    8. Doelsaldo wedstrijd
+    9. Doelsaldo totaal
+    10. Gemiddeld doelsaldo
+    11. Tegendoelpunten totaal
+    12. Klinkers wedstrijd
+    13. Klinkers totaal
+    14. Klinkers gemiddeld
+    """)
 
-    # df_player needs to be double checked!
-    df_player = df_player[["Speler", "ELO", "Totaal aantal wedstrijden"]]
-
-    st.write(df_player)
     st.write(player_stats)
 
 
