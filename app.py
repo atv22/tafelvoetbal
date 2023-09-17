@@ -6,7 +6,7 @@ import pandas as pd
 from google.oauth2.service_account import Credentials
 import numpy as np
 
-Versie = "Beta versie 0.3.0 - 16 september 2023"
+Versie = "Beta versie 0.3.1 - 17 september 2023"
 
 st.set_page_config(page_title="Tafelvoetbal", page_icon="⚽", layout="centered", initial_sidebar_state="auto",
                    menu_items=None)
