@@ -415,7 +415,7 @@ with tab4:
     # Define the ELO calculation function
     def elo_calculation(player_elo, opponent_elo, score, score_opp):
 
-        k_factor = 64  # You can adjust this value as needed
+        k_factor = 32  # You can adjust this value as needed
         expected_outcome = 1 / (1 + 10 ** ((opponent_elo - player_elo) / 400))
 
         # Calculate the actual outcome based on the score difference
