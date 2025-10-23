@@ -60,9 +60,11 @@ with st.form("formulier"):
         ]
         ws.append_row(values)
         for team, player in selected_names.items():
-            if player['name'] == 'Kwint':
+            if player['name'] == 'Robert':
                 if ('Thuis' in team and away_score > home_score) or ('Uit' in team and home_score > away_score):
                     st.balloons()
+            if (home_score == 10 and away_score == 0) or (home_score == 0 and away_score == 10):
+                st.balloons()
         st.success("Uitslag toegevoegd!")
         time.sleep(1)
         st.experimental_rerun()
