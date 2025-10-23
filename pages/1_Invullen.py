@@ -3,6 +3,10 @@ import datetime as dt
 import streamlit as st
 from config import get_client, get_players_list, SHEET_NAME
 from utils import get_download_filename
+from styles import setup_page
+
+setup_page()
+
 st.title("Tafelvoetbal Competitie ⚽ — Invullen")
 klink = st.radio("Zijn er klinkers gescoord? (Als ja, draai dan je scherm op 📱)", ("Nee", "Ja"))
 players = sorted(get_players_list())

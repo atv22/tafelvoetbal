@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 from config import get_uitslag_df, get_players_list
+
+from styles import setup_page
+
+setup_page()
 st.title(":crown: Ranglijst :crown:")
 df = get_uitslag_df()
 players = [p for p in get_players_list() if p not in ['Niemand', 'Niemanduit']]

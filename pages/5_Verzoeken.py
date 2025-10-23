@@ -1,6 +1,10 @@
 import streamlit as st
 from config import get_uitslag_df, get_public_sheet_url
 from utils import get_download_filename
+from styles import setup_page
+
+setup_page()
+
 st.title("Ruwe data google sheet")
 df = get_uitslag_df()
 st.download_button(
