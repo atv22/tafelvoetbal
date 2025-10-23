@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+from styles import setup_page
+
+setup_page()
 
 goede_wachtwoord = "Klinker"
 if "authenticated" not in st.session_state:
