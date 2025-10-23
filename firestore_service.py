@@ -102,3 +102,20 @@ def add_match_and_update_elo(match_data, elo_updates):
     except Exception as e:
         print(f"Error during batch commit: {e}")
         return False
+
+def delete_player_by_id(player_id):
+    """Verwijdert een speler op basis van zijn document ID."""
+    try:
+        players_ref.document(player_id).delete()
+        return True
+    except Exception as e:
+        print(f"Fout bij verwijderen van speler {player_id}: {e}")
+        return False
+
+def delete_matches_by_player_name(player_name):
+    """Verwijdert alle wedstrijden waar een specifieke speler aan meedeed."""
+    # Deze functie is complexer omdat we eerst moeten queryen.
+    # Voor een simpele test laten we dit even achterwege en focussen we op het verwijderen van spelers.
+    # In een productie-omgeving zou je hier een query bouwen.
+    print(f"Opruimen van wedstrijden voor {player_name} is niet geïmplementeerd in deze simpele test.")
+    pass
