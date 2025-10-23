@@ -1,1 +1,5 @@
 gspread==5.9.0
+streamlit
+pandas
+numpy
+google-auth
