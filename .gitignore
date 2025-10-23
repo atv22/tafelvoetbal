@@ -12,4 +12,4 @@ secrets.toml
 /External Libraries
 .idea
 .DS_Store
-
+__pycache__
