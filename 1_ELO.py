@@ -6,7 +6,7 @@ from styles import setup_page
 
 setup_page()
 
-st.title("ELO rating (bèta)")
+st.title(":crown: ELO rating (bèta) :crown:")
 df = get_uitslag_df()
 if df.empty:
     st.info("Nog geen wedstrijden geregistreerd.")
