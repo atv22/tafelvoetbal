@@ -10,7 +10,11 @@ import pandas as pd
 def initialize_firestore():
     """Maakt verbinding met Firestore met behulp van de Streamlit secrets."""
     # Converteer de TOML-string uit secrets.toml naar een dictionary
-    key_dict = json.loads(st.secrets["firestore_credentials"])
+    try:
+        key_dict = json.loads(st.secrets["firestore_credentials"])
+    except json.decoder.JSONDecodeError as e:
+        print(f"Error decoding JSON: {e}")
+        raise
     creds = service_account.Credentials.from_service_account_info(key_dict)
     db = google.cloud.firestore.Client(credentials=creds)
     return db
