@@ -2,7 +2,11 @@ import streamlit as st
 import pandas as pd
 from config import get_uitslag_df
 from utils import get_klinkers_for_player, elo_calculation
-st.title("ELO rating (bèta)")
+from styles import setup_page
+
+setup_page()
+
+st.title(":crown: ELO rating (bèta) :crown:")
 df = get_uitslag_df()
 if df.empty:
     st.info("Nog geen wedstrijden geregistreerd.")

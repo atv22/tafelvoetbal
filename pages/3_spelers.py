@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 from config import get_players_list, get_client, SHEET_NAME
 from utils import add_name
+from styles import setup_page
+
+setup_page()
+
 st.header("Voeg een speler toe")
 name = st.text_input("Vul een naam in:")
 if st.button("Voeg naam toe"):
