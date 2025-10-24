@@ -1,77 +1,91 @@
 import streamlit as st
 import pandas as pd
-from config import get_uitslag_df
-from utils import get_klinkers_for_player, elo_calculation
+import firestore_service as db # Use Firestore
 from styles import setup_page
 
 setup_page()
 
-st.title(":crown: ELO rating (bèta) :crown:")
-df = get_uitslag_df()
-if df.empty:
-    st.info("Nog geen wedstrijden geregistreerd.")
+st.title(":crown: ELO rating :crown:")
+
+# --- Data ophalen ---
+players_df = db.get_players()
+matches_df = db.get_matches()
+
+if players_df.empty:
+    st.info("Nog geen spelers geregistreerd.")
     st.stop()
-# Filter er ‘Niemand’ regels uit
-mask_valid = ~df[['Thuis_1','Thuis_2','Uit_1','Uit_2']].isin(['Niemand','Niemanduit']).any(axis=1)
-df_elo = df[mask_valid]
-player_stats = {}
-match_ind = 1
-for _, row in df_elo.iterrows():
-    home_team = [row['Thuis_1'], row['Thuis_2']]
-    away_team = [row['Uit_1'], row['Uit_2']]
-    home_score = int(row['Thuis_score'])
-    away_score = int(row['Uit_score'])
-    timestamp = row['Timestamp']
-    for team, score, opposing_team, opposing_score in [
-        (home_team, home_score, away_team, away_score),
-        (away_team, away_score, home_team, home_score),
-    ]:
-        elo_temp_match = {}
-        for t in [team, opposing_team]:
-            for player in t:
-                player_stats.setdefault(player, [])
-                elo = 1000 if not player_stats[player] else player_stats[player][-1][2]
-                elo_temp_match[player] = elo
-        for player in team:
-            player_stats.setdefault(player, [])
-            match_index = match_ind
-            elo = elo_temp_match[player]
-            opponents = [p for p in opposing_team]
-            opponent_elo = sum(elo_temp_match[o] for o in opponents) / 2
-            elo = elo_calculation(elo, opponent_elo, score, opposing_score)
-            total_goals = sum(s[4] for s in player_stats[player]) + score
-            total_matches = len(player_stats[player]) + 1
-            avg_goals_per_match = round(total_goals / total_matches, 2)
-            total_goals_opposing = sum(s[7] for s in player_stats[player]) + opposing_score
-            goal_diff = score - opposing_score
-            goal_diff_total = sum(s[8] for s in player_stats[player]) + goal_diff
-            avg_goal_diff = round(goal_diff_total / total_matches, 2)
-            klinkers = get_klinkers_for_player(player, row)
-            klinkers_total = sum(s[12] for s in player_stats[player]) + klinkers
-            avg_klinkers = round(klinkers_total / total_matches, 2)
-            player_stats[player].append([
-                match_index, timestamp, elo, total_matches, score, total_goals, avg_goals_per_match,
-                opposing_score, goal_diff, goal_diff_total, avg_goal_diff, total_goals_opposing,
-                klinkers, klinkers_total, avg_klinkers,
-            ])
-            match_ind += 1
-# overzicht huidig
-rows = []
-for player, stats in player_stats.items():
-    latest = stats[-1]
-    rows.append([player] + latest)
-col = ['Speler','Wedstrijd Index','Timestamp','ELO','Gespeeld','Doelpunten laatste wedstrijd','Voor',
-       'Gem aantal doelpunten per wedstrijd','Score tegenstander','Doelsaldo wedstrijd','Doelsaldo',
-       'Gem. doelsaldo','Tegen','Klinkers wedstrijd','Klinkers','Gem. klinkers']
-df_player = pd.DataFrame(rows, columns=col).sort_values(by='ELO', ascending=False)
+
+# --- Bereken extra statistieken ---
+def calculate_stats(players, matches):
+    stats_list = []
+    for index, player in players.iterrows():
+        player_name = player['speler_naam']
+        player_matches = matches[
+            (matches['thuis_1'] == player_name) | (matches['thuis_2'] == player_name) |
+            (matches['uit_1'] == player_name) | (matches['uit_2'] == player_name)
+        ]
+
+        if player_matches.empty:
+            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0}
+        else:
+            goals_for = 0
+            goals_against = 0
+            klinkers = 0
+            for _, match in player_matches.iterrows():
+                if player_name in [match['thuis_1'], match['thuis_2']]:
+                    goals_for += match['thuis_score']
+                    goals_against += match['uit_score']
+                    if player_name == match['thuis_1']:
+                        klinkers += match.get('klinkers_thuis_1', 0)
+                    else:
+                        klinkers += match.get('klinkers_thuis_2', 0)
+                else:
+                    goals_for += match['uit_score']
+                    goals_against += match['thuis_score']
+                    if player_name == match['uit_1']:
+                        klinkers += match.get('klinkers_uit_1', 0)
+                    else:
+                        klinkers += match.get('klinkers_uit_2', 0)
+            
+            stats = {
+                'Gespeeld': len(player_matches),
+                'Voor': int(goals_for),
+                'Tegen': int(goals_against),
+                'Doelsaldo': int(goals_for - goals_against),
+                'Klinkers': int(klinkers)
+            }
+        
+        stats['Speler'] = player_name
+        stats['ELO'] = player['rating']
+        stats_list.append(stats)
+        
+    return pd.DataFrame(stats_list)
+
+# --- Huidige ELO rating tonen ---
 st.header("Huidige ELO rating van alle spelers")
-st.dataframe(df_player[["Speler","ELO","Gespeeld","Voor","Tegen","Doelsaldo","Gem. doelsaldo","Klinkers"]])
+
+if not players_df.empty:
+    stats_df = calculate_stats(players_df, matches_df)
+    
+    # Sorteer en selecteer kolommen voor weergave
+    display_df = stats_df.sort_values(by='ELO', ascending=False)
+    st.dataframe(display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']], width='stretch')
+else:
+    st.info("Geen spelersdata beschikbaar.")
+
+# --- ELO ontwikkeling tonen ---
 st.header("Ontwikkeling ELO rating per speler")
-players_elo = sorted(list(player_stats.keys()))
-selected = st.selectbox("Selecteer een speler:", players_elo)
-if selected:
-    elo_data = {
-        "Match Index": [s[3] for s in player_stats[selected]],
-        "ELO Rating": [s[2] for s in player_stats[selected]]}
-st.write(player_stats)
- 
+
+player_names = sorted(players_df['speler_naam'].tolist())
+selected_player = st.selectbox("Selecteer een speler:", player_names)
+
+if selected_player:
+    # Haal de ELO geschiedenis op voor de geselecteerde speler
+    # De _ttl parameter is een workaround om st.cache_data te forceren opnieuw te draaien
+    history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
+    
+    if not history_df.empty:
+        history_df['match_num'] = range(1, len(history_df) + 1)
+        st.line_chart(history_df, x='match_num', y='rating')
+    else:
+        st.info(f"Geen ELO geschiedenis gevonden voor {selected_player}.")

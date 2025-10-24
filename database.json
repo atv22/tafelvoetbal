@@ -1,0 +1,127 @@
+{
+  "elo": {
+    "collection_name": "elo",
+    "fields": [
+      {
+        "name": "elo_id",
+        "type": "number",
+        "description": "Unique identifier for the ELO entry"
+      },
+      {
+        "name": "rating",
+        "type": "number",
+        "description": "Player's ELO rating"
+      },
+      {
+        "name": "speler_naam",
+        "type": "string",
+        "description": "Name of the player"
+      },
+      {
+        "name": "timestamp",
+        "type": "timestamp",
+        "description": "Date and time of the rating update"
+      }
+    ]
+  },
+  "spelers": {
+    "collection_name": "spelers",
+    "fields": [
+      {
+        "name": "speler_id",
+        "type": "number",
+        "description": "Unique identifier for the player"
+      },
+      {
+        "name": "speler_naam",
+        "type": "string",
+        "description": "Name of the player"
+      }
+    ]
+  },
+  "uitslag": {
+    "collection_name": "uitslag",
+    "fields": [
+      {
+        "name": "match_id",
+        "type": "number",
+        "description": "Unique identifier for the match result"
+      },
+      {
+        "name": "klinkers_thuis_1",
+        "type": "number",
+        "description": "Exceptional goal scored by the home team 1"
+      },
+      {
+        "name": "klinkers_thuis_2",
+        "type": "number",
+        "description": "Exceptional goal scored by the home team 2"
+      },
+      {
+        "name": "klinkers_uit_1",
+        "type": "number",
+        "description": "Exceptional goal scored by the away team 1"
+      },
+      {
+        "name": "klinkers_uit_2",
+        "type": "number",
+        "description": "Exceptional goal scored by the away team 2"
+      },
+      {
+        "name": "thuis_1",
+        "type": "string",
+        "description": "Name of home player 1"
+      },
+      {
+        "name": "thuis_2",
+        "type": "string",
+        "description": "Name of home player 2"
+      },
+      {
+        "name": "thuis_score",
+        "type": "number",
+        "description": "Score for the home team"
+      },
+      {
+        "name": "timestamp",
+        "type": "timestamp",
+        "description": "Date and time of the match"
+      },
+      {
+        "name": "uit_1",
+        "type": "string",
+        "description": "Name of away player 1"
+      },
+      {
+        "name": "uit_2",
+        "type": "string",
+        "description": "Name of away player 2"
+      },
+      {
+        "name": "uit_score",
+        "type": "number",
+        "description": "Score for the away team"
+      }
+    ]
+  },
+  "seizoenen": {
+    "collection_name": "seizoenen",
+    "fields": [
+      {
+        "name": "seizoen_id",
+        "type": "number",
+        "description": "Unique identifier for the season"
+      },
+      {
+        "name": "startdatum",
+        "type": "timestamp",
+        "description": "Start date of the season"
+      },
+      {
+        "name": "einddatum",
+        "type": "timestamp",
+        "description": "End date of the season"
+      }
+    ]
+  }
+}
