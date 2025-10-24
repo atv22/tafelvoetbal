@@ -50,23 +50,20 @@ else:
 
 st.markdown("""<hr>""", unsafe_allow_html=True)
 
-# --- Seizoenen Beheer (functionaliteit ongewijzigd) ---
+# --- Seizoenen Beheer ---
 st.subheader("Seizoenen")
-if "seizoenen" not in st.session_state:
-    st.session_state.seizoenen = pd.DataFrame([
-        {"seizoen_id": 1, "startdatum": pd.to_datetime('2025-03-15 00:00:00'), "einddatum": pd.to_datetime('2025-09-16 23:59:59')}
-    ])
+
+# Haal seizoenen op uit Firestore
+df_seizoenen = db.get_seasons()
 
 def start_nieuw_seizoen(einddatum):
-    df_seizoenen = st.session_state.seizoenen
-    nieuw_id = df_seizoenen['seizoen_id'].max() + 1 if not df_seizoenen.empty else 1
-    nieuwe_rij = {
-        "seizoen_id": nieuw_id,
-        "startdatum": pd.to_datetime(date.today()),
-        "einddatum": einddatum
-    }
-    st.session_state.seizoenen = pd.concat([df_seizoenen, pd.DataFrame([nieuwe_rij])], ignore_index=True)
-    st.success(f"Nieuw seizoen gestart (Seizoen {nieuw_id})")
+    startdatum = pd.to_datetime(date.today())
+    result = db.add_season(startdatum, einddatum)
+    if result == "Success":
+        st.success("Nieuw seizoen succesvol gestart!")
+        st.rerun()
+    else:
+        st.error(f"Kon nieuw seizoen niet starten: {result}")
 
 with st.form("nieuw_seizoen_form"):
     st.write("Klik op de knop om een nieuw seizoen te starten.")
@@ -81,4 +78,7 @@ if submit:
         start_nieuw_seizoen(einddatum)
 
 st.subheader("Alle seizoenen")
-st.dataframe(st.session_state.seizoenen)
+if not df_seizoenen.empty:
+    st.dataframe(df_seizoenen, use_container_width=True)
+else:
+    st.info("Nog geen seizoenen aangemaakt.")

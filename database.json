@@ -103,5 +103,25 @@
         "description": "Score for the away team"
       }
     ]
+  },
+  "seizoenen": {
+    "collection_name": "seizoenen",
+    "fields": [
+      {
+        "name": "seizoen_id",
+        "type": "number",
+        "description": "Unique identifier for the season"
+      },
+      {
+        "name": "startdatum",
+        "type": "timestamp",
+        "description": "Start date of the season"
+      },
+      {
+        "name": "einddatum",
+        "type": "timestamp",
+        "description": "End date of the season"
+      }
+    ]
   }
 }

@@ -59,6 +59,7 @@ players_ref = db.collection('spelers')
 matches_ref = db.collection('uitslag')
 elo_ref = db.collection('elo')
 requests_ref = db.collection('requests')
+seasons_ref = db.collection('seizoenen')
 
 
 # DATA LEESFUNCTIES
@@ -109,6 +110,17 @@ def get_elo_history(_ttl, speler_naam):
     return pd.DataFrame(history)
 
 @st.cache_data
+def get_seasons():
+    """Haalt alle seizoenen op."""
+    seasons_docs = seasons_ref.order_by("startdatum", direction=google.cloud.firestore.Query.DESCENDING).stream()
+    seasons = []
+    for doc in seasons_docs:
+        season_data = doc.to_dict()
+        season_data['seizoen_id'] = doc.id
+        seasons.append(season_data)
+    return pd.DataFrame(seasons)
+
+@st.cache_data
 def get_requests():
     """Haalt alle verzoeken op, gesorteerd op tijdstip."""
     docs = requests_ref.order_by("Timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
@@ -116,6 +128,34 @@ def get_requests():
     return pd.DataFrame(requests)
 
 # DATA SCHRIJFFUNCTIES
+def add_season(startdatum, einddatum):
+    """Voegt een nieuw seizoen toe."""
+    try:
+        # Haal het hoogste bestaande seizoen_id op
+        seasons_query = seasons_ref.order_by("seizoen_id", direction=google.cloud.firestore.Query.DESCENDING).limit(1)
+        last_season_docs = list(seasons_query.stream())
+        
+        new_id = 1
+        if last_season_docs:
+            last_season_data = last_season_docs[0].to_dict()
+            if 'seizoen_id' in last_season_data:
+                new_id = last_season_data['seizoen_id'] + 1
+
+        # Voeg het nieuwe seizoen toe met het correcte ID
+        new_season_ref = seasons_ref.document()
+        new_season_ref.set({
+            'seizoen_id': new_id,
+            'startdatum': startdatum,
+            'einddatum': einddatum
+        })
+        
+        st.cache_data.clear()
+        return "Success"
+    except Exception as e:
+        print(f"Fout bij toevoegen van seizoen: {e}")
+        return f"Error: {e}"
+
+
 def add_player(name, start_elo):
     """Voegt een nieuwe speler en zijn initiële ELO-rating toe in een batch."""
     # Controleer eerst of de speler al bestaat
