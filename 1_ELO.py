@@ -20,10 +20,17 @@ def calculate_stats(players, matches):
     stats_list = []
     for index, player in players.iterrows():
         player_name = player['speler_naam']
-        player_matches = matches[
-            (matches['thuis_1'] == player_name) | (matches['thuis_2'] == player_name) |
-            (matches['uit_1'] == player_name) | (matches['uit_2'] == player_name)
-        ]
+        
+        # Veilige filtering om KeyError te voorkomen
+        conditions = []
+        for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+            if col in matches.columns:
+                conditions.append(matches[col] == player_name)
+        
+        if not conditions:
+            player_matches = pd.DataFrame()
+        else:
+            player_matches = matches[pd.concat(conditions, axis=1).any(axis=1)]
 
         if player_matches.empty:
             stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0}
@@ -32,20 +39,23 @@ def calculate_stats(players, matches):
             goals_against = 0
             klinkers = 0
             for _, match in player_matches.iterrows():
-                if player_name in [match['thuis_1'], match['thuis_2']]:
-                    goals_for += match['thuis_score']
-                    goals_against += match['uit_score']
-                    if player_name == match['thuis_1']:
-                        klinkers += match.get('klinkers_thuis_1', 0)
+                thuis_spelers = [match.get('thuis_1'), match.get('thuis_2')]
+                uit_spelers = [match.get('uit_1'), match.get('uit_2')]
+                
+                if player_name in thuis_spelers:
+                    goals_for += int(match.get('thuis_score', 0) or 0)
+                    goals_against += int(match.get('uit_score', 0) or 0)
+                    if player_name == match.get('thuis_1'):
+                        klinkers += int(match.get('klinkers_thuis_1', 0) or 0)
                     else:
-                        klinkers += match.get('klinkers_thuis_2', 0)
-                else:
-                    goals_for += match['uit_score']
-                    goals_against += match['thuis_score']
-                    if player_name == match['uit_1']:
-                        klinkers += match.get('klinkers_uit_1', 0)
+                        klinkers += int(match.get('klinkers_thuis_2', 0) or 0)
+                elif player_name in uit_spelers:
+                    goals_for += int(match.get('uit_score', 0) or 0)
+                    goals_against += int(match.get('thuis_score', 0) or 0)
+                    if player_name == match.get('uit_1'):
+                        klinkers += int(match.get('klinkers_uit_1', 0) or 0)
                     else:
-                        klinkers += match.get('klinkers_uit_2', 0)
+                        klinkers += int(match.get('klinkers_uit_2', 0) or 0)
             
             stats = {
                 'Gespeeld': len(player_matches),
@@ -56,7 +66,7 @@ def calculate_stats(players, matches):
             }
         
         stats['Speler'] = player_name
-        stats['ELO'] = player['rating']
+        stats['ELO'] = int(player['rating'])
         stats_list.append(stats)
         
     return pd.DataFrame(stats_list)

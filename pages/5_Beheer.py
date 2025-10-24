@@ -86,7 +86,7 @@ df_matches_delete = db.get_matches()
 if not df_matches_delete.empty:
     # Maak een leesbare weergave voor de selectbox
     df_matches_delete['display'] = df_matches_delete.apply(
-        lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'No Timestamp'} - {row.get('speler1', 'N/A')}/{row.get('speler2', 'N/A')} vs {row.get('speler3', 'N/A')}/{row.get('speler4', 'N/A')}: {row.get('score_team1', 'N/A')}-{row.get('score_team2', 'N/A')}",
+        lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'No Timestamp'} - {row.get('thuis_1', 'N/A')}/{row.get('thuis_2', 'N/A')} vs {row.get('uit_1', 'N/A')}/{row.get('uit_2', 'N/A')}: {row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
         axis=1
     )
     match_display_list = df_matches_delete['display'].tolist()
@@ -197,13 +197,13 @@ with st.expander("Uitslagen Importeren"):
     st.markdown("""
     **Vereist CSV formaat:**
     De kolomnamen moeten exact overeenkomen.
-    - `speler1`, `speler2`, `speler3`, `speler4`
-    - `score_team1`, `score_team2`
+    - `thuis_1`, `thuis_2`, `uit_1`, `uit_2`
+    - `thuis_score`, `uit_score`
     - `timestamp` (optioneel, formaat: `YYYY-MM-DD HH:MM:SS`)
 
     *Voorbeeld:*
     ```csv
-    speler1,speler2,speler3,speler4,score_team1,score_team2,timestamp
+    thuis_1,thuis_2,uit_1,uit_2,thuis_score,uit_score,timestamp
     Jan,Piet,Klaas,Marie,10,5,2023-10-27 14:30:00
     ```
     """)
@@ -214,7 +214,7 @@ with st.expander("Uitslagen Importeren"):
             st.write("Voorbeeld van de geüploade data:")
             st.dataframe(matches_df.head())
 
-            required_cols = ['speler1', 'speler2', 'speler3', 'speler4', 'score_team1', 'score_team2']
+            required_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
             if not all(col in matches_df.columns for col in required_cols):
                 st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
             else:
