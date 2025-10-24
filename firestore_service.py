@@ -349,16 +349,16 @@ def import_matches(matches_data):
     for doc in existing_matches_docs:
         d = doc.to_dict()
         # Maak een unieke, sorteerbare tuple om de wedstrijd te identificeren
-        players_tuple = tuple(sorted([d.get('speler1'), d.get('speler2'), d.get('speler3'), d.get('speler4')]))
-        scores_tuple = (d.get('score_team1'), d.get('score_team2'))
+        players_tuple = tuple(sorted([d.get('thuis_1'), d.get('thuis_2'), d.get('uit_1'), d.get('uit_2')]))
+        scores_tuple = (d.get('thuis_score'), d.get('uit_score'))
         existing_matches.add((players_tuple, scores_tuple))
 
     batch = db.batch()
     commit_counter = 0
     for match in matches_data:
         # Maak dezelfde unieke tuple voor de te importeren wedstrijd
-        players_tuple = tuple(sorted([match.get('speler1'), match.get('speler2'), match.get('speler3'), match.get('speler4')]))
-        scores_tuple = (match.get('score_team1'), match.get('score_team2'))
+        players_tuple = tuple(sorted([match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]))
+        scores_tuple = (match.get('thuis_score'), match.get('uit_score'))
         
         if (players_tuple, scores_tuple) in existing_matches:
             duplicate_count += 1
