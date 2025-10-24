@@ -79,6 +79,6 @@ if submit:
 
 st.subheader("Alle seizoenen")
 if not df_seizoenen.empty:
-    st.dataframe(df_seizoenen, use_container_width=True)
+    st.dataframe(df_seizoenen, width='stretch')
 else:
     st.info("Nog geen seizoenen aangemaakt.")

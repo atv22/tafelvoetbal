@@ -12,7 +12,7 @@ st.title("Ruwe Data uit Firestore")
 st.header("Spelers")
 df_players = db.get_players()
 if not df_players.empty:
-    st.dataframe(df_players, use_container_width=True)
+    st.dataframe(df_players, width='stretch')
 else:
     st.info("Geen spelers gevonden in Firestore.")
 
@@ -25,7 +25,7 @@ st.download_button(
     file_name=get_download_filename('Tafelvoetbal_Uitslagen', 'csv'),
     mime='text/csv',
 )
-st.dataframe(df_matches, use_container_width=True)
+st.dataframe(df_matches, width='stretch')
 
 # --- ELO Geschiedenis ---
 st.header("ELO Geschiedenis")
@@ -36,4 +36,4 @@ st.download_button(
     file_name=get_download_filename('Tafelvoetbal_ELO_Geschiedenis', 'csv'),
     mime='text/csv',
 )
-st.dataframe(df_elo, use_container_width=True)
+st.dataframe(df_elo, width='stretch')
