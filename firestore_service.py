@@ -67,25 +67,34 @@ seasons_ref = db.collection('seizoenen')
 def get_players():
     """Haalt alle spelers op en hun meest recente ELO-rating."""
     spelers_docs = players_ref.stream()
-    players = []
+    players_list = []
     for doc in spelers_docs:
         player_data = doc.to_dict()
         player_data['speler_id'] = doc.id
+        players_list.append(player_data)
+    
+    if not players_list:
+        return pd.DataFrame()
 
-        # Haal de meest recente ELO-rating op voor deze speler
-        elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', player_data['speler_naam'])).order_by(
-            "timestamp", direction=google.cloud.firestore.Query.DESCENDING
-        ).limit(1)
-        elo_docs = list(elo_query.stream())
+    players_df = pd.DataFrame(players_list)
 
-        if elo_docs:
-            player_data['rating'] = elo_docs[0].to_dict().get('rating', 1000)
-        else:
-            player_data['rating'] = 1000 # Default ELO if none found
+    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+    elo_list = [doc.to_dict() for doc in elo_docs]
 
-        players.append(player_data)
-        
-    return pd.DataFrame(players)
+    if not elo_list:
+        players_df['rating'] = 1000
+        return players_df
+
+    elo_df = pd.DataFrame(elo_list)
+    
+    # Get the latest ELO for each player
+    latest_elo_df = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
+
+    # Merge with players_df
+    players_with_elo_df = pd.merge(players_df, latest_elo_df[['speler_naam', 'rating']], on='speler_naam', how='left')
+    players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
+    
+    return players_with_elo_df
 
 @st.cache_data
 def get_matches():
