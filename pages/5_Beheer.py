@@ -7,7 +7,7 @@ from styles import setup_page
 setup_page()
 
 # --- Authenticatie ---
-goede_wachtwoord = "Klinker" # Consider moving this to a more secure location
+goede_wachtwoord = "Klinker"
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -50,6 +50,79 @@ else:
 
 st.markdown("""<hr>""", unsafe_allow_html=True)
 
+# --- Seizoen Verwijderen ---
+st.subheader("Seizoen Verwijderen")
+df_seizoenen_delete = db.get_seasons()
+if not df_seizoenen_delete.empty:
+    # Maak een leesbare weergave voor de selectbox
+    df_seizoenen_delete['display'] = df_seizoenen_delete.apply(
+        lambda row: f"Seizoen {row.get('seizoen_id', 'N/A')}: {pd.to_datetime(row['startdatum']).strftime('%d-%m-%Y')} - {pd.to_datetime(row['einddatum']).strftime('%d-%m-%Y')}",
+        axis=1
+    )
+    season_display_list = df_seizoenen_delete['display'].tolist()
+    season_id_map = {display: id for display, id in zip(season_display_list, df_seizoenen_delete['seizoen_id'].tolist())}
+
+    season_to_delete_display = st.selectbox("Selecteer een seizoen om te verwijderen", options=season_display_list)
+    
+    if st.button(f"Verwijder geselecteerd seizoen permanent"):
+        season_id_to_delete = season_id_map.get(season_to_delete_display)
+        if season_id_to_delete:
+            with st.spinner("Seizoen wordt verwijderd..."):
+                if db.delete_season_by_id(season_id_to_delete):
+                    st.success("Seizoen succesvol verwijderd.")
+                    st.rerun()
+                else:
+                    st.error("Kon het seizoen niet verwijderen.")
+        else:
+            st.error("Kon het seizoen ID niet vinden.")
+else:
+    st.info("Geen seizoenen om te verwijderen.")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
+
+# --- Wedstrijd Verwijderen ---
+st.subheader("Wedstrijd Verwijderen")
+df_matches_delete = db.get_matches()
+if not df_matches_delete.empty:
+    # Maak een leesbare weergave voor de selectbox
+    df_matches_delete['display'] = df_matches_delete.apply(
+        lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'No Timestamp'} - {row.get('speler1', 'N/A')}/{row.get('speler2', 'N/A')} vs {row.get('speler3', 'N/A')}/{row.get('speler4', 'N/A')}: {row.get('score_team1', 'N/A')}-{row.get('score_team2', 'N/A')}",
+        axis=1
+    )
+    match_display_list = df_matches_delete['display'].tolist()
+    match_id_map = {display: id for display, id in zip(match_display_list, df_matches_delete['match_id'].tolist())}
+
+    match_to_delete_display = st.selectbox("Selecteer een wedstrijd om te verwijderen", options=match_display_list)
+    
+    if st.button(f"Verwijder geselecteerde wedstrijd permanent"):
+        match_id_to_delete = match_id_map.get(match_to_delete_display)
+        if match_id_to_delete:
+            with st.spinner("Wedstrijd wordt verwijderd..."):
+                if db.delete_match_by_id(match_id_to_delete):
+                    st.success("Wedstrijd succesvol verwijderd.")
+                    st.rerun()
+                else:
+                    st.error("Kon de wedstrijd niet verwijderen.")
+        else:
+            st.error("Kon de wedstrijd ID niet vinden.")
+else:
+    st.info("Geen wedstrijden om te verwijderen.")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
+
+# --- Overige Entries Verwijderen ---
+st.subheader("Overige Entries Verwijderen")
+
+if st.button("Verwijder alle 'Requests'"):
+    with st.spinner("Alle requests worden verwijderd..."):
+        if db.clear_collection('requests'):
+            st.success("Alle requests zijn succesvol verwijderd.")
+            st.rerun()
+        else:
+            st.error("Kon de requests niet verwijderen.")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
+
 # --- Seizoenen Beheer ---
 st.subheader("Seizoenen")
 
@@ -82,3 +155,107 @@ if not df_seizoenen.empty:
     st.dataframe(df_seizoenen, width='stretch')
 else:
     st.info("Nog geen seizoenen aangemaakt.")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
+
+# --- Data Importeren ---
+st.subheader("Data Importeren")
+
+with st.expander("Spelers Importeren"):
+    st.markdown("""
+    **Vereist CSV formaat:**
+    - Kolom 1: `speler_naam` (verplicht)
+    - Kolom 2: `rating` (optioneel, standaard is 1000)
+    
+    *Voorbeeld:*
+    ```csv
+    speler_naam,rating
+    Jan,1050
+    Piet,980
+    ```
+    """)
+    uploaded_players = st.file_uploader("Upload spelers CSV", type=["csv"], key="players_uploader")
+    if uploaded_players is not None:
+        try:
+            players_df = pd.read_csv(uploaded_players)
+            st.write("Voorbeeld van de geüploade data:")
+            st.dataframe(players_df.head())
+
+            if 'speler_naam' not in players_df.columns:
+                st.error("De kolom 'speler_naam' is verplicht in het CSV-bestand.")
+            else:
+                if st.button("Importeer Spelers"):
+                    with st.spinner("Spelers aan het importeren..."):
+                        players_data = players_df.to_dict('records')
+                        added, duplicates = db.import_players(players_data)
+                        st.success(f"Import voltooid! {added} spelers toegevoegd, {duplicates} duplicaten gevonden.")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
+
+with st.expander("Uitslagen Importeren"):
+    st.markdown("""
+    **Vereist CSV formaat:**
+    De kolomnamen moeten exact overeenkomen.
+    - `speler1`, `speler2`, `speler3`, `speler4`
+    - `score_team1`, `score_team2`
+    - `timestamp` (optioneel, formaat: `YYYY-MM-DD HH:MM:SS`)
+
+    *Voorbeeld:*
+    ```csv
+    speler1,speler2,speler3,speler4,score_team1,score_team2,timestamp
+    Jan,Piet,Klaas,Marie,10,5,2023-10-27 14:30:00
+    ```
+    """)
+    uploaded_matches = st.file_uploader("Upload uitslagen CSV", type=["csv"], key="matches_uploader")
+    if uploaded_matches is not None:
+        try:
+            matches_df = pd.read_csv(uploaded_matches)
+            st.write("Voorbeeld van de geüploade data:")
+            st.dataframe(matches_df.head())
+
+            required_cols = ['speler1', 'speler2', 'speler3', 'speler4', 'score_team1', 'score_team2']
+            if not all(col in matches_df.columns for col in required_cols):
+                st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
+            else:
+                if st.button("Importeer Uitslagen"):
+                    with st.spinner("Uitslagen aan het importeren..."):
+                        matches_data = matches_df.to_dict('records')
+                        added, duplicates = db.import_matches(matches_data)
+                        st.success(f"Import voltooid! {added} uitslagen toegevoegd, {duplicates} duplicaten gevonden.")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
+
+with st.expander("Seizoenen Importeren"):
+    st.markdown("""
+    **Vereist CSV formaat:**
+    - `startdatum` (formaat: `YYYY-MM-DD`)
+    - `einddatum` (formaat: `YYYY-MM-DD`)
+
+    *Voorbeeld:*
+    ```csv
+    startdatum,einddatum
+    2023-01-01,2023-06-30
+    2023-07-01,2023-12-31
+    ```
+    """)
+    uploaded_seasons = st.file_uploader("Upload seizoenen CSV", type=["csv"], key="seasons_uploader")
+    if uploaded_seasons is not None:
+        try:
+            seasons_df = pd.read_csv(uploaded_seasons)
+            st.write("Voorbeeld van de geüploade data:")
+            st.dataframe(seasons_df.head())
+
+            required_cols = ['startdatum', 'einddatum']
+            if not all(col in seasons_df.columns for col in required_cols):
+                st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
+            else:
+                if st.button("Importeer Seizoenen"):
+                    with st.spinner("Seizoenen aan het importeren..."):
+                        seasons_data = seasons_df.to_dict('records')
+                        added, duplicates = db.import_seasons(seasons_data)
+                        st.success(f"Import voltooid! {added} seizoenen toegevoegd, {duplicates} duplicaten gevonden.")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")

@@ -100,7 +100,11 @@ def get_players():
 def get_matches():
     """Haalt alle wedstrijden op."""
     matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    matches = [doc.to_dict() for doc in matches_docs]
+    matches = []
+    for doc in matches_docs:
+        match_data = doc.to_dict()
+        match_data['match_id'] = doc.id
+        matches.append(match_data)
     return pd.DataFrame(matches)
 
 @st.cache_data
@@ -259,3 +263,159 @@ def delete_player_by_id(player_id):
     except Exception as e:
         print(f"Fout bij verwijderen van speler {player_id}: {e}")
         return False
+
+def delete_season_by_id(season_id):
+    """Verwijdert een seizoen op basis van zijn ID."""
+    try:
+        seasons_ref.document(season_id).delete()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Fout bij verwijderen van seizoen {season_id}: {e}")
+        return False
+
+def delete_match_by_id(match_id):
+    """Verwijdert een wedstrijd op basis van zijn ID."""
+    try:
+        matches_ref.document(match_id).delete()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Fout bij verwijderen van wedstrijd {match_id}: {e}")
+        return False
+
+def clear_collection(collection_name):
+    """Verwijdert alle documenten uit een collectie."""
+    try:
+        if collection_name == "requests":
+            docs = requests_ref.stream()
+            for doc in docs:
+                doc.reference.delete()
+            st.cache_data.clear()
+            return True
+        # Voeg hier eventueel andere collecties toe die geleegd mogen worden
+        return False
+    except Exception as e:
+        print(f"Fout bij het legen van collectie {collection_name}: {e}")
+        return False
+
+# --- DATA IMPORT FUNCTIES ---
+def import_players(players_data):
+    """
+    Importeert spelers uit een lijst van dictionaries.
+    Controleert op duplicaten op basis van 'speler_naam'.
+    Geeft een samenvatting terug van de importactie.
+    """
+    added_count = 0
+    duplicate_count = 0
+    
+    # Haal alle bestaande spelernamen op in één query
+    existing_players = {doc.to_dict()['speler_naam'] for doc in players_ref.stream()}
+
+    for player in players_data:
+        player_name = player.get('speler_naam')
+        if not player_name:
+            continue
+
+        if player_name in existing_players:
+            duplicate_count += 1
+        else:
+            # Gebruik de bestaande add_player functie die ook de initiële ELO toevoegt
+            start_elo = player.get('rating', 1000) # Gebruik rating uit CSV of default naar 1000
+            result = add_player(player_name, start_elo)
+            if result == "Success":
+                added_count += 1
+                existing_players.add(player_name) # Voeg toe aan de set om duplicaten binnen dezelfde import te voorkomen
+            else:
+                # Optioneel: log de fout als add_player faalt
+                print(f"Kon speler {player_name} niet importeren: {result}")
+
+    st.cache_data.clear()
+    return added_count, duplicate_count
+
+def import_matches(matches_data):
+    """
+    Importeert wedstrijden uit een lijst van dictionaries.
+    Controleert op duplicaten.
+    Geeft een samenvatting terug.
+    """
+    added_count = 0
+    duplicate_count = 0
+    
+    # Haal een subset van bestaande wedstrijden op om te controleren op duplicaten
+    # Dit is een vereenvoudiging. Een robuustere aanpak is nodig voor grote datasets.
+    existing_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(5000).stream()
+    existing_matches = set()
+    for doc in existing_matches_docs:
+        d = doc.to_dict()
+        # Maak een unieke, sorteerbare tuple om de wedstrijd te identificeren
+        players_tuple = tuple(sorted([d.get('speler1'), d.get('speler2'), d.get('speler3'), d.get('speler4')]))
+        scores_tuple = (d.get('score_team1'), d.get('score_team2'))
+        existing_matches.add((players_tuple, scores_tuple))
+
+    batch = db.batch()
+    commit_counter = 0
+    for match in matches_data:
+        # Maak dezelfde unieke tuple voor de te importeren wedstrijd
+        players_tuple = tuple(sorted([match.get('speler1'), match.get('speler2'), match.get('speler3'), match.get('speler4')]))
+        scores_tuple = (match.get('score_team1'), match.get('score_team2'))
+        
+        if (players_tuple, scores_tuple) in existing_matches:
+            duplicate_count += 1
+        else:
+            new_match_ref = matches_ref.document()
+            # Zorg ervoor dat de timestamp wordt geconverteerd als het een string is
+            if 'timestamp' in match and isinstance(match['timestamp'], str):
+                match['timestamp'] = pd.to_datetime(match['timestamp'])
+            else:
+                match['timestamp'] = SERVER_TIMESTAMP # Fallback
+
+            batch.set(new_match_ref, match)
+            added_count += 1
+            existing_matches.add((players_tuple, scores_tuple))
+            commit_counter += 1
+
+            # Commit de batch elke 400 writes om de limiet van 500 te vermijden
+            if commit_counter >= 400:
+                batch.commit()
+                batch = db.batch() # Start een nieuwe batch
+                commit_counter = 0
+
+    if commit_counter > 0:
+        batch.commit() # Commit de resterende writes
+
+    st.cache_data.clear()
+    return added_count, duplicate_count
+
+def import_seasons(seasons_data):
+    """
+    Importeert seizoenen uit een lijst van dictionaries.
+    Controleert op duplicaten op basis van start- en einddatum.
+    """
+    added_count = 0
+    duplicate_count = 0
+    
+    existing_seasons_docs = seasons_ref.stream()
+    existing_seasons = set()
+    for doc in existing_seasons_docs:
+        d = doc.to_dict()
+        # Converteer Firestore timestamps naar vergelijkbare objecten
+        start = pd.to_datetime(d.get('startdatum')).strftime('%Y-%m-%d')
+        eind = pd.to_datetime(d.get('einddatum')).strftime('%Y-%m-%d')
+        existing_seasons.add((start, eind))
+
+    for season in seasons_data:
+        start_str = pd.to_datetime(season.get('startdatum')).strftime('%Y-%m-%d')
+        eind_str = pd.to_datetime(season.get('einddatum')).strftime('%Y-%m-%d')
+
+        if (start_str, eind_str) in existing_seasons:
+            duplicate_count += 1
+        else:
+            # Gebruik de bestaande add_season functie
+            result = add_season(pd.to_datetime(season.get('startdatum')), pd.to_datetime(season.get('einddatum')))
+            if result == "Success":
+                added_count += 1
+                existing_seasons.add((start_str, eind_str))
+
+    st.cache_data.clear()
+    return added_count, duplicate_count
