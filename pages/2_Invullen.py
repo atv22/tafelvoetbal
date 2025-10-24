@@ -1,71 +1,104 @@
 import time
-import datetime as dt
 import streamlit as st
-from config import get_client, get_players_list, SHEET_NAME
-from utils import get_download_filename
+import firestore_service as db # Use Firestore
+from utils import elo_calculation # Use ELO calculation from utils
 from styles import setup_page
 
 setup_page()
 
 st.title("Tafelvoetbal Competitie ⚽ — Invullen")
-klink = st.radio("Zijn er klinkers gescoord? (Als ja, draai dan je scherm op 📱)", ("Nee", "Ja"))
-players = sorted(get_players_list())
+
+# --- Data ophalen ---
+players_df = db.get_players()
+if players_df.empty:
+    st.warning("Er zijn nog geen spelers. Voeg eerst een speler toe via de 'Spelers' pagina.")
+    st.stop()
+
+player_names = sorted(players_df['speler_naam'].tolist())
+player_elos = players_df.set_index('speler_naam')['rating'].to_dict()
+
+# --- UI ---
+klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
+
 selected_names = {
-    'Thuis speler 1': {'name': None, 'klinkers': 0},
-    'Thuis speler 2': {'name': None, 'klinkers': 0},
-    'Uit speler 1':   {'name': None, 'klinkers': 0},
-    'Uit speler 2':   {'name': None, 'klinkers': 0},
+    'Thuis 1': {'name': None, 'klinkers': 0},
+    'Thuis 2': {'name': None, 'klinkers': 0},
+    'Uit 1':   {'name': None, 'klinkers': 0},
+    'Uit 2':   {'name': None, 'klinkers': 0},
 }
+
 with st.form("formulier"):
+    cols = st.columns(4)
+    for i, title in enumerate(selected_names):
+        with cols[i]:
+            selected_names[title]['name'] = st.selectbox(title, player_names, key=f"sel_{title}", index=i % len(player_names))
+
     if klink == "Ja":
-        c1, c2 = st.columns([2, 1])
-        for title in selected_names:
-            with c1:
-                selected_name = st.selectbox(title, players, key=f"sel_{title}")
-            with c2:
-                selected_klinkers = st.number_input(f"Aantal klinkers {title}:", min_value=0, max_value=10, step=1, key=f"kl_{title}")
-            selected_names[title] = {'name': selected_name, 'klinkers': selected_klinkers}
-    else:
-        for title in selected_names:
-            selected_name = st.selectbox(title, players, key=f"sel_{title}")
-            selected_names[title] = {'name': selected_name, 'klinkers': 0}
-    home_score = st.number_input("Score Thuis team:", min_value=0, max_value=10, step=1)
-    away_score = st.number_input("Score Uit team:",   min_value=0, max_value=10, step=1)
-    if st.form_submit_button("Verstuur"):
-        # validaties
+        klinker_cols = st.columns(4)
+        for i, title in enumerate(selected_names):
+            with klinker_cols[i]:
+                selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}")
+
+    score_cols = st.columns(2)
+    with score_cols[0]:
+        home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1)
+    with score_cols[1]:
+        away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1)
+
+    if st.form_submit_button("Verstuur Uitslag"):
+        # --- Validatie ---
         if home_score == 10 and away_score == 10:
-            st.error('Wijzig de einduitslag. Beide scores kunnen niet 10 zijn.')
+            st.error('Beide scores kunnen niet 10 zijn.')
             st.stop()
         if home_score != 10 and away_score != 10:
-            st.error('Wijzig de einduitslag. Eén van de scores moet 10 zijn.')
+            st.error('Eén van de scores moet 10 zijn.')
             st.stop()
-        if len({v['name'] for v in selected_names.values()}) < len(selected_names):
-            st.error("Selecteer elke speler slechts één keer.")
+        
+        player_list = [p['name'] for p in selected_names.values()]
+        if len(set(player_list)) < 4:
+            st.error("Selecteer vier unieke spelers.")
             st.stop()
-        client = get_client()
-        ws = client.open(SHEET_NAME).worksheet('Uitslag')
-        timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        values = [
-            selected_names['Thuis speler 1']['name'],
-            selected_names['Thuis speler 2']['name'],
-            selected_names['Uit speler 1']['name'],
-            selected_names['Uit speler 2']['name'],
-            home_score,
-            away_score,
-            timestamp,
-            selected_names['Thuis speler 1']['klinkers'],
-            selected_names['Thuis speler 2']['klinkers'],
-            selected_names['Uit speler 1']['klinkers'],
-            selected_names['Uit speler 2']['klinkers'],
-        ]
-        ws.append_row(values)
-        for team, player in selected_names.items():
-            if player['name'] == 'Robert':
-                if ('Thuis' in team and away_score > home_score) or ('Uit' in team and home_score > away_score):
-                    st.balloons()
+
+        # --- ELO Berekening ---
+        home_team_names = [selected_names['Thuis 1']['name'], selected_names['Thuis 2']['name']]
+        away_team_names = [selected_names['Uit 1']['name'], selected_names['Uit 2']['name']]
+
+        home_team_elos = [player_elos[p] for p in home_team_names]
+        away_team_elos = [player_elos[p] for p in away_team_names]
+
+        avg_elo_home = sum(home_team_elos) / 2
+        avg_elo_away = sum(away_team_elos) / 2
+
+        new_elos = {}
+        for player_name in home_team_names:
+            new_elos[player_name] = elo_calculation(player_elos[player_name], avg_elo_away, home_score, away_score)
+        for player_name in away_team_names:
+            new_elos[player_name] = elo_calculation(player_elos[player_name], avg_elo_home, away_score, home_score)
+
+        # --- Data voorbereiden voor Firestore ---
+        match_data = {
+            'thuis_1': selected_names['Thuis 1']['name'],
+            'thuis_2': selected_names['Thuis 2']['name'],
+            'uit_1': selected_names['Uit 1']['name'],
+            'uit_2': selected_names['Uit 2']['name'],
+            'thuis_score': home_score,
+            'uit_score': away_score,
+            'klinkers_thuis_1': selected_names['Thuis 1']['klinkers'],
+            'klinkers_thuis_2': selected_names['Thuis 2']['klinkers'],
+            'klinkers_uit_1': selected_names['Uit 1']['klinkers'],
+            'klinkers_uit_2': selected_names['Uit 2']['klinkers'],
+        }
+
+        elo_updates = list(new_elos.items())
+
+        # --- Opslaan in Firestore ---
+        success = db.add_match_and_update_elo(match_data, elo_updates)
+
+        if success:
+            st.success("Uitslag en nieuwe ELO ratings succesvol opgeslagen!")
             if (home_score == 10 and away_score == 0) or (home_score == 0 and away_score == 10):
                 st.balloons()
-        st.success("Uitslag toegevoegd!")
-        time.sleep(1)
-        st.experimental_rerun()
- 
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("Er is een fout opgetreden bij het opslaan van de wedstrijd.")

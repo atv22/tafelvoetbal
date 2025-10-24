@@ -13,3 +13,4 @@ secrets.toml
 .idea
 .DS_Store
 __pycache__
+firestore-key.json

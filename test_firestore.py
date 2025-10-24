@@ -5,7 +5,6 @@ import pandas as pd
 import time
 
 # TEST CONFIGURATIE
-# We gebruiken unieke namen om conflicten met bestaande data te voorkomen
 TEST_PLAYERS = {
     "TestSpelerAlpha": 1000,
     "TestSpelerBravo": 1000,
@@ -14,30 +13,63 @@ TEST_PLAYERS = {
 }
 player_ids_to_cleanup = []
 
+def cleanup_test_players():
+    """Ruimt eventuele overgebleven testspelers en hun ELO-geschiedenis van eerdere runs op."""
+    print("\n Vooraf opruimen...")
+    try:
+        df_players = db.get_players()
+        if df_players.empty:
+            print(" -> Geen spelers gevonden om op te ruimen.")
+            return
+
+        deleted_count = 0
+        # Gebruik .iterrows() om door de rijen van de DataFrame te itereren
+        for index, player in df_players.iterrows():
+            # Zorg ervoor dat 'speler_naam' en 'speler_id' bestaan in de rij
+            if 'speler_naam' in player and 'speler_id' in player and str(player['speler_naam']).startswith("TestSpeler"):
+                if db.delete_player_by_id(player['speler_id']):
+                    deleted_count += 1
+        
+        if deleted_count > 0:
+            print(f" -> {deleted_count} overgebleven testspelers en hun ELO-geschiedenis verwijderd.")
+        else:
+            print(" -> Geen overgebleven testspelers gevonden.")
+            
+    except Exception as e:
+        print(f"Fout tijdens vooraf opruimen: {e}")
+
+
 def run_test():
-    """Voert een reeks tests uit op de Firestore service."""
+    """Voert een reeks tests uit op de Firestore service volgens de nieuwe databasestructuur."""
     
-    print("START TEST")
+    cleanup_test_players()
+    time.sleep(3) # Geef Firestore de tijd om de verwijderingen te verwerken
+
+    print("\nSTART TEST")
     
     try:
         # === TEST 1: Spelers toevoegen ===
         print("\n Spelers toevoegen...")
         for name, elo in TEST_PLAYERS.items():
             result = db.add_player(name, elo)
-            assert result == "Success", f"Kon speler {name} niet toevoegen."
-        print(" -> SUCCES: Alle testspelers succesvol toegevoegd.")
-        time.sleep(2) # Geef Firestore even de tijd om te synchroniseren
+            assert result == "Success", f"Kon speler {name} niet toevoegen. Resultaat: {result}"
+        print(" -> SUCCES: Alle testspelers en hun initiële ELO succesvol toegevoegd.")
+        time.sleep(2)
 
         # === TEST 2: Spelers ophalen en verifiëren ===
         print("\n Spelers ophalen en verifiëren...")
         df_players = db.get_players()
         assert not df_players.empty, "DataFrame met spelers is leeg."
-        
-        for name in TEST_PLAYERS.keys():
-            assert name in df_players['name'].values, f"Testspeler {name} niet gevonden in database."
+        assert len(df_players) >= len(TEST_PLAYERS), "Niet alle spelers zijn opgehaald."
+
+        # Maak een dictionary voor makkelijke toegang
+        player_map = {row['speler_naam']: row for index, row in df_players.iterrows()}
+
+        for name, elo in TEST_PLAYERS.items():
+            assert name in player_map, f"Testspeler {name} niet gevonden in database."
+            assert player_map[name]['rating'] == elo, f"ELO voor {name} is incorrect."
             # Sla de ID op voor de opruimactie
-            player_id = df_players[df_players['name'] == name]['player_id'].iloc
-            player_ids_to_cleanup.append(player_id)
+            player_ids_to_cleanup.append(player_map[name]['speler_id'])
 
         print(" -> SUCCES: Alle testspelers succesvol opgehaald en geverifieerd.")
 
@@ -46,39 +78,34 @@ def run_test():
         # Team 1 (winnaars): Alpha & Charlie
         # Team 2 (verliezers): Bravo & Delta
         
-        # Haal de IDs en ELOs op
-        player_dict = df_players.set_index('name').to_dict('index')
-        id_alpha = player_dict['player_id']
-        id_bravo = player_dict['player_id']
-        id_charlie = player_dict['player_id']
-        id_delta = player_dict['player_id']
-
         match_data = {
-            'thuis_speler_1_id': id_alpha, 'thuis_speler_2_id': id_charlie,
-            'uit_speler_1_id': id_bravo, 'uit_speler_2_id': id_delta,
-            'Thuis_score': 10, 'Uit_score': 5, 'timestamp': "test_timestamp"
+            'thuis_1': "TestSpelerAlpha", 'thuis_2': "TestSpelerCharlie",
+            'uit_1': "TestSpelerBravo", 'uit_2': "TestSpelerDelta",
+            'thuis_score': 10, 'uit_score': 5,
+            'klinkers_thuis_1': 1, 'klinkers_thuis_2': 0,
+            'klinkers_uit_1': 0, 'klinkers_uit_2': 2,
         }
         
-        # Aangezien alle spelers starten met 1000 ELO, is de verwachte verandering +16 voor de winnaars en -16 voor de verliezers.
+        # De nieuwe ELO-ratings die gelogd moeten worden
         elo_updates = [
-            (1016, id_alpha), (1016, id_charlie),
-            (984, id_bravo), (984, id_delta)
+            ("TestSpelerAlpha", 1016), ("TestSpelerCharlie", 1016),
+            ("TestSpelerBravo", 984), ("TestSpelerDelta", 984)
         ]
 
         success = db.add_match_and_update_elo(match_data, elo_updates)
-        assert success, "Toevoegen van wedstrijd en updaten van ELO is mislukt."
-        print(" -> SUCCES: Wedstrijd succesvol toegevoegd via batch write.")
+        assert success, "Toevoegen van wedstrijd en loggen van ELO is mislukt."
+        print(" -> SUCCES: Wedstrijd en nieuwe ELO-ratings succesvol gelogd.")
         time.sleep(2)
 
-        # Verifieer de nieuwe ELO-scores
+        # Verifieer de nieuwe ELO-scores door get_players opnieuw aan te roepen
         df_players_after = db.get_players()
-        player_dict_after = df_players_after.set_index('name').to_dict('index')
+        player_map_after = {row['speler_naam']: row for index, row in df_players_after.iterrows()}
 
-        assert player_dict_after['elo'] == 1016
-        assert player_dict_after['elo'] == 1016
-        assert player_dict_after['elo'] == 984
-        assert player_dict_after['elo'] == 984
-        print(" -> SUCCES: ELO-scores zijn correct bijgewerkt.")
+        assert player_map_after["TestSpelerAlpha"]['rating'] == 1016
+        assert player_map_after["TestSpelerCharlie"]['rating'] == 1016
+        assert player_map_after["TestSpelerBravo"]['rating'] == 984
+        assert player_map_after["TestSpelerDelta"]['rating'] == 984
+        print(" -> SUCCES: ELO-scores zijn correct bijgewerkt en opgehaald.")
 
     except AssertionError as e:
         print(f"\n!!! TEST MISLUKT: {e}!!!")
@@ -90,12 +117,11 @@ def run_test():
             print(" -> Geen spelers om op te ruimen.")
         else:
             deleted_count = 0
+            # We gebruiken de opgeslagen IDs voor de opruimactie
             for player_id in player_ids_to_cleanup:
                 if db.delete_player_by_id(player_id):
                     deleted_count += 1
-            print(f" -> SUCCES: {deleted_count} van de {len(player_ids_to_cleanup)} testspelers verwijderd.")
-            # N.B.: De wedstrijden blijven achter, maar bevatten nu ongeldige speler-ID's.
-            # Voor een simpele test is dit acceptabel.
+            print(f" -> SUCCES: {deleted_count} van de {len(player_ids_to_cleanup)} testspelers (en hun ELO-geschiedenis) verwijderd.")
 
     print("\nEINDE TEST")
 
