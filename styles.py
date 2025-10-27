@@ -26,11 +26,129 @@ def setup_page():
         page_icon=APP_ICON,
         layout=LAYOUT,
         initial_sidebar_state="expanded",
-        menu_items=None,
+        menu_items={
+            'Get Help': None,
+            'Report a bug': None,
+            'About': None
+        },
     )
     
     # Injecteer aangepaste CSS
     st.markdown(_get_custom_css(), unsafe_allow_html=True)
+    
+    # Voeg JavaScript toe voor mobiele sidebar functionaliteit
+    st.markdown(_get_mobile_js(), unsafe_allow_html=True)
+
+def _get_mobile_js():
+    """JavaScript voor mobiele sidebar verbetering."""
+    return """
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Voeg mobiele navigatie toe als fallback
+        function addMobileNav() {
+            if (window.innerWidth <= 768 && !document.getElementById('mobile-nav-fallback')) {
+                const nav = document.createElement('div');
+                nav.id = 'mobile-nav-fallback';
+                nav.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    background-color: #154273;
+                    z-index: 1002;
+                    padding: 1rem;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                    display: none;
+                `;
+                
+                const navContent = `
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <a href="/" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">🏠 Home</a>
+                        <a href="/Invullen" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">📝 Invullen</a>
+                        <a href="/spelers" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">👥 Spelers</a>
+                        <a href="/Ruwe_data" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">📊 Data</a>
+                        <a href="/Beheer" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">⚙️ Beheer</a>
+                        <a href="/Colofon" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">ℹ️ Info</a>
+                    </div>
+                `;
+                nav.innerHTML = navContent;
+                document.body.appendChild(nav);
+                
+                // Toggle functie
+                window.toggleMobileNav = function() {
+                    const nav = document.getElementById('mobile-nav-fallback');
+                    if (nav) {
+                        nav.style.display = nav.style.display === 'block' ? 'none' : 'block';
+                    }
+                };
+            }
+        }
+        
+        // Forceer sidebar zichtbaarheid op mobiel
+        function ensureSidebarVisibility() {
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            const collapsedControl = document.querySelector('[data-testid="collapsedControl"]');
+            
+            if (window.innerWidth <= 768) {
+                // Als sidebar niet zichtbaar is, toon mobile nav
+                if (!sidebar || sidebar.style.display === 'none' || sidebar.offsetWidth === 0) {
+                    addMobileNav();
+                    const mobileNav = document.getElementById('mobile-nav-fallback');
+                    if (mobileNav) mobileNav.style.display = 'block';
+                }
+                
+                if (sidebar) {
+                    sidebar.style.display = 'block';
+                    sidebar.style.position = 'fixed';
+                    sidebar.style.zIndex = '999';
+                    sidebar.style.left = '0';
+                    sidebar.style.top = '0';
+                    sidebar.style.height = '100vh';
+                    sidebar.style.width = window.innerWidth <= 480 ? '100vw' : '300px';
+                    sidebar.style.visibility = 'visible';
+                    sidebar.style.opacity = '1';
+                    sidebar.style.transform = 'translateX(0)';
+                }
+                
+                if (collapsedControl) {
+                    collapsedControl.style.position = 'fixed';
+                    collapsedControl.style.top = '1rem';
+                    collapsedControl.style.left = '1rem';
+                    collapsedControl.style.zIndex = '1001';
+                    collapsedControl.style.display = 'flex';
+                    collapsedControl.style.visibility = 'visible';
+                    
+                    // Voeg click handler toe voor mobile nav toggle
+                    collapsedControl.addEventListener('click', function() {
+                        setTimeout(toggleMobileNav, 100);
+                    });
+                }
+            } else {
+                // Verberg mobile nav op desktop
+                const mobileNav = document.getElementById('mobile-nav-fallback');
+                if (mobileNav) mobileNav.style.display = 'none';
+            }
+        }
+        
+        // Run onload en bij resize
+        ensureSidebarVisibility();
+        window.addEventListener('resize', ensureSidebarVisibility);
+        
+        // Observer voor dynamische content
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    ensureSidebarVisibility();
+                }
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        
+        // Extra check na 1 seconde
+        setTimeout(ensureSidebarVisibility, 1000);
+    });
+    </script>
+    """
 
 def _get_custom_css():
     """Genereer de complete CSS voor de applicatie."""
@@ -63,6 +181,29 @@ def _get_custom_css():
     body {{
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: none;
+    }}
+    
+    /* FORCEER SIDEBAR ZICHTBAARHEID OP ALLE APPARATEN */
+    [data-testid="stSidebar"][aria-expanded="false"] {{
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+    }}
+    
+    /* Verhinder sidebar collapse op mobiel */
+    @media (max-width: 768px) {{
+        [data-testid="stSidebar"] {{
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }}
+        
+        /* Zorg dat sidebar toggle altijd werkt */
+        [data-testid="collapsedControl"] {{
+            display: block !important;
+            visibility: visible !important;
+        }}
     }}
     
     /* ===== ALGEMENE BODY STYLING ===== */
@@ -107,6 +248,7 @@ def _get_custom_css():
     [data-testid="stSidebar"] {{
         background-color: {COLORS['primary_blue']} !important;
         color: {COLORS['white']} !important;
+        z-index: 999 !important;
     }}
     
     /* Zorg ervoor dat alle sidebar tekst wit is */
@@ -114,95 +256,166 @@ def _get_custom_css():
         color: {COLORS['white']} !important;
     }}
     
+    /* Sidebar content wrapper */
+    [data-testid="stSidebar"] > div {{
+        background-color: {COLORS['primary_blue']} !important;
+        padding: 1rem !important;
+    }}
+    
     /* Sidebar links styling */
     [data-testid="stSidebar"] .css-1d391kg,
-    [data-testid="stSidebar"] a {{
-        color: {COLORS['white']} !important;
-        text-decoration: none;
-        padding: 0.5rem 1rem;
-        display: block;
-        border-radius: 5px;
-        margin: 0.2rem 0;
-        transition: background-color 0.2s ease;
-    }}
-    
-    [data-testid="stSidebar"] a:hover {{
-        color: {COLORS['white']} !important;
-        background-color: rgba(255, 255, 255, 0.1);
-        opacity: 1;
-    }}
-    
-    /* Sidebar navigation items */
-    [data-testid="stSidebar"] .css-17lntkn,
+    [data-testid="stSidebar"] a,
+    [data-testid="stSidebar"] [role="button"],
     [data-testid="stSidebar"] .css-pkbazv {{
-        padding: 0.5rem 0;
+        color: {COLORS['white']} !important;
+        text-decoration: none !important;
+        padding: 0.8rem 1rem !important;
+        display: block !important;
+        border-radius: 8px !important;
+        margin: 0.3rem 0 !important;
+        transition: all 0.2s ease !important;
+        background-color: transparent !important;
+        border: none !important;
+        width: 100% !important;
+        text-align: left !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
     }}
     
-    /* Sidebar toggle button (hamburger menu) */
+    [data-testid="stSidebar"] .css-1d391kg:hover,
+    [data-testid="stSidebar"] a:hover,
+    [data-testid="stSidebar"] [role="button"]:hover,
+    [data-testid="stSidebar"] .css-pkbazv:hover {{
+        color: {COLORS['white']} !important;
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        opacity: 1 !important;
+        transform: translateX(5px) !important;
+    }}
+    
+    /* Sidebar navigation container */
+    [data-testid="stSidebar"] .css-17lntkn {{
+        padding: 0 !important;
+        margin: 0 !important;
+    }}
+    
+    /* Sidebar toggle button (hamburger menu) - KRITIEK VOOR MOBIEL */
     [data-testid="collapsedControl"] {{
         color: {COLORS['white']} !important;
         background-color: {COLORS['primary_blue']} !important;
         border: 2px solid {COLORS['accent_purple']} !important;
-        border-radius: 8px !important;
-        padding: 0.5rem !important;
+        border-radius: 50% !important;
+        padding: 0.8rem !important;
         margin: 0.5rem !important;
-        z-index: 999 !important;
+        z-index: 1001 !important;
+        position: fixed !important;
+        top: 1rem !important;
+        left: 1rem !important;
+        width: 60px !important;
+        height: 60px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.3s ease !important;
     }}
     
     [data-testid="collapsedControl"]:hover {{
         background-color: {COLORS['accent_purple']} !important;
-        transform: scale(1.05);
+        transform: scale(1.1) !important;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
     }}
     
-    /* Mobile sidebar optimizations */
+    [data-testid="collapsedControl"] svg {{
+        width: 24px !important;
+        height: 24px !important;
+        color: {COLORS['white']} !important;
+    }}
+    
+    /* MOBIELE OPTIMALISATIES - TABLET */
     @media (max-width: 768px) {{
+        /* Sidebar altijd zichtbaar en goed gepositioneerd */
         [data-testid="stSidebar"] {{
-            width: 280px !important;
-            min-width: 280px !important;
-        }}
-        
-        [data-testid="stSidebar"] .css-1d391kg,
-        [data-testid="stSidebar"] a {{
-            font-size: 1.1rem;
-            padding: 0.8rem 1rem;
-            margin: 0.3rem 0;
-        }}
-        
-        [data-testid="collapsedControl"] {{
-            width: 50px !important;
-            height: 50px !important;
-            position: fixed !important;
-            top: 1rem !important;
-            left: 1rem !important;
-            z-index: 999 !important;
-            border-radius: 50% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }}
-        
-        [data-testid="collapsedControl"] svg {{
-            width: 24px !important;
-            height: 24px !important;
-        }}
-    }}
-    
-    @media (max-width: 480px) {{
-        [data-testid="stSidebar"] {{
-            width: 100vw !important;
-            min-width: 100vw !important;
+            width: 300px !important;
+            min-width: 300px !important;
+            max-width: 300px !important;
             height: 100vh !important;
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            z-index: 1000 !important;
+            z-index: 999 !important;
+            transform: translateX(0) !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }}
         
+        /* Sidebar content */
+        [data-testid="stSidebar"] > div {{
+            height: 100vh !important;
+            overflow-y: auto !important;
+            padding: 2rem 1rem !important;
+        }}
+        
+        /* Grotere touch targets */
         [data-testid="stSidebar"] .css-1d391kg,
-        [data-testid="stSidebar"] a {{
-            font-size: 1.2rem;
-            padding: 1rem 1.5rem;
-            margin: 0.5rem 0;
+        [data-testid="stSidebar"] a,
+        [data-testid="stSidebar"] [role="button"],
+        [data-testid="stSidebar"] .css-pkbazv {{
+            font-size: 1.2rem !important;
+            padding: 1rem 1.5rem !important;
+            margin: 0.5rem 0 !important;
+            min-height: 50px !important;
+        }}
+        
+        /* Main content shift */
+        .main .block-container {{
+            margin-left: 300px !important;
+            max-width: calc(100vw - 320px) !important;
+        }}
+    }}
+    
+    /* MOBIELE OPTIMALISATIES - SMARTPHONE */
+    @media (max-width: 480px) {{
+        [data-testid="stSidebar"] {{
+            width: 100vw !important;
+            min-width: 100vw !important;
+            max-width: 100vw !important;
+        }}
+        
+        [data-testid="stSidebar"] > div {{
+            padding: 3rem 2rem !important;
+        }}
+        
+        /* Extra grote touch targets */
+        [data-testid="stSidebar"] .css-1d391kg,
+        [data-testid="stSidebar"] a,
+        [data-testid="stSidebar"] [role="button"],
+        [data-testid="stSidebar"] .css-pkbazv {{
+            font-size: 1.4rem !important;
+            padding: 1.2rem 2rem !important;
+            margin: 0.7rem 0 !important;
+            min-height: 60px !important;
+            border-radius: 12px !important;
+        }}
+        
+        /* Main content hidden when sidebar open */
+        .main .block-container {{
+            margin-left: 0 !important;
+            max-width: 100vw !important;
+        }}
+        
+        /* Hamburger menu extra prominent */
+        [data-testid="collapsedControl"] {{
+            width: 70px !important;
+            height: 70px !important;
+            top: 2rem !important;
+            left: 2rem !important;
+        }}
+        
+        [data-testid="collapsedControl"] svg {{
+            width: 30px !important;
+            height: 30px !important;
         }}
     }}
     
