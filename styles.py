@@ -7,7 +7,7 @@ LAYOUT = "centered"
 
 # Kleurenschema
 COLORS = {
-    'primary_blue': '#154273',      # Hoofdblauw - nu voor beide sidebar en header
+    'primary_blue': '#154273',      # Hoofdblauw
     'secondary_blue': '#1a4d80',    # Iets lichtere blauw voor variatie
     'accent_purple': '#8E6CA6',     # Accentpaars
     'dark_purple': '#42145F',       # Donkerpaars
@@ -25,7 +25,7 @@ def setup_page():
         page_title=APP_TITLE,
         page_icon=APP_ICON,
         layout=LAYOUT,
-        initial_sidebar_state="auto",
+        initial_sidebar_state="expanded",
         menu_items=None,
     )
     
@@ -36,6 +36,35 @@ def _get_custom_css():
     """Genereer de complete CSS voor de applicatie."""
     return f"""
 <style>
+    /* ===== MOBILE VIEWPORT EN TOUCH OPTIMALISATIE ===== */
+    * {{
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }}
+    
+    input, textarea, select {{
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+    }}
+    
+    html {{
+        font-size: 16px;
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+    }}
+    
+    body {{
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: none;
+    }}
+    
     /* ===== ALGEMENE BODY STYLING ===== */
     .main .block-container {{
         padding-top: 2rem;
@@ -51,6 +80,27 @@ def _get_custom_css():
     .element-container {{
         width: 100% !important;
         max-width: 100% !important;
+    }}
+    
+    /* Mobile optimizations voor main content */
+    @media (max-width: 768px) {{
+        .main .block-container {{
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+            max-width: 98vw;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .main .block-container {{
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            padding-left: 0.3rem;
+            padding-right: 0.3rem;
+            max-width: 100vw;
+        }}
     }}
     
     /* ===== SIDEBAR ===== */
@@ -69,11 +119,91 @@ def _get_custom_css():
     [data-testid="stSidebar"] a {{
         color: {COLORS['white']} !important;
         text-decoration: none;
+        padding: 0.5rem 1rem;
+        display: block;
+        border-radius: 5px;
+        margin: 0.2rem 0;
+        transition: background-color 0.2s ease;
     }}
     
     [data-testid="stSidebar"] a:hover {{
-        color: {COLORS['light_background']} !important;
-        opacity: 0.8;
+        color: {COLORS['white']} !important;
+        background-color: rgba(255, 255, 255, 0.1);
+        opacity: 1;
+    }}
+    
+    /* Sidebar navigation items */
+    [data-testid="stSidebar"] .css-17lntkn,
+    [data-testid="stSidebar"] .css-pkbazv {{
+        padding: 0.5rem 0;
+    }}
+    
+    /* Sidebar toggle button (hamburger menu) */
+    [data-testid="collapsedControl"] {{
+        color: {COLORS['white']} !important;
+        background-color: {COLORS['primary_blue']} !important;
+        border: 2px solid {COLORS['accent_purple']} !important;
+        border-radius: 8px !important;
+        padding: 0.5rem !important;
+        margin: 0.5rem !important;
+        z-index: 999 !important;
+    }}
+    
+    [data-testid="collapsedControl"]:hover {{
+        background-color: {COLORS['accent_purple']} !important;
+        transform: scale(1.05);
+    }}
+    
+    /* Mobile sidebar optimizations */
+    @media (max-width: 768px) {{
+        [data-testid="stSidebar"] {{
+            width: 280px !important;
+            min-width: 280px !important;
+        }}
+        
+        [data-testid="stSidebar"] .css-1d391kg,
+        [data-testid="stSidebar"] a {{
+            font-size: 1.1rem;
+            padding: 0.8rem 1rem;
+            margin: 0.3rem 0;
+        }}
+        
+        [data-testid="collapsedControl"] {{
+            width: 50px !important;
+            height: 50px !important;
+            position: fixed !important;
+            top: 1rem !important;
+            left: 1rem !important;
+            z-index: 999 !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+        
+        [data-testid="collapsedControl"] svg {{
+            width: 24px !important;
+            height: 24px !important;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        [data-testid="stSidebar"] {{
+            width: 100vw !important;
+            min-width: 100vw !important;
+            height: 100vh !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 1000 !important;
+        }}
+        
+        [data-testid="stSidebar"] .css-1d391kg,
+        [data-testid="stSidebar"] a {{
+            font-size: 1.2rem;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem 0;
+        }}
     }}
     
     /* ===== HEADER ===== */
@@ -85,6 +215,8 @@ def _get_custom_css():
         align-items: center;
         justify-content: center;
         padding: 0 1rem;
+        position: relative;
+        z-index: 100;
     }}
     
     [data-testid="stHeader"]::before {{
@@ -96,6 +228,32 @@ def _get_custom_css():
         text-align: center;
         white-space: nowrap;
         line-height: 1;
+    }}
+    
+    /* Mobile header optimizations */
+    @media (max-width: 768px) {{
+        [data-testid="stHeader"] {{
+            height: 3.5rem;
+            padding: 0 60px 0 0.5rem; /* Extra ruimte voor hamburger menu */
+        }}
+        
+        [data-testid="stHeader"]::before {{
+            font-size: 1.3rem;
+            letter-spacing: 0.5px;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        [data-testid="stHeader"] {{
+            height: 3rem;
+            padding: 0 60px 0 0.5rem;
+        }}
+        
+        [data-testid="stHeader"]::before {{
+            font-size: 1.1rem;
+            letter-spacing: 0.3px;
+            content: "⚽ Tafelvoetbal"; /* Kortere titel op zeer kleine schermen */
+        }}
     }}
     
     /* ===== GLITTER ACHTERGROND ===== */
@@ -168,6 +326,25 @@ def _get_custom_css():
         max-width: 95vw;
     }}
     
+    /* Mobile content container optimizations */
+    @media (max-width: 768px) {{
+        .main .block-container {{
+            padding: 1.5rem 1rem;
+            margin: 0.5rem auto;
+            border-radius: 12px;
+            max-width: 98vw;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .main .block-container {{
+            padding: 1rem 0.8rem;
+            margin: 0.3rem auto;
+            border-radius: 10px;
+            max-width: 99vw;
+        }}
+    }}
+    
     /* ===== KNOPPEN ===== */
     .stButton > button {{
         background-color: {COLORS['accent_purple']};
@@ -180,6 +357,8 @@ def _get_custom_css():
         position: relative;
         z-index: 2;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        width: auto;
+        min-height: 44px; /* Minimale touch target grootte */
     }}
     
     .stButton > button:hover {{
@@ -191,6 +370,28 @@ def _get_custom_css():
     .stButton > button:active {{
         transform: translateY(0);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }}
+    
+    /* Mobile button optimizations */
+    @media (max-width: 768px) {{
+        .stButton > button {{
+            padding: 0.8rem 1.5rem;
+            font-size: 1rem;
+            min-height: 48px;
+            width: 100%;
+            margin: 0.5rem 0;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .stButton > button {{
+            padding: 1rem 1.5rem;
+            font-size: 1.1rem;
+            min-height: 52px;
+            width: 100%;
+            margin: 0.7rem 0;
+            border-radius: 12px;
+        }}
     }}
     
     /* ===== FORM SUBMIT BUTTONS ===== */
@@ -334,6 +535,8 @@ def _get_custom_css():
         border: 2px solid {COLORS['soft_purple']};
         position: relative;
         z-index: 2;
+        min-height: 44px;
+        font-size: 1rem;
     }}
     
     .stTextInput > div > div > input:focus,
@@ -341,6 +544,36 @@ def _get_custom_css():
     .stNumberInput > div > div > input:focus {{
         border-color: {COLORS['accent_purple']};
         box-shadow: 0 0 0 2px rgba(142, 108, 166, 0.2);
+    }}
+    
+    /* Mobile input field optimizations */
+    @media (max-width: 768px) {{
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div > select,
+        .stNumberInput > div > div > input {{
+            min-height: 48px;
+            font-size: 1.1rem;
+            padding: 0.8rem;
+        }}
+        
+        .stSelectbox > div > div {{
+            min-height: 48px;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .stTextInput > div > div > input,
+        .stSelectbox > div > div > select,
+        .stNumberInput > div > div > input {{
+            min-height: 52px;
+            font-size: 1.2rem;
+            padding: 1rem;
+            border-radius: 12px;
+        }}
+        
+        .stSelectbox > div > div {{
+            min-height: 52px;
+        }}
     }}
     
     /* ===== SUCCESS/ERROR MESSAGES ===== */
@@ -385,12 +618,58 @@ def _get_custom_css():
         color: {COLORS['primary_blue']};
         position: relative;
         z-index: 2;
+        line-height: 1.2;
     }}
     
     .main h1 {{
         border-bottom: 3px solid {COLORS['accent_purple']};
         padding-bottom: 0.5rem;
         margin-bottom: 1.5rem;
+    }}
+    
+    /* Mobile typography optimizations */
+    @media (max-width: 768px) {{
+        h1 {{
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+        }}
+        
+        h2 {{
+            font-size: 1.5rem;
+            margin-bottom: 0.8rem;
+        }}
+        
+        h3 {{
+            font-size: 1.3rem;
+            margin-bottom: 0.6rem;
+        }}
+        
+        .main h1 {{
+            padding-bottom: 0.4rem;
+            margin-bottom: 1.2rem;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        h1 {{
+            font-size: 1.6rem;
+            margin-bottom: 0.8rem;
+        }}
+        
+        h2 {{
+            font-size: 1.3rem;
+            margin-bottom: 0.6rem;
+        }}
+        
+        h3 {{
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }}
+        
+        .main h1 {{
+            padding-bottom: 0.3rem;
+            margin-bottom: 1rem;
+        }}
     }}
     
     /* ===== DIVIDERS ===== */
