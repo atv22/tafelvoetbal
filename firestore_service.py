@@ -20,26 +20,44 @@ def is_running_in_streamlit():
 def initialize_firestore():
     """
     Maakt verbinding met Firestore.
-    Gebruikt lokaal serviceaccountbestand voor nu.
+    Gebruikt Streamlit secrets in de cloud, anders lokaal serviceaccountbestand.
     """
     project_id = None
+    
+    # Probeer eerst Streamlit secrets (voor cloud deployment)
     try:
-        # Probeer eerst lokaal bestand
-        with open("firestore-key.json") as f:
-            key_dict = json.load(f)
+        if hasattr(st, 'secrets') and 'firestore_credentials' in st.secrets:
+            # Streamlit Cloud: gebruik secrets
+            key_dict = dict(st.secrets["firestore_credentials"])
             project_id = key_dict.get("project_id")
-        creds = service_account.Credentials.from_service_account_file("firestore-key.json")
-    except FileNotFoundError:
-        print("Fout: 'firestore-key.json' niet gevonden. Zorg dat dit bestand in de root van je project staat.")
-        raise
-    except Exception as e:
-        print(f"Een onverwachte fout is opgetreden bij het laden van de credentials: {e}")
-        raise
+            creds = service_account.Credentials.from_service_account_info(key_dict)
+            print("Firestore credentials geladen vanuit Streamlit secrets")
+        else:
+            raise KeyError("Geen firestore_credentials gevonden in secrets")
+    except (KeyError, AttributeError, ValueError) as e:
+        print(f"Streamlit secrets niet beschikbaar ({e}), probeer lokaal bestand...")
+        
+        # Fallback naar lokaal bestand (voor lokale ontwikkeling)
+        try:
+            with open("firestore-key.json") as f:
+                key_dict = json.load(f)
+                project_id = key_dict.get("project_id")
+            creds = service_account.Credentials.from_service_account_file("firestore-key.json")
+            print("Firestore credentials geladen vanuit lokaal bestand")
+        except FileNotFoundError:
+            print("Fout: Noch Streamlit secrets noch 'firestore-key.json' beschikbaar.")
+            print("Voor lokale ontwikkeling: voeg firestore-key.json toe aan de root.")
+            print("Voor Streamlit Cloud: configureer firestore_credentials in secrets.")
+            raise
+        except Exception as e:
+            print(f"Fout bij laden van lokale credentials: {e}")
+            raise
             
     if not project_id:
         raise ValueError("Project ID kon niet worden gevonden in de credentials.")
 
     db = google.cloud.firestore.Client(credentials=creds, project=project_id)
+    print(f"Firestore client succesvol geïnitialiseerd voor project: {project_id}")
     return db
 
 db = initialize_firestore()
