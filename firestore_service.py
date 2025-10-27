@@ -151,7 +151,7 @@ def add_season(startdatum, einddatum):
         new_id = 1
         if last_season_docs:
             last_season_data = last_season_docs[0].to_dict()
-            if 'seizoen_id' in last_season_data:
+            if last_season_data and 'seizoen_id' in last_season_data:
                 new_id = last_season_data['seizoen_id'] + 1
 
         # Voeg het nieuwe seizoen toe met het correcte ID
@@ -245,7 +245,8 @@ def delete_player_by_id(player_id):
         if not player_doc.exists:
             return True # Beschouw als succes als de speler al weg is
             
-        player_name = player_doc.to_dict().get('speler_naam')
+        player_data = player_doc.to_dict()
+        player_name = player_data.get('speler_naam') if player_data else None
 
         # 2. Verwijder de speler uit de 'spelers' collectie
         batch.delete(players_ref.document(player_id))
