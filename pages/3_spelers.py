@@ -11,7 +11,7 @@ name = st.text_input("Vul een naam in:")
 if st.button("Voeg naam toe"):
     add_name(name)
 
-st.markdown("<hr style=\"height:9px;border:none;color:#f0f2f6;background-color:#122f5b;opacity:0.8;\" />", unsafe_allow_html=True)
+st.markdown("<hr />", unsafe_allow_html=True)
 
 st.header("Huidige spelerslijst")
 
