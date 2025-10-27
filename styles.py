@@ -70,18 +70,22 @@ def _get_custom_css():
     [data-testid="stHeader"] {{
         background-color: {COLORS['primary_blue']} !important;
         border-bottom: 2px solid {COLORS['accent_purple']};
-        height: 3.5rem;
+        height: 4rem;
         display: flex;
         align-items: center;
         justify-content: center;
+        padding: 0 1rem;
     }}
     
     [data-testid="stHeader"]::before {{
         content: "⚽  Tafelvoetbal Competitie";
-        font-size: 1.3rem;
-        font-weight: 600;
+        font-size: 1.8rem;
+        font-weight: 700;
         color: {COLORS['white']};
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
+        text-align: center;
+        white-space: nowrap;
+        line-height: 1;
     }}
     
     /* ===== GLITTER ACHTERGROND ===== */
