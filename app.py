@@ -19,7 +19,7 @@ if players_df.empty:
 def calculate_stats(players, matches):
     stats_list = []
     for index, player in players.iterrows():
-        player_name = player['speler_naam']
+        player_name = str(player['speler_naam']) if player['speler_naam'] is not None else ""
         
         # Veilige filtering om KeyError te voorkomen
         conditions = []
@@ -33,7 +33,7 @@ def calculate_stats(players, matches):
             player_matches = matches[pd.concat(conditions, axis=1).any(axis=1)]
 
         if player_matches.empty:
-            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0}
+            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Speler': ""}
         else:
             goals_for = 0
             goals_against = 0
@@ -62,11 +62,16 @@ def calculate_stats(players, matches):
                 'Voor': int(goals_for),
                 'Tegen': int(goals_against),
                 'Doelsaldo': int(goals_for - goals_against),
-                'Klinkers': int(klinkers)
+                'Klinkers': int(klinkers),
+                'Speler': ""  # Placeholder voor string type
             }
         
         stats['Speler'] = player_name
-        stats['ELO'] = int(player['rating'])
+        # Veilige conversie van rating met fallback naar 1000 als default
+        rating_value = player.get('rating', 1000)
+        if rating_value is None or pd.isna(rating_value):
+            rating_value = 1000
+        stats['ELO'] = int(rating_value)
         stats_list.append(stats)
         
     return pd.DataFrame(stats_list)
