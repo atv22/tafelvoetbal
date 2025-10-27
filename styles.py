@@ -25,7 +25,7 @@ def setup_page():
         page_title=APP_TITLE,
         page_icon=APP_ICON,
         layout=LAYOUT,
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="auto",  # Laat Streamlit zelf beslissen
         menu_items={
             'Get Help': None,
             'Report a bug': None,
@@ -36,186 +36,27 @@ def setup_page():
     # Injecteer aangepaste CSS
     st.markdown(_get_custom_css(), unsafe_allow_html=True)
     
-    # Voeg JavaScript toe voor mobiele sidebar functionaliteit
+    # Voeg minimale JavaScript toe
     st.markdown(_get_mobile_js(), unsafe_allow_html=True)
 
 def _get_mobile_js():
-    """JavaScript voor mobiele sidebar met toggle functionaliteit."""
+    """Minimale JavaScript - laat Streamlit sidebar met rust."""
     return """
     <script>
+    // Alleen noodzakelijke mobile optimalisaties
     document.addEventListener('DOMContentLoaded', function() {
-        let sidebarVisible = false; // Track sidebar state
-        
-        // Sidebar toggle functie
-        function toggleSidebar() {
-            const sidebar = document.querySelector('[data-testid="stSidebar"]');
-            const mobileOverlay = document.getElementById('mobile-sidebar-overlay');
-            
-            if (window.innerWidth <= 768 && sidebar) {
-                sidebarVisible = !sidebarVisible;
-                
-                if (sidebarVisible) {
-                    // Toon sidebar
-                    sidebar.style.transform = 'translateX(0)';
-                    sidebar.style.visibility = 'visible';
-                    sidebar.style.opacity = '1';
-                    
-                    // Toon overlay
-                    if (mobileOverlay) {
-                        mobileOverlay.style.display = 'block';
-                    }
-                    
-                    // Prevent body scroll
-                    document.body.style.overflow = 'hidden';
-                } else {
-                    // Verberg sidebar
-                    sidebar.style.transform = 'translateX(-100%)';
-                    sidebar.style.visibility = 'hidden';
-                    sidebar.style.opacity = '0';
-                    
-                    // Verberg overlay
-                    if (mobileOverlay) {
-                        mobileOverlay.style.display = 'none';
-                    }
-                    
-                    // Restore body scroll
-                    document.body.style.overflow = 'auto';
-                }
+        // Zorg voor juiste viewport gedrag
+        function optimizeViewport() {
+            const viewport = document.querySelector('meta[name="viewport"]');
+            if (!viewport) {
+                const meta = document.createElement('meta');
+                meta.name = 'viewport';
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
+                document.head.appendChild(meta);
             }
         }
         
-        // Voeg overlay toe voor mobile sidebar
-        function addMobileOverlay() {
-            if (!document.getElementById('mobile-sidebar-overlay')) {
-                const overlay = document.createElement('div');
-                overlay.id = 'mobile-sidebar-overlay';
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100vw;
-                    height: 100vh;
-                    background-color: rgba(0, 0, 0, 0.5);
-                    z-index: 998;
-                    display: none;
-                    backdrop-filter: blur(2px);
-                `;
-                
-                // Click overlay to close sidebar
-                overlay.addEventListener('click', function() {
-                    if (sidebarVisible) {
-                        toggleSidebar();
-                    }
-                });
-                
-                document.body.appendChild(overlay);
-            }
-        }
-        
-        // Setup mobile sidebar
-        function setupMobileSidebar() {
-            const sidebar = document.querySelector('[data-testid="stSidebar"]');
-            const collapsedControl = document.querySelector('[data-testid="collapsedControl"]');
-            
-            if (window.innerWidth <= 768) {
-                addMobileOverlay();
-                
-                if (sidebar) {
-                    // Initieel verborgen op mobiel
-                    sidebar.style.position = 'fixed';
-                    sidebar.style.top = '0';
-                    sidebar.style.left = '0';
-                    sidebar.style.height = '100vh';
-                    sidebar.style.width = window.innerWidth <= 480 ? '85vw' : '300px';
-                    sidebar.style.zIndex = '999';
-                    sidebar.style.transform = 'translateX(-100%)';
-                    sidebar.style.visibility = 'hidden';
-                    sidebar.style.opacity = '0';
-                    sidebar.style.transition = 'all 0.3s ease-in-out';
-                    sidebar.style.boxShadow = '4px 0 20px rgba(0, 0, 0, 0.3)';
-                    
-                    // Reset sidebar state
-                    sidebarVisible = false;
-                }
-                
-                if (collapsedControl) {
-                    collapsedControl.style.position = 'fixed';
-                    collapsedControl.style.top = '1rem';
-                    collapsedControl.style.left = '1rem';
-                    collapsedControl.style.zIndex = '1001';
-                    collapsedControl.style.display = 'flex';
-                    collapsedControl.style.visibility = 'visible';
-                    
-                    // Remove old event listeners
-                    collapsedControl.replaceWith(collapsedControl.cloneNode(true));
-                    const newCollapsedControl = document.querySelector('[data-testid="collapsedControl"]');
-                    
-                    // Add new click handler
-                    newCollapsedControl.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleSidebar();
-                    });
-                }
-                
-                // Close sidebar when clicking sidebar links
-                const sidebarLinks = sidebar?.querySelectorAll('a, [role="button"]');
-                if (sidebarLinks) {
-                    sidebarLinks.forEach(link => {
-                        link.addEventListener('click', function() {
-                            if (sidebarVisible) {
-                                setTimeout(() => toggleSidebar(), 200); // Small delay for navigation
-                            }
-                        });
-                    });
-                }
-            } else {
-                // Desktop: herstel normale sidebar gedrag
-                if (sidebar) {
-                    sidebar.style.position = '';
-                    sidebar.style.transform = '';
-                    sidebar.style.visibility = '';
-                    sidebar.style.opacity = '';
-                    sidebar.style.transition = '';
-                    sidebar.style.boxShadow = '';
-                }
-                
-                // Verberg overlay op desktop
-                const mobileOverlay = document.getElementById('mobile-sidebar-overlay');
-                if (mobileOverlay) {
-                    mobileOverlay.style.display = 'none';
-                }
-                
-                // Restore body scroll
-                document.body.style.overflow = 'auto';
-                sidebarVisible = false;
-            }
-        }
-        
-        // Global toggle function
-        window.toggleMobileSidebar = toggleSidebar;
-        
-        // Run setup
-        setupMobileSidebar();
-        
-        // Listen for resize events
-        window.addEventListener('resize', function() {
-            setupMobileSidebar();
-        });
-        
-        // Observer for dynamic content
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList') {
-                    // Delay setup to allow DOM to update
-                    setTimeout(setupMobileSidebar, 100);
-                }
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        
-        // Extra setup after DOM is fully loaded
-        setTimeout(setupMobileSidebar, 500);
+        optimizeViewport();
     });
     </script>
     """
@@ -251,66 +92,6 @@ def _get_custom_css():
     body {{
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: none;
-    }}
-    
-    /* FORCEER SIDEBAR GEDRAG - DESKTOP ALTIJD ZICHTBAAR */
-    [data-testid="stSidebar"][aria-expanded="false"] {{
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        transform: translateX(0) !important;
-    }}
-    
-    /* DESKTOP: Sidebar altijd zichtbaar */
-    @media (min-width: 769px) {{
-        [data-testid="stSidebar"] {{
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            position: relative !important;
-            transform: translateX(0) !important;
-        }}
-    }}
-    
-    /* MOBIEL: Sidebar initieel verborgen, toggle via menu */
-    @media (max-width: 768px) {{
-        [data-testid="stSidebar"] {{
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            height: 100vh !important;
-            width: 300px !important;
-            z-index: 999 !important;
-            transform: translateX(-100%) !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            transition: all 0.3s ease-in-out !important;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
-        }}
-        
-        /* Zorg dat sidebar toggle altijd werkt */
-        [data-testid="collapsedControl"] {{
-            display: flex !important;
-            visibility: visible !important;
-            position: fixed !important;
-            top: 1rem !important;
-            left: 1rem !important;
-            z-index: 1001 !important;
-        }}
-    }}
-    
-    /* SMARTPHONE: Sidebar bijna volledige breedte */
-    @media (max-width: 480px) {{
-        [data-testid="stSidebar"] {{
-            width: 85vw !important;
-        }}
-    }}
-    
-    /* Sidebar content blijft hetzelfde */
-    [data-testid="stSidebar"] > div {{
-        height: 100vh !important;
-        overflow-y: auto !important;
-        padding: 2rem 1rem !important;
     }}
     
     /* ===== ALGEMENE BODY STYLING ===== */
@@ -351,11 +132,10 @@ def _get_custom_css():
         }}
     }}
     
-    /* ===== SIDEBAR ===== */
+    /* ===== SIDEBAR - BASIS STYLING ===== */
     [data-testid="stSidebar"] {{
         background-color: {COLORS['primary_blue']} !important;
         color: {COLORS['white']} !important;
-        z-index: 999 !important;
     }}
     
     /* Zorg ervoor dat alle sidebar tekst wit is */
@@ -406,95 +186,21 @@ def _get_custom_css():
         margin: 0 !important;
     }}
     
-    /* Sidebar toggle button (hamburger menu) - KRITIEK VOOR MOBIEL */
+    /* Sidebar toggle button (hamburger menu) - minimale styling */
     [data-testid="collapsedControl"] {{
         color: {COLORS['white']} !important;
         background-color: {COLORS['primary_blue']} !important;
         border: 2px solid {COLORS['accent_purple']} !important;
         border-radius: 50% !important;
-        padding: 0.8rem !important;
-        margin: 0.5rem !important;
-        z-index: 1001 !important;
-        position: fixed !important;
-        top: 1rem !important;
-        left: 1rem !important;
-        width: 60px !important;
-        height: 60px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
         transition: all 0.3s ease !important;
     }}
     
     [data-testid="collapsedControl"]:hover {{
         background-color: {COLORS['accent_purple']} !important;
-        transform: scale(1.1) !important;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
     }}
     
     [data-testid="collapsedControl"] svg {{
-        width: 24px !important;
-        height: 24px !important;
         color: {COLORS['white']} !important;
-    }}
-    
-    /* MOBIELE OPTIMALISATIES - TABLET */
-    @media (max-width: 768px) {{
-        /* Grotere touch targets voor sidebar links */
-        [data-testid="stSidebar"] .css-1d391kg,
-        [data-testid="stSidebar"] a,
-        [data-testid="stSidebar"] [role="button"],
-        [data-testid="stSidebar"] .css-pkbazv {{
-            font-size: 1.2rem !important;
-            padding: 1rem 1.5rem !important;
-            margin: 0.5rem 0 !important;
-            min-height: 50px !important;
-        }}
-        
-        /* Main content GEEN margin - sidebar is overlay */
-        .main .block-container {{
-            margin-left: 0 !important;
-            max-width: 100vw !important;
-        }}
-    }}
-    
-    /* MOBIELE OPTIMALISATIES - SMARTPHONE */
-    @media (max-width: 480px) {{
-        [data-testid="stSidebar"] > div {{
-            padding: 3rem 2rem !important;
-        }}
-        
-        /* Extra grote touch targets */
-        [data-testid="stSidebar"] .css-1d391kg,
-        [data-testid="stSidebar"] a,
-        [data-testid="stSidebar"] [role="button"],
-        [data-testid="stSidebar"] .css-pkbazv {{
-            font-size: 1.4rem !important;
-            padding: 1.2rem 2rem !important;
-            margin: 0.7rem 0 !important;
-            min-height: 60px !important;
-            border-radius: 12px !important;
-        }}
-        
-        /* Main content volledige breedte - sidebar is overlay */
-        .main .block-container {{
-            margin-left: 0 !important;
-            max-width: 100vw !important;
-        }}
-        
-        /* Hamburger menu extra prominent */
-        [data-testid="collapsedControl"] {{
-            width: 70px !important;
-            height: 70px !important;
-            top: 2rem !important;
-            left: 2rem !important;
-        }}
-        
-        [data-testid="collapsedControl"] svg {{
-            width: 30px !important;
-            height: 30px !important;
-        }}
     }}
     
     /* ===== HEADER ===== */
