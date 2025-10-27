@@ -40,7 +40,17 @@ def _get_custom_css():
     .main .block-container {{
         padding-top: 2rem;
         padding-bottom: 2rem;
-        max-width: 1200px;
+        max-width: 95vw;
+        width: 100%;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }}
+    
+    /* Zorg ervoor dat content containers volledige breedte gebruiken */
+    .stContainer > div,
+    .element-container {{
+        width: 100% !important;
+        max-width: 100% !important;
     }}
     
     /* ===== SIDEBAR ===== */
@@ -150,10 +160,12 @@ def _get_custom_css():
         z-index: 1;
         background-color: rgba(255, 255, 255, 0.75);
         border-radius: 15px;
-        padding: 2rem;
+        padding: 2rem 1.5rem;
         margin: 1rem auto;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         backdrop-filter: blur(1px);
+        width: 100%;
+        max-width: 95vw;
     }}
     
     /* ===== KNOPPEN ===== */
@@ -227,6 +239,25 @@ def _get_custom_css():
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         position: relative;
         z-index: 2;
+        width: 100% !important;
+        max-width: 100% !important;
+    }}
+    
+    /* DataFrames volledige breedte */
+    .stDataFrame > div,
+    .stTable > div {{
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto;
+    }}
+    
+    /* Table container volledige breedte */
+    .stDataFrame table,
+    .stTable table {{
+        width: 100% !important;
+        min-width: 100%;
+        table-layout: auto;
+        border-collapse: collapse;
     }}
     
     /* Table headers */
@@ -235,13 +266,64 @@ def _get_custom_css():
         background-color: {COLORS['primary_blue']} !important;
         color: {COLORS['white']} !important;
         font-weight: 600;
-        padding: 1rem 0.5rem;
+        padding: 1rem 0.8rem;
+        text-align: left;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }}
+    
+    /* Table cells */
+    .stDataFrame tbody td,
+    .stTable tbody td {{
+        padding: 0.8rem;
+        border-bottom: 1px solid {COLORS['soft_purple']};
+        text-align: left;
+        word-wrap: break-word;
     }}
     
     /* Table rows */
     .stDataFrame tbody tr:nth-child(even),
     .stTable tbody tr:nth-child(even) {{
         background-color: {COLORS['light_background']};
+    }}
+    
+    .stDataFrame tbody tr:hover,
+    .stTable tbody tr:hover {{
+        background-color: rgba(142, 108, 166, 0.1);
+        transition: background-color 0.2s ease;
+    }}
+    
+    /* Responsive table aanpassingen */
+    @media (max-width: 768px) {{
+        .stDataFrame thead th,
+        .stTable thead th,
+        .stDataFrame tbody td,
+        .stTable tbody td {{
+            padding: 0.5rem 0.3rem;
+            font-size: 0.9rem;
+        }}
+        
+        .stDataFrame,
+        .stTable {{
+            font-size: 0.85rem;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .stDataFrame thead th,
+        .stTable thead th,
+        .stDataFrame tbody td,
+        .stTable tbody td {{
+            padding: 0.4rem 0.2rem;
+            font-size: 0.8rem;
+        }}
+        
+        .stDataFrame,
+        .stTable {{
+            font-size: 0.75rem;
+        }}
     }}
     
     /* ===== TEXT INPUT FIELDS ===== */
