@@ -24,8 +24,8 @@ def setup_page():
     st.set_page_config(
         page_title=APP_TITLE,
         page_icon=APP_ICON,
-        layout=LAYOUT,
-        initial_sidebar_state="auto",  # Laat Streamlit zelf beslissen
+        layout="wide",  # Gebruik volledige breedte zonder sidebar
+        initial_sidebar_state="collapsed",  # Zorg dat sidebar weg is
         menu_items={
             'Get Help': None,
             'Report a bug': None,
@@ -132,75 +132,106 @@ def _get_custom_css():
         }}
     }}
     
-    /* ===== SIDEBAR - BASIS STYLING ===== */
+    /* ===== VERBERG SIDEBAR COMPLEET ===== */
     [data-testid="stSidebar"] {{
-        background-color: {COLORS['primary_blue']} !important;
-        color: {COLORS['white']} !important;
+        display: none !important;
     }}
     
-    /* Zorg ervoor dat alle sidebar tekst wit is */
-    [data-testid="stSidebar"] * {{
-        color: {COLORS['white']} !important;
-    }}
-    
-    /* Sidebar content wrapper */
-    [data-testid="stSidebar"] > div {{
-        background-color: {COLORS['primary_blue']} !important;
-        padding: 1rem !important;
-    }}
-    
-    /* Sidebar links styling */
-    [data-testid="stSidebar"] .css-1d391kg,
-    [data-testid="stSidebar"] a,
-    [data-testid="stSidebar"] [role="button"],
-    [data-testid="stSidebar"] .css-pkbazv {{
-        color: {COLORS['white']} !important;
-        text-decoration: none !important;
-        padding: 0.8rem 1rem !important;
-        display: block !important;
-        border-radius: 8px !important;
-        margin: 0.3rem 0 !important;
-        transition: all 0.2s ease !important;
-        background-color: transparent !important;
-        border: none !important;
-        width: 100% !important;
-        text-align: left !important;
-        font-size: 1rem !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-    }}
-    
-    [data-testid="stSidebar"] .css-1d391kg:hover,
-    [data-testid="stSidebar"] a:hover,
-    [data-testid="stSidebar"] [role="button"]:hover,
-    [data-testid="stSidebar"] .css-pkbazv:hover {{
-        color: {COLORS['white']} !important;
-        background-color: rgba(255, 255, 255, 0.15) !important;
-        opacity: 1 !important;
-        transform: translateX(5px) !important;
-    }}
-    
-    /* Sidebar navigation container */
-    [data-testid="stSidebar"] .css-17lntkn {{
-        padding: 0 !important;
-        margin: 0 !important;
-    }}
-    
-    /* Sidebar toggle button (hamburger menu) - minimale styling */
     [data-testid="collapsedControl"] {{
-        color: {COLORS['white']} !important;
+        display: none !important;
+    }}
+    
+    /* Zorg dat main content volledige breedte gebruikt */
+    .main .block-container {{
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+    }}
+    
+    /* ===== TABS STYLING ===== */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 0.3rem;
+        border-bottom: 2px solid {COLORS['primary_blue']};
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+        background: transparent;
+        flex-wrap: wrap; /* Allow wrapping on mobile */
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
+        background: {COLORS['soft_purple']};
+        border-radius: 12px 12px 0 0;
+        padding: 0.8rem 1.2rem;
+        color: {COLORS['primary_blue']};
+        font-weight: 500;
+        border: none;
+        position: relative;
+        z-index: 2;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        min-height: 48px; /* Touch-friendly */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }}
+    
+    .stTabs [data-baseweb="tab"]:hover {{
+        background-color: {COLORS['light_background']};
+        transform: translateY(-2px);
+    }}
+    
+    .stTabs [aria-selected="true"] {{
         background-color: {COLORS['primary_blue']} !important;
-        border: 2px solid {COLORS['accent_purple']} !important;
-        border-radius: 50% !important;
-        transition: all 0.3s ease !important;
-    }}
-    
-    [data-testid="collapsedControl"]:hover {{
-        background-color: {COLORS['accent_purple']} !important;
-    }}
-    
-    [data-testid="collapsedControl"] svg {{
         color: {COLORS['white']} !important;
+        font-weight: 600;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }}
+    
+    /* Tab content styling */
+    .stTabs [data-baseweb="tab-panel"] {{
+        padding: 1.5rem 1rem;
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 0 12px 12px 12px;
+        border: 1px solid {COLORS['soft_purple']};
+        position: relative;
+        z-index: 1;
+    }}
+    
+    /* Mobile tab optimizations */
+    @media (max-width: 768px) {{
+        .stTabs [data-baseweb="tab-list"] {{
+            justify-content: flex-start;
+            overflow-x: auto;
+            padding-bottom: 0.8rem;
+        }}
+        
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.6rem 1rem;
+            font-size: 0.9rem;
+            min-width: 80px;
+            flex-shrink: 0;
+        }}
+        
+        .stTabs [data-baseweb="tab-panel"] {{
+            padding: 1rem 0.5rem;
+            border-radius: 0 8px 8px 8px;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.7rem 0.8rem;
+            font-size: 0.8rem;
+            min-width: 70px;
+        }}
+        
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 0.2rem;
+        }}
+        
+        .stTabs [data-baseweb="tab-panel"] {{
+            padding: 0.8rem 0.3rem;
+        }}
     }}
     
     /* ===== HEADER ===== */
@@ -399,34 +430,6 @@ def _get_custom_css():
     
     .stForm .stButton > button:hover {{
         background-color: {COLORS['dark_purple']};
-    }}
-    
-    /* ===== TABS ===== */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 0.5rem;
-        border-bottom: none;
-    }}
-    
-    .stTabs [data-baseweb="tab"] {{
-        background: {COLORS['soft_purple']};
-        border-radius: 12px 12px 0 0;
-        padding: 0.6rem 1rem;
-        color: {COLORS['primary_blue']};
-        font-weight: 500;
-        border: none;
-        position: relative;
-        z-index: 2;
-        transition: all 0.2s ease;
-    }}
-    
-    .stTabs [data-baseweb="tab"]:hover {{
-        background-color: {COLORS['light_background']};
-    }}
-    
-    .stTabs [aria-selected="true"] {{
-        background-color: {COLORS['primary_blue']} !important;
-        color: {COLORS['white']} !important;
-        font-weight: 600;
     }}
     
     /* ===== TABELLEN ===== */
