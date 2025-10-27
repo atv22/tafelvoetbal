@@ -40,74 +40,102 @@ def setup_page():
     st.markdown(_get_mobile_js(), unsafe_allow_html=True)
 
 def _get_mobile_js():
-    """JavaScript voor mobiele sidebar verbetering."""
+    """JavaScript voor mobiele sidebar met toggle functionaliteit."""
     return """
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Voeg mobiele navigatie toe als fallback
-        function addMobileNav() {
-            if (window.innerWidth <= 768 && !document.getElementById('mobile-nav-fallback')) {
-                const nav = document.createElement('div');
-                nav.id = 'mobile-nav-fallback';
-                nav.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    background-color: #154273;
-                    z-index: 1002;
-                    padding: 1rem;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                    display: none;
-                `;
+        let sidebarVisible = false; // Track sidebar state
+        
+        // Sidebar toggle functie
+        function toggleSidebar() {
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            const mobileOverlay = document.getElementById('mobile-sidebar-overlay');
+            
+            if (window.innerWidth <= 768 && sidebar) {
+                sidebarVisible = !sidebarVisible;
                 
-                const navContent = `
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                        <a href="/" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">🏠 Home</a>
-                        <a href="/Invullen" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">📝 Invullen</a>
-                        <a href="/spelers" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">👥 Spelers</a>
-                        <a href="/Ruwe_data" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">📊 Data</a>
-                        <a href="/Beheer" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">⚙️ Beheer</a>
-                        <a href="/Colofon" style="color: white; text-decoration: none; padding: 0.5rem 1rem; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9rem;">ℹ️ Info</a>
-                    </div>
-                `;
-                nav.innerHTML = navContent;
-                document.body.appendChild(nav);
-                
-                // Toggle functie
-                window.toggleMobileNav = function() {
-                    const nav = document.getElementById('mobile-nav-fallback');
-                    if (nav) {
-                        nav.style.display = nav.style.display === 'block' ? 'none' : 'block';
+                if (sidebarVisible) {
+                    // Toon sidebar
+                    sidebar.style.transform = 'translateX(0)';
+                    sidebar.style.visibility = 'visible';
+                    sidebar.style.opacity = '1';
+                    
+                    // Toon overlay
+                    if (mobileOverlay) {
+                        mobileOverlay.style.display = 'block';
                     }
-                };
+                    
+                    // Prevent body scroll
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    // Verberg sidebar
+                    sidebar.style.transform = 'translateX(-100%)';
+                    sidebar.style.visibility = 'hidden';
+                    sidebar.style.opacity = '0';
+                    
+                    // Verberg overlay
+                    if (mobileOverlay) {
+                        mobileOverlay.style.display = 'none';
+                    }
+                    
+                    // Restore body scroll
+                    document.body.style.overflow = 'auto';
+                }
             }
         }
         
-        // Forceer sidebar zichtbaarheid op mobiel
-        function ensureSidebarVisibility() {
+        // Voeg overlay toe voor mobile sidebar
+        function addMobileOverlay() {
+            if (!document.getElementById('mobile-sidebar-overlay')) {
+                const overlay = document.createElement('div');
+                overlay.id = 'mobile-sidebar-overlay';
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    background-color: rgba(0, 0, 0, 0.5);
+                    z-index: 998;
+                    display: none;
+                    backdrop-filter: blur(2px);
+                `;
+                
+                // Click overlay to close sidebar
+                overlay.addEventListener('click', function() {
+                    if (sidebarVisible) {
+                        toggleSidebar();
+                    }
+                });
+                
+                document.body.appendChild(overlay);
+            }
+        }
+        
+        // Setup mobile sidebar
+        function setupMobileSidebar() {
             const sidebar = document.querySelector('[data-testid="stSidebar"]');
             const collapsedControl = document.querySelector('[data-testid="collapsedControl"]');
             
             if (window.innerWidth <= 768) {
-                // Als sidebar niet zichtbaar is, toon mobile nav
-                if (!sidebar || sidebar.style.display === 'none' || sidebar.offsetWidth === 0) {
-                    addMobileNav();
-                    const mobileNav = document.getElementById('mobile-nav-fallback');
-                    if (mobileNav) mobileNav.style.display = 'block';
-                }
+                addMobileOverlay();
                 
                 if (sidebar) {
-                    sidebar.style.display = 'block';
+                    // Initieel verborgen op mobiel
                     sidebar.style.position = 'fixed';
-                    sidebar.style.zIndex = '999';
-                    sidebar.style.left = '0';
                     sidebar.style.top = '0';
+                    sidebar.style.left = '0';
                     sidebar.style.height = '100vh';
-                    sidebar.style.width = window.innerWidth <= 480 ? '100vw' : '300px';
-                    sidebar.style.visibility = 'visible';
-                    sidebar.style.opacity = '1';
-                    sidebar.style.transform = 'translateX(0)';
+                    sidebar.style.width = window.innerWidth <= 480 ? '85vw' : '300px';
+                    sidebar.style.zIndex = '999';
+                    sidebar.style.transform = 'translateX(-100%)';
+                    sidebar.style.visibility = 'hidden';
+                    sidebar.style.opacity = '0';
+                    sidebar.style.transition = 'all 0.3s ease-in-out';
+                    sidebar.style.boxShadow = '4px 0 20px rgba(0, 0, 0, 0.3)';
+                    
+                    // Reset sidebar state
+                    sidebarVisible = false;
                 }
                 
                 if (collapsedControl) {
@@ -118,34 +146,76 @@ def _get_mobile_js():
                     collapsedControl.style.display = 'flex';
                     collapsedControl.style.visibility = 'visible';
                     
-                    // Voeg click handler toe voor mobile nav toggle
-                    collapsedControl.addEventListener('click', function() {
-                        setTimeout(toggleMobileNav, 100);
+                    // Remove old event listeners
+                    collapsedControl.replaceWith(collapsedControl.cloneNode(true));
+                    const newCollapsedControl = document.querySelector('[data-testid="collapsedControl"]');
+                    
+                    // Add new click handler
+                    newCollapsedControl.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSidebar();
+                    });
+                }
+                
+                // Close sidebar when clicking sidebar links
+                const sidebarLinks = sidebar?.querySelectorAll('a, [role="button"]');
+                if (sidebarLinks) {
+                    sidebarLinks.forEach(link => {
+                        link.addEventListener('click', function() {
+                            if (sidebarVisible) {
+                                setTimeout(() => toggleSidebar(), 200); // Small delay for navigation
+                            }
+                        });
                     });
                 }
             } else {
-                // Verberg mobile nav op desktop
-                const mobileNav = document.getElementById('mobile-nav-fallback');
-                if (mobileNav) mobileNav.style.display = 'none';
+                // Desktop: herstel normale sidebar gedrag
+                if (sidebar) {
+                    sidebar.style.position = '';
+                    sidebar.style.transform = '';
+                    sidebar.style.visibility = '';
+                    sidebar.style.opacity = '';
+                    sidebar.style.transition = '';
+                    sidebar.style.boxShadow = '';
+                }
+                
+                // Verberg overlay op desktop
+                const mobileOverlay = document.getElementById('mobile-sidebar-overlay');
+                if (mobileOverlay) {
+                    mobileOverlay.style.display = 'none';
+                }
+                
+                // Restore body scroll
+                document.body.style.overflow = 'auto';
+                sidebarVisible = false;
             }
         }
         
-        // Run onload en bij resize
-        ensureSidebarVisibility();
-        window.addEventListener('resize', ensureSidebarVisibility);
+        // Global toggle function
+        window.toggleMobileSidebar = toggleSidebar;
         
-        // Observer voor dynamische content
+        // Run setup
+        setupMobileSidebar();
+        
+        // Listen for resize events
+        window.addEventListener('resize', function() {
+            setupMobileSidebar();
+        });
+        
+        // Observer for dynamic content
         const observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList') {
-                    ensureSidebarVisibility();
+                    // Delay setup to allow DOM to update
+                    setTimeout(setupMobileSidebar, 100);
                 }
             });
         });
         observer.observe(document.body, { childList: true, subtree: true });
         
-        // Extra check na 1 seconde
-        setTimeout(ensureSidebarVisibility, 1000);
+        // Extra setup after DOM is fully loaded
+        setTimeout(setupMobileSidebar, 500);
     });
     </script>
     """
@@ -183,7 +253,7 @@ def _get_custom_css():
         overscroll-behavior: none;
     }}
     
-    /* FORCEER SIDEBAR ZICHTBAARHEID OP ALLE APPARATEN */
+    /* FORCEER SIDEBAR GEDRAG - DESKTOP ALTIJD ZICHTBAAR */
     [data-testid="stSidebar"][aria-expanded="false"] {{
         display: block !important;
         visibility: visible !important;
@@ -191,19 +261,56 @@ def _get_custom_css():
         transform: translateX(0) !important;
     }}
     
-    /* Verhinder sidebar collapse op mobiel */
-    @media (max-width: 768px) {{
+    /* DESKTOP: Sidebar altijd zichtbaar */
+    @media (min-width: 769px) {{
         [data-testid="stSidebar"] {{
             display: block !important;
             visibility: visible !important;
             opacity: 1 !important;
+            position: relative !important;
+            transform: translateX(0) !important;
+        }}
+    }}
+    
+    /* MOBIEL: Sidebar initieel verborgen, toggle via menu */
+    @media (max-width: 768px) {{
+        [data-testid="stSidebar"] {{
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            height: 100vh !important;
+            width: 300px !important;
+            z-index: 999 !important;
+            transform: translateX(-100%) !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            transition: all 0.3s ease-in-out !important;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
         }}
         
         /* Zorg dat sidebar toggle altijd werkt */
         [data-testid="collapsedControl"] {{
-            display: block !important;
+            display: flex !important;
             visibility: visible !important;
+            position: fixed !important;
+            top: 1rem !important;
+            left: 1rem !important;
+            z-index: 1001 !important;
         }}
+    }}
+    
+    /* SMARTPHONE: Sidebar bijna volledige breedte */
+    @media (max-width: 480px) {{
+        [data-testid="stSidebar"] {{
+            width: 85vw !important;
+        }}
+    }}
+    
+    /* Sidebar content blijft hetzelfde */
+    [data-testid="stSidebar"] > div {{
+        height: 100vh !important;
+        overflow-y: auto !important;
+        padding: 2rem 1rem !important;
     }}
     
     /* ===== ALGEMENE BODY STYLING ===== */
@@ -334,30 +441,7 @@ def _get_custom_css():
     
     /* MOBIELE OPTIMALISATIES - TABLET */
     @media (max-width: 768px) {{
-        /* Sidebar altijd zichtbaar en goed gepositioneerd */
-        [data-testid="stSidebar"] {{
-            width: 300px !important;
-            min-width: 300px !important;
-            max-width: 300px !important;
-            height: 100vh !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            z-index: 999 !important;
-            transform: translateX(0) !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        }}
-        
-        /* Sidebar content */
-        [data-testid="stSidebar"] > div {{
-            height: 100vh !important;
-            overflow-y: auto !important;
-            padding: 2rem 1rem !important;
-        }}
-        
-        /* Grotere touch targets */
+        /* Grotere touch targets voor sidebar links */
         [data-testid="stSidebar"] .css-1d391kg,
         [data-testid="stSidebar"] a,
         [data-testid="stSidebar"] [role="button"],
@@ -368,21 +452,15 @@ def _get_custom_css():
             min-height: 50px !important;
         }}
         
-        /* Main content shift */
+        /* Main content GEEN margin - sidebar is overlay */
         .main .block-container {{
-            margin-left: 300px !important;
-            max-width: calc(100vw - 320px) !important;
+            margin-left: 0 !important;
+            max-width: 100vw !important;
         }}
     }}
     
     /* MOBIELE OPTIMALISATIES - SMARTPHONE */
     @media (max-width: 480px) {{
-        [data-testid="stSidebar"] {{
-            width: 100vw !important;
-            min-width: 100vw !important;
-            max-width: 100vw !important;
-        }}
-        
         [data-testid="stSidebar"] > div {{
             padding: 3rem 2rem !important;
         }}
@@ -399,7 +477,7 @@ def _get_custom_css():
             border-radius: 12px !important;
         }}
         
-        /* Main content hidden when sidebar open */
+        /* Main content volledige breedte - sidebar is overlay */
         .main .block-container {{
             margin-left: 0 !important;
             max-width: 100vw !important;
