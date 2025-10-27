@@ -26,10 +26,10 @@ def initialize_firestore():
     if is_running_in_streamlit():
         # Streamlit-omgeving: gebruik st.secrets
         try:
-            key_dict = json.loads(st.secrets["firestore_credentials"])
+            key_dict = st.secrets["firestore_credentials"] 
             project_id = key_dict.get("project_id")
             creds = service_account.Credentials.from_service_account_info(key_dict)
-        except (json.JSONDecodeError, KeyError) as e:
+        except KeyError as e:
             print(f"Fout bij laden van Streamlit secrets: {e}")
             raise
     else:
