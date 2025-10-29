@@ -357,7 +357,7 @@ def _get_custom_css():
         min-height: 100vh;
     }}
     
-    /* Glitter effect - roze en blauw thema */
+    /* Glitter effect - eenvoudige langzame beweging */
     [data-testid="stAppViewContainer"]::before {{
         content: "";
         position: fixed;
@@ -366,17 +366,35 @@ def _get_custom_css():
         right: 0;
         bottom: 0;
         background-image:
-            radial-gradient(circle at 15% 25%, {COLORS['bright_sparkle']} 2px, transparent 2px),
-            radial-gradient(circle at 85% 75%, {COLORS['blue_sparkle']} 1.5px, transparent 1.5px),
-            radial-gradient(circle at 35% 45%, {COLORS['silver_sparkle']} 1px, transparent 1px),
-            radial-gradient(circle at 65% 15%, {COLORS['bright_sparkle']} 1.2px, transparent 1.2px),
-            radial-gradient(circle at 25% 85%, {COLORS['blue_sparkle']} 0.8px, transparent 0.8px),
-            radial-gradient(circle at 75% 55%, {COLORS['silver_sparkle']} 1.3px, transparent 1.3px);
-        background-size: 150px 150px, 200px 200px, 100px 100px, 120px 120px, 80px 80px, 180px 180px;
-        animation: sparkle 1s ease-in-out infinite;
-        opacity: 1;
+            radial-gradient(circle at 15% 25%, {COLORS['bright_sparkle']} 1.5px, transparent 1.5px),
+            radial-gradient(circle at 85% 75%, {COLORS['blue_sparkle']} 1px, transparent 1px),
+            radial-gradient(circle at 35% 45%, {COLORS['silver_sparkle']} 1.2px, transparent 1.2px),
+            radial-gradient(circle at 65% 15%, {COLORS['bright_sparkle']} 0.8px, transparent 0.8px),
+            radial-gradient(circle at 25% 85%, {COLORS['blue_sparkle']} 1.1px, transparent 1.1px),
+            radial-gradient(circle at 75% 55%, {COLORS['silver_sparkle']} 0.9px, transparent 0.9px);
+        background-size: 120px 120px, 180px 180px, 100px 100px, 150px 150px, 90px 90px, 130px 130px;
+        animation: gentleFloat 20s linear infinite;
+        opacity: 0.7;
         pointer-events: none;
         z-index: 0;
+    }}
+    
+    @keyframes gentleFloat {{
+        0% {{
+            transform: translateX(0px) translateY(0px);
+        }}
+        25% {{
+            transform: translateX(10px) translateY(-5px);
+        }}
+        50% {{
+            transform: translateX(20px) translateY(0px);
+        }}
+        75% {{
+            transform: translateX(10px) translateY(5px);
+        }}
+        100% {{
+            transform: translateX(0px) translateY(0px);
+        }}
     }}
     
     /* Zorg ervoor dat content boven glitter staat */
