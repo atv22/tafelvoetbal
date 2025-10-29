@@ -5,18 +5,19 @@ APP_TITLE = "Tafelvoetbal Competitie ⚽"
 APP_ICON = "⚽"
 LAYOUT = "centered"
 
-# Kleurenschema
+# Kleurenschema - ADR roze en MinFin blauw
 COLORS = {
-    'primary_blue': '#154273',      # Hoofdblauw
-    'secondary_blue': '#1a4d80',    # Iets lichtere blauw voor variatie
-    'accent_purple': '#8E6CA6',     # Accentpaars
-    'dark_purple': '#42145F',       # Donkerpaars
-    'light_background': '#FAF8FC',  # Lichte achtergrond
-    'soft_purple': '#F4EFF7',       # Zachte paarse tint
+    'primary_pink': '#ca005d',      # ADR roze (primair)
+    'secondary_blue': '#154273',    # MinFin blauw (secundair)
+    'light_pink': '#f5e6ed',        # Lichte roze achtergrond
+    'soft_pink': '#f0d7e1',         # Zachte roze tint
+    'dark_pink': '#9a0048',         # Donkere roze voor accenten
+    'accent_blue': '#1a4d80',       # Accent blauw (iets lichter)
     'white': '#FFFFFF',             # Wit
-    'bright_sparkle': 'rgba(255, 215, 0, 0.8)',     # Gouden glitter
-    'purple_sparkle': 'rgba(142, 108, 166, 0.9)',   # Paarse glitter
-    'silver_sparkle': 'rgba(192, 192, 192, 0.9)',   # Zilveren glitter
+    'light_background': '#fdfcfd',  # Zeer lichte achtergrond
+    'bright_sparkle': 'rgba(202, 0, 93, 0.8)',      # Roze glitter
+    'blue_sparkle': 'rgba(21, 66, 115, 0.7)',       # Blauwe glitter
+    'silver_sparkle': 'rgba(192, 192, 192, 0.6)',   # Zilveren glitter
 }
 
 def setup_page():
@@ -32,6 +33,18 @@ def setup_page():
             'About': None
         },
     )
+    
+    # Forceer light mode
+    st.markdown("""
+    <script>
+    // Force light theme
+    const stApp = window.parent.document.querySelector('.stApp');
+    if (stApp) {
+        stApp.classList.remove('dark-theme');
+        stApp.classList.add('light-theme');
+    }
+    </script>
+    """, unsafe_allow_html=True)
     
     # Injecteer aangepaste CSS
     st.markdown(_get_custom_css(), unsafe_allow_html=True)
@@ -65,6 +78,23 @@ def _get_custom_css():
     """Genereer de complete CSS voor de applicatie."""
     return f"""
 <style>
+    /* ===== FORCEER LIGHT MODE ===== */
+    .stApp {{
+        background-color: {COLORS['white']} !important;
+        color: #262730 !important;
+    }}
+    
+    /* Verberg dark mode toggle als die er is */
+    [data-testid="stSidebar"] button[title*="theme"] {{
+        display: none !important;
+    }}
+    
+    /* Forceer light theme op alle content */
+    .main, .block-container, .element-container {{
+        background-color: transparent !important;
+        color: #262730 !important;
+    }}
+    
     /* ===== MOBILE VIEWPORT EN TOUCH OPTIMALISATIE ===== */
     * {{
         -webkit-tap-highlight-color: transparent;
@@ -151,7 +181,7 @@ def _get_custom_css():
     /* ===== TABS STYLING ===== */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 0.3rem;
-        border-bottom: 2px solid {COLORS['primary_blue']};
+        border-bottom: 2px solid {COLORS['primary_pink']};
         padding-bottom: 0.5rem;
         margin-bottom: 1.5rem;
         background: transparent;
@@ -159,10 +189,10 @@ def _get_custom_css():
     }}
     
     .stTabs [data-baseweb="tab"] {{
-        background: {COLORS['soft_purple']};
+        background: {COLORS['soft_pink']};
         border-radius: 12px 12px 0 0;
         padding: 0.8rem 1.2rem;
-        color: {COLORS['primary_blue']};
+        color: {COLORS['primary_pink']};
         font-weight: 500;
         border: none;
         position: relative;
@@ -176,12 +206,12 @@ def _get_custom_css():
     }}
     
     .stTabs [data-baseweb="tab"]:hover {{
-        background-color: {COLORS['light_background']};
+        background-color: {COLORS['light_pink']};
         transform: translateY(-2px);
     }}
     
     .stTabs [aria-selected="true"] {{
-        background-color: {COLORS['primary_blue']} !important;
+        background-color: {COLORS['primary_pink']} !important;
         color: {COLORS['white']} !important;
         font-weight: 600;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
@@ -192,7 +222,7 @@ def _get_custom_css():
         padding: 1.5rem 1rem;
         background: rgba(255, 255, 255, 0.7);
         border-radius: 0 12px 12px 12px;
-        border: 1px solid {COLORS['soft_purple']};
+        border: 1px solid {COLORS['soft_pink']};
         position: relative;
         z-index: 1;
     }}
@@ -236,8 +266,8 @@ def _get_custom_css():
     
     /* ===== HEADER ===== */
     [data-testid="stHeader"] {{
-        background-color: {COLORS['primary_blue']} !important;
-        border-bottom: 2px solid {COLORS['accent_purple']};
+        background-color: {COLORS['primary_pink']} !important;
+        border-bottom: 2px solid {COLORS['secondary_blue']};
         height: 4rem;
         display: flex;
         align-items: center;
@@ -286,12 +316,12 @@ def _get_custom_css():
     
     /* ===== GLITTER ACHTERGROND ===== */
     [data-testid="stAppViewContainer"] {{
-        background: linear-gradient(135deg, {COLORS['white']} 0%, {COLORS['light_background']} 40%, {COLORS['soft_purple']} 100%);
+        background: linear-gradient(135deg, {COLORS['white']} 0%, {COLORS['light_background']} 40%, {COLORS['soft_pink']} 100%);
         position: relative;
         min-height: 100vh;
     }}
     
-    /* Glitter effect - veel zichtbaarder */
+    /* Glitter effect - roze en blauw thema */
     [data-testid="stAppViewContainer"]::before {{
         content: "";
         position: fixed;
@@ -301,10 +331,10 @@ def _get_custom_css():
         bottom: 0;
         background-image:
             radial-gradient(circle at 15% 25%, {COLORS['bright_sparkle']} 2px, transparent 2px),
-            radial-gradient(circle at 85% 75%, {COLORS['purple_sparkle']} 1.5px, transparent 1.5px),
+            radial-gradient(circle at 85% 75%, {COLORS['blue_sparkle']} 1.5px, transparent 1.5px),
             radial-gradient(circle at 35% 45%, {COLORS['silver_sparkle']} 1px, transparent 1px),
             radial-gradient(circle at 65% 15%, {COLORS['bright_sparkle']} 1.2px, transparent 1.2px),
-            radial-gradient(circle at 25% 85%, {COLORS['purple_sparkle']} 0.8px, transparent 0.8px),
+            radial-gradient(circle at 25% 85%, {COLORS['blue_sparkle']} 0.8px, transparent 0.8px),
             radial-gradient(circle at 75% 55%, {COLORS['silver_sparkle']} 1.3px, transparent 1.3px);
         background-size: 150px 150px, 200px 200px, 100px 100px, 120px 120px, 80px 80px, 180px 180px;
         animation: sparkle 15s ease-in-out infinite;
@@ -375,7 +405,7 @@ def _get_custom_css():
     
     /* ===== KNOPPEN ===== */
     .stButton > button {{
-        background-color: {COLORS['accent_purple']};
+        background-color: {COLORS['primary_pink']};
         color: {COLORS['white']};
         border: none;
         border-radius: 8px;
@@ -390,7 +420,7 @@ def _get_custom_css():
     }}
     
     .stButton > button:hover {{
-        background-color: {COLORS['dark_purple']};
+        background-color: {COLORS['dark_pink']};
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }}
@@ -424,12 +454,12 @@ def _get_custom_css():
     
     /* ===== FORM SUBMIT BUTTONS ===== */
     .stForm .stButton > button {{
-        background-color: {COLORS['accent_purple']};
+        background-color: {COLORS['primary_pink']};
         font-weight: 600;
     }}
     
     .stForm .stButton > button:hover {{
-        background-color: {COLORS['dark_purple']};
+        background-color: {COLORS['dark_pink']};
     }}
     
     /* ===== TABELLEN ===== */
@@ -464,7 +494,7 @@ def _get_custom_css():
     /* Table headers */
     .stDataFrame thead th,
     .stTable thead th {{
-        background-color: {COLORS['primary_blue']} !important;
+        background-color: {COLORS['primary_pink']} !important;
         color: {COLORS['white']} !important;
         font-weight: 600;
         padding: 1rem 0.8rem;
@@ -479,7 +509,7 @@ def _get_custom_css():
     .stDataFrame tbody td,
     .stTable tbody td {{
         padding: 0.8rem;
-        border-bottom: 1px solid {COLORS['soft_purple']};
+        border-bottom: 1px solid {COLORS['soft_pink']};
         text-align: left;
         word-wrap: break-word;
     }}
@@ -492,7 +522,7 @@ def _get_custom_css():
     
     .stDataFrame tbody tr:hover,
     .stTable tbody tr:hover {{
-        background-color: rgba(142, 108, 166, 0.1);
+        background-color: rgba(202, 0, 93, 0.1);
         transition: background-color 0.2s ease;
     }}
     
@@ -532,7 +562,7 @@ def _get_custom_css():
     .stSelectbox > div > div > select,
     .stNumberInput > div > div > input {{
         border-radius: 8px;
-        border: 2px solid {COLORS['soft_purple']};
+        border: 2px solid {COLORS['soft_pink']};
         position: relative;
         z-index: 2;
         min-height: 44px;
@@ -542,8 +572,8 @@ def _get_custom_css():
     .stTextInput > div > div > input:focus,
     .stSelectbox > div > div > select:focus,
     .stNumberInput > div > div > input:focus {{
-        border-color: {COLORS['accent_purple']};
-        box-shadow: 0 0 0 2px rgba(142, 108, 166, 0.2);
+        border-color: {COLORS['primary_pink']};
+        box-shadow: 0 0 0 2px rgba(202, 0, 93, 0.2);
     }}
     
     /* Mobile input field optimizations */
@@ -615,14 +645,14 @@ def _get_custom_css():
     
     /* ===== HEADERS EN TITLES ===== */
     h1, h2, h3 {{
-        color: {COLORS['primary_blue']};
+        color: {COLORS['primary_pink']};
         position: relative;
         z-index: 2;
         line-height: 1.2;
     }}
     
     .main h1 {{
-        border-bottom: 3px solid {COLORS['accent_purple']};
+        border-bottom: 3px solid {COLORS['secondary_blue']};
         padding-bottom: 0.5rem;
         margin-bottom: 1.5rem;
     }}
@@ -676,7 +706,7 @@ def _get_custom_css():
     hr {{
         border: none;
         height: 3px;
-        background: linear-gradient(90deg, {COLORS['primary_blue']}, {COLORS['accent_purple']});
+        background: linear-gradient(90deg, {COLORS['primary_pink']}, {COLORS['secondary_blue']});
         border-radius: 2px;
         margin: 2rem 0;
         position: relative;
@@ -685,7 +715,7 @@ def _get_custom_css():
     
     /* ===== SPINNER ===== */
     .stSpinner > div {{
-        border-top-color: {COLORS['accent_purple']} !important;
+        border-top-color: {COLORS['primary_pink']} !important;
     }}
 </style>
 """
