@@ -95,6 +95,31 @@ def _get_custom_css():
         color: #262730 !important;
     }}
     
+    /* ===== STREAMLIT HEADER/MENU STYLING ===== */
+    /* Maak alle Streamlit header teksten wit voor contrast tegen roze */
+    [data-testid="stHeader"] * {{
+        color: {COLORS['white']} !important;
+    }}
+    
+    /* GitHub link, Fork button, etc. in de header */
+    [data-testid="stHeader"] a,
+    [data-testid="stHeader"] button,
+    [data-testid="stHeader"] span,
+    [data-testid="stHeader"] div {{
+        color: {COLORS['white']} !important;
+    }}
+    
+    /* Menu items wit maken */
+    [data-testid="stHeader"] svg {{
+        fill: {COLORS['white']} !important;
+    }}
+    
+    /* Zorg dat hover states ook wit blijven */
+    [data-testid="stHeader"] a:hover,
+    [data-testid="stHeader"] button:hover {{
+        color: rgba(255, 255, 255, 0.8) !important;
+    }}
+    
     /* ===== MOBILE VIEWPORT EN TOUCH OPTIMALISATIE ===== */
     * {{
         -webkit-tap-highlight-color: transparent;
@@ -126,7 +151,7 @@ def _get_custom_css():
     
     /* ===== ALGEMENE BODY STYLING ===== */
     .main .block-container {{
-        padding-top: 2rem;
+        padding-top: 0.5rem !important; /* Verminder lege ruimte */
         padding-bottom: 2rem;
         max-width: 95vw;
         width: 100%;
@@ -141,10 +166,21 @@ def _get_custom_css():
         max-width: 100% !important;
     }}
     
+    /* Verwijder extra marges van de app container */
+    .stApp > div {{
+        padding-top: 0 !important;
+    }}
+    
+    /* Zorg dat de main content direct onder header begint */
+    .main {{
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }}
+    
     /* Mobile optimizations voor main content */
     @media (max-width: 768px) {{
         .main .block-container {{
-            padding-top: 1rem;
+            padding-top: 0.3rem !important; /* Nog minder ruimte op mobiel */
             padding-bottom: 1rem;
             padding-left: 0.5rem;
             padding-right: 0.5rem;
@@ -154,7 +190,7 @@ def _get_custom_css():
     
     @media (max-width: 480px) {{
         .main .block-container {{
-            padding-top: 0.5rem;
+            padding-top: 0.2rem !important; /* Minimale ruimte op kleine schermen */
             padding-bottom: 0.5rem;
             padding-left: 0.3rem;
             padding-right: 0.3rem;
@@ -376,8 +412,8 @@ def _get_custom_css():
         z-index: 1;
         background-color: rgba(255, 255, 255, 0.75);
         border-radius: 15px;
-        padding: 2rem 1.5rem;
-        margin: 1rem auto;
+        padding: 1.5rem 1.5rem; /* Verminder top padding */
+        margin: 0.5rem auto; /* Verminder top margin */
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         backdrop-filter: blur(1px);
         width: 100%;
@@ -387,8 +423,8 @@ def _get_custom_css():
     /* Mobile content container optimizations */
     @media (max-width: 768px) {{
         .main .block-container {{
-            padding: 1.5rem 1rem;
-            margin: 0.5rem auto;
+            padding: 1rem 1rem; /* Minder padding */
+            margin: 0.3rem auto; /* Minder margin */
             border-radius: 12px;
             max-width: 98vw;
         }}
@@ -396,8 +432,8 @@ def _get_custom_css():
     
     @media (max-width: 480px) {{
         .main .block-container {{
-            padding: 1rem 0.8rem;
-            margin: 0.3rem auto;
+            padding: 0.8rem 0.8rem; /* Nog minder padding */
+            margin: 0.2rem auto; /* Nog minder margin */
             border-radius: 10px;
             max-width: 99vw;
         }}
