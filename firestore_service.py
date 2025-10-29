@@ -113,7 +113,22 @@ def get_matches():
         match_data = doc.to_dict()
         match_data['match_id'] = doc.id
         matches.append(match_data)
-    return pd.DataFrame(matches)
+    
+    df = pd.DataFrame(matches)
+    
+    # Herorder kolommen in logische volgorde
+    if not df.empty:
+        desired_columns = [
+            'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
+            'thuis_score', 'uit_score',
+            'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
+            'timestamp', 'match_id'
+        ]
+        # Alleen kolommen gebruiken die daadwerkelijk bestaan
+        available_columns = [col for col in desired_columns if col in df.columns]
+        df = df[available_columns]
+    
+    return df
 
 @st.cache_data
 def get_elo_logs():
