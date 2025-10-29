@@ -180,7 +180,7 @@ def _get_custom_css():
     /* Mobile optimizations voor main content */
     @media (max-width: 768px) {{
         .main .block-container {{
-            padding-top: 0.3rem !important; /* Nog minder ruimte op mobiel */
+            padding-top: 1rem;
             padding-bottom: 1rem;
             padding-left: 0.5rem;
             padding-right: 0.5rem;
@@ -190,7 +190,7 @@ def _get_custom_css():
     
     @media (max-width: 480px) {{
         .main .block-container {{
-            padding-top: 0.2rem !important; /* Minimale ruimte op kleine schermen */
+            padding-top: 0.5rem;
             padding-bottom: 0.5rem;
             padding-left: 0.3rem;
             padding-right: 0.3rem;
@@ -379,41 +379,14 @@ def _get_custom_css():
         z-index: 0;
     }}
     
-    @keyframes sparkle {{
-        0% {{ 
-            background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
-            opacity: 0.7;
-        }}
-        20% {{ 
-            background-position: 30px 30px, 50px 50px, 20px 20px, 25px 25px, 15px 15px, 35px 35px;
-            opacity: 1;
-        }}
-        40% {{ 
-            background-position: 60px 60px, 100px 100px, 40px 40px, 50px 50px, 30px 30px, 70px 70px;
-            opacity: 0.8;
-        }}
-        60% {{ 
-            background-position: 90px 90px, 150px 150px, 60px 60px, 75px 75px, 45px 45px, 105px 105px;
-            opacity: 1;
-        }}
-        80% {{ 
-            background-position: 120px 120px, 200px 200px, 80px 80px, 100px 100px, 60px 60px, 140px 140px;
-            opacity: 0.9;
-        }}
-        100% {{ 
-            background-position: 150px 150px, 250px 250px, 100px 100px, 125px 125px, 75px 75px, 175px 175px;
-            opacity: 0.7;
-        }}
-    }}
-    
     /* Zorg ervoor dat content boven glitter staat */
     .main .block-container {{
         position: relative;
         z-index: 1;
         background-color: rgba(255, 255, 255, 0.75);
         border-radius: 15px;
-        padding: 1.5rem 1.5rem; /* Verminder top padding */
-        margin: 0.5rem auto; /* Verminder top margin */
+        padding: 2rem 1.5rem;
+        margin: 1rem auto;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         backdrop-filter: blur(1px);
         width: 100%;
