@@ -366,71 +366,43 @@ def _get_custom_css():
         right: 0;
         bottom: 0;
         background-image:
-            radial-gradient(circle at 20% 30%, {COLORS['bright_sparkle']} 1.5px, transparent 1.5px),
-            radial-gradient(circle at 80% 20%, {COLORS['blue_sparkle']} 1px, transparent 1px),
-            radial-gradient(circle at 40% 70%, {COLORS['silver_sparkle']} 1.2px, transparent 1.2px),
-            radial-gradient(circle at 60% 10%, {COLORS['bright_sparkle']} 0.8px, transparent 0.8px),
-            radial-gradient(circle at 90% 80%, {COLORS['blue_sparkle']} 1.3px, transparent 1.3px),
-            radial-gradient(circle at 10% 90%, {COLORS['silver_sparkle']} 0.9px, transparent 0.9px);
-        background-size: 120px 120px, 180px 180px, 90px 90px, 150px 150px, 200px 200px, 110px 110px;
-        animation: smoothSparkle 8s ease-in-out infinite;
-        opacity: 0.8;
+            radial-gradient(circle at 15% 25%, {COLORS['bright_sparkle']} 2px, transparent 2px),
+            radial-gradient(circle at 85% 75%, {COLORS['blue_sparkle']} 1.5px, transparent 1.5px),
+            radial-gradient(circle at 35% 45%, {COLORS['silver_sparkle']} 1px, transparent 1px),
+            radial-gradient(circle at 65% 15%, {COLORS['bright_sparkle']} 1.2px, transparent 1.2px),
+            radial-gradient(circle at 25% 85%, {COLORS['blue_sparkle']} 0.8px, transparent 0.8px),
+            radial-gradient(circle at 75% 55%, {COLORS['silver_sparkle']} 1.3px, transparent 1.3px);
+        background-size: 150px 150px, 200px 200px, 100px 100px, 120px 120px, 80px 80px, 180px 180px;
+        animation: sparkle 1s ease-in-out infinite;
+        opacity: 1;
         pointer-events: none;
         z-index: 0;
-        will-change: opacity, transform;
     }}
     
-    /* Extra glitter laag voor meer dynamiek */
-    [data-testid="stAppViewContainer"]::after {{
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-image:
-            radial-gradient(circle at 70% 40%, {COLORS['bright_sparkle']} 0.8px, transparent 0.8px),
-            radial-gradient(circle at 30% 80%, {COLORS['blue_sparkle']} 1.1px, transparent 1.1px),
-            radial-gradient(circle at 85% 60%, {COLORS['silver_sparkle']} 0.7px, transparent 0.7px);
-        background-size: 100px 100px, 140px 140px, 80px 80px;
-        animation: floatingSparkle 12s ease-in-out infinite reverse;
-        opacity: 0.5;
-        pointer-events: none;
-        z-index: 0;
-        will-change: opacity;
-    }}
-    
-    @keyframes smoothSparkle {{
-        0%, 100% {{ 
-            opacity: 0.6;
-            transform: scale(1) rotate(0deg);
-        }}
-        25% {{ 
-            opacity: 0.9;
-            transform: scale(1.05) rotate(90deg);
-        }}
-        50% {{ 
+    @keyframes sparkle {{
+        0% {{ 
+            background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
             opacity: 0.7;
-            transform: scale(0.95) rotate(180deg);
         }}
-        75% {{ 
+        20% {{ 
+            background-position: 30px 30px, 50px 50px, 20px 20px, 25px 25px, 15px 15px, 35px 35px;
             opacity: 1;
-            transform: scale(1.02) rotate(270deg);
         }}
-    }}
-    
-    @keyframes floatingSparkle {{
-        0%, 100% {{ 
-            opacity: 0.3;
-            transform: translateY(0px) scale(1);
+        40% {{ 
+            background-position: 60px 60px, 100px 100px, 40px 40px, 50px 50px, 30px 30px, 70px 70px;
+            opacity: 0.8;
         }}
-        33% {{ 
-            opacity: 0.6;
-            transform: translateY(-10px) scale(1.1);
+        60% {{ 
+            background-position: 90px 90px, 150px 150px, 60px 60px, 75px 75px, 45px 45px, 105px 105px;
+            opacity: 1;
         }}
-        66% {{ 
-            opacity: 0.4;
-            transform: translateY(5px) scale(0.9);
+        80% {{ 
+            background-position: 120px 120px, 200px 200px, 80px 80px, 100px 100px, 60px 60px, 140px 140px;
+            opacity: 0.9;
+        }}
+        100% {{ 
+            background-position: 150px 150px, 250px 250px, 100px 100px, 125px 125px, 75px 75px, 175px 175px;
+            opacity: 0.7;
         }}
     }}
     
@@ -451,8 +423,8 @@ def _get_custom_css():
     /* Mobile content container optimizations */
     @media (max-width: 768px) {{
         .main .block-container {{
-            padding: 1rem 1rem; /* Minder padding */
-            margin: 0.3rem auto; /* Minder margin */
+            padding: 1.5rem 1rem;
+            margin: 0.5rem auto;
             border-radius: 12px;
             max-width: 98vw;
         }}
@@ -460,8 +432,8 @@ def _get_custom_css():
     
     @media (max-width: 480px) {{
         .main .block-container {{
-            padding: 0.8rem 0.8rem; /* Nog minder padding */
-            margin: 0.2rem auto; /* Nog minder margin */
+            padding: 1rem 0.8rem;
+            margin: 0.3rem auto;
             border-radius: 10px;
             max-width: 99vw;
         }}
