@@ -106,32 +106,31 @@ def get_players():
 
 @st.cache_data
 def get_matches():
-    """Haalt alle wedstrijden op."""
+    """Haalt alle wedstrijden op en normaliseert timestamps."""
     matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
     matches = []
     for doc in matches_docs:
         match_data = doc.to_dict()
         match_data['match_id'] = doc.id
         matches.append(match_data)
-    
     df = pd.DataFrame(matches)
-    
-    # Voeg datum kolom toe op basis van timestamp (voor compatibiliteit met seizoen logic)
-    if not df.empty and 'timestamp' in df.columns:
-        df['datum'] = df['timestamp']
-    
-    # Herorder kolommen in logische volgorde
+
     if not df.empty:
+        # Normaliseer timestamp naar pandas datetime
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['datum'] = df['timestamp']
+
+        # Herorder kolommen in logische volgorde
         desired_columns = [
             'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
             'thuis_score', 'uit_score',
             'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
             'datum', 'timestamp', 'match_id'
         ]
-        # Alleen kolommen gebruiken die daadwerkelijk bestaan
         available_columns = [col for col in desired_columns if col in df.columns]
         df = df[available_columns]
-    
+
     return df
 
 @st.cache_data
@@ -722,11 +721,15 @@ def import_matches(matches_data):
             duplicate_count += 1
         else:
             new_match_ref = matches_ref.document()
-            # Zorg ervoor dat de timestamp wordt geconverteerd als het een string is
-            if 'timestamp' in match and isinstance(match['timestamp'], str):
-                match['timestamp'] = pd.to_datetime(match['timestamp'])
+            # Converteer aangeleverde timestamp naar python datetime indien aanwezig, anders gebruik server
+            if 'timestamp' in match and match['timestamp'] is not None:
+                try:
+                    # pd.Timestamp, str of datetime worden naar native datetime geconverteerd
+                    match['timestamp'] = pd.to_datetime(match['timestamp']).to_pydatetime()
+                except Exception:
+                    match['timestamp'] = SERVER_TIMESTAMP
             else:
-                match['timestamp'] = SERVER_TIMESTAMP # Fallback
+                match['timestamp'] = SERVER_TIMESTAMP
 
             batch.set(new_match_ref, match)
             added_count += 1
