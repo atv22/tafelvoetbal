@@ -630,11 +630,16 @@ with tab4:
                                     
                                     if scatter_data:
                                         scatter_df = pd.DataFrame(scatter_data)
+                                        # Zorg dat alle kolommen numeriek zijn voor de scatter
+                                        for col in ['Wedstrijden', 'Win Rate %', 'Totaal Goals']:
+                                            scatter_df[col] = pd.to_numeric(scatter_df[col], errors='coerce')
+                                        scatter_df['Size'] = scatter_df['Totaal Goals'].fillna(0).clip(lower=0)
+
                                         fig_scatter = px.scatter(
                                             scatter_df,
                                             x='Wedstrijden',
                                             y='Win Rate %',
-                                            size='Totaal Goals',
+                                            size='Size',
                                             hover_name='Speler',
                                             title='🏆 Activiteit vs Win Rate (grootte = goals)',
                                             color='Win Rate %',
@@ -1016,14 +1021,22 @@ with tab4:
                                 # Activiteit en Performance Chart
                                 try:
                                     st.markdown("**📈 Speler Activiteit vs Performance**")
+                                    # Zorg voor numerieke en niet-negatieve grootte voor markers
+                                    ranking_df = ranking_df.copy()
+                                    ranking_df['DoelsaldoAbs'] = pd.to_numeric(ranking_df['Doelsaldo'], errors='coerce').abs().fillna(0)
+                                    ranking_df['Wedstrijden'] = pd.to_numeric(ranking_df['Wedstrijden'], errors='coerce').fillna(0)
+                                    ranking_df['Huidige ELO'] = pd.to_numeric(ranking_df['Huidige ELO'], errors='coerce').fillna(0)
+                                    ranking_df['Win %'] = pd.to_numeric(ranking_df['Win %'], errors='coerce').fillna(0)
+
                                     fig_scatter = px.scatter(
                                         ranking_df,
                                         x='Wedstrijden',
                                         y='Huidige ELO',
-                                        size='Doelsaldo',
+                                        size='DoelsaldoAbs',
                                         color='Win %',
                                         hover_name='Speler',
-                                        title='Wedstrijden vs ELO Rating (grootte = doelsaldo, kleur = win %)',
+                                        hover_data={'Doelsaldo': True},
+                                        title='Wedstrijden vs ELO Rating (grootte = |doelsaldo|, kleur = win %)',
                                         color_continuous_scale='RdYlBu_r'
                                     )
                                     st.plotly_chart(fig_scatter, use_container_width=True)
