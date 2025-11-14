@@ -272,6 +272,8 @@ with tab4:
                 try:
                     start_date = pd.to_datetime(season['startdatum']).date()
                     end_date = pd.to_datetime(season['einddatum']).date()
+                    # Bepaal of dit het huidige seizoen is o.b.v. huidige datum
+                    is_current_season = (start_date <= current_date <= end_date)
                     
                     # Check of er wedstrijden zijn in dit seizoen
                     try:
@@ -291,16 +293,14 @@ with tab4:
                             (match_dates >= start_date_naive) & 
                             (match_dates <= end_date_naive)
                         ]
-                        
-                        # Alleen toevoegen als er wedstrijden zijn
-                        if len(season_matches) > 0:
+                        # Voeg toe wanneer er wedstrijden zijn OF wanneer dit het huidige seizoen is (ook als 0 wedstrijden)
+                        if is_current_season or len(season_matches) > 0:
                             season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
                             match_count = len(season_matches)
                             season_options.append((f"{season_name} ({match_count} wedstrijden)", idx))
-                            
-                            # Check of dit het huidige seizoen is
-                            if start_date <= current_date <= end_date:
-                                current_season_id = len(season_options) - 1
+                            # Onthoud het 'huidige' seizoen via de DataFrame index (idx), niet via positie in season_options
+                            if is_current_season:
+                                current_season_id = idx
                                 
                     except Exception:
                         continue  # Skip seizoenen met datum problemen
@@ -318,13 +318,12 @@ with tab4:
                 display_options = [option[0] for option in season_options]
 
                 if current_season_id is not None:
-                    # Zoek de optie die overeenkomt met het huidige seizoen
+                    # Zoek de optie die overeenkomt met het huidige seizoen via de DataFrame index (idx)
                     for i, option in enumerate(season_options):
                         if option[1] == current_season_id:
-                            # Pas de weergavenaam aan
                             original_name = option[0]
                             display_options[i] = f"⭐ Huidig: {original_name}"
-                            default_option_index = i  # Stel dit in als de standaard
+                            default_option_index = i
                             break
                 elif len(season_options) > 1: # Als er geen huidig seizoen is, neem de meest recente (meer dan alleen "Alle seizoenen")
                     # De meest recente is de laatste die is toegevoegd
