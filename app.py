@@ -263,29 +263,31 @@ with tab4:
         prinsjesdag_seasons = []
         
         try:
-            # Bepaal jaar bereik - minimaal 2020-2030 voor historische context
+            from datetime import date
+            current_year = date.today().year
+            
+            # Bepaal jaar bereik - alleen seizoenen tot huidig jaar
             if not matches_df.empty:
                 try:
                     # Converteer datum kolom naar datetime en haal timezone info weg
                     match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
-                    min_year = min(2020, match_dates.min().year - 1)
-                    max_year = max(2030, match_dates.max().year + 1)
+                    min_year = max(2020, match_dates.min().year - 1)  # Vanaf 2020 of eerste match jaar
+                    max_year = min(current_year + 1, match_dates.max().year + 1)  # Tot huidig jaar
                 except Exception as date_error:
                     # Alleen waarschuwen bij daadwerkelijke data problemen
                     if not matches_df.empty:
                         st.warning(f"Probleem met datum conversie: {date_error}")
-                    # Fallback naar default bereik
+                    # Fallback naar huidige datum bereik
                     min_year = 2020
-                    max_year = 2030
+                    max_year = current_year + 1
             else:
-                # Geen wedstrijden - toon toch historische Prinsjesdag data
-                min_year = 2020
-                max_year = 2030
+                # Geen wedstrijden - geen seizoenen tonen
+                return pd.DataFrame()
             
             for year in range(min_year, max_year + 1):
                 try:
-                    # Skip jaar 1900 of andere ongeldige jaren
-                    if year < 1900 or year > 2100:
+                    # Skip jaar 1900 of andere ongeldige jaren, en toekomstige jaren
+                    if year < 1900 or year > current_year + 1:
                         continue
                         
                     prinsjesdag = get_prinsjesdag(year)
@@ -338,61 +340,60 @@ with tab4:
     # Combineer database seizoenen met Prinsjesdag seizoenen
     if not prinsjesdag_seasons_df.empty:
         combined_seasons_df = prinsjesdag_seasons_df
-        st.success(f"✅ {len(combined_seasons_df)} Prinsjesdag seizoenen automatisch gegenereerd (2020-2030)")
+        st.success(f"✅ {len(combined_seasons_df)} Prinsjesdag seizoenen automatisch gegenereerd met wedstrijddata")
     else:
         combined_seasons_df = pd.DataFrame()
-        st.warning("⚠️ Kon geen Prinsjesdag seizoenen genereren.")
+        if matches_df.empty:
+            st.info("💡 Voeg wedstrijddata toe om Prinsjesdag seizoenen te genereren.")
+        else:
+            st.warning("⚠️ Kon geen Prinsjesdag seizoenen genereren.")
     
-    # Toon Prinsjesdag data per jaar - ALTIJD tonen, ook zonder wedstrijden
-    st.subheader("🗓️ Prinsjesdag Data Per Jaar (2020-2030)")
-    
-    # Maak Prinsjesdag data ook als er geen seizoenen zijn gegenereerd
-    prinsjesdag_info = []
-    
-    for year in range(2020, 2031):  # 2020 tot en met 2030
-        try:
-            prinsjesdag = get_prinsjesdag(year)
-            prev_prinsjesdag = get_prinsjesdag(year - 1)
-            seizoen_naam = f'Prinsjesdag Seizoen {year-1}-{year}'
-            
-            # Check of er wedstrijden zijn in dit seizoen
-            season_matches = pd.DataFrame()
-            if not matches_df.empty:
+    # Toon alleen Prinsjesdag data voor seizoenen met wedstrijden
+    if not matches_df.empty and not combined_seasons_df.empty:
+        st.subheader("🗓️ Prinsjesdag Seizoenen Met Wedstrijddata")
+        
+        # Maak Prinsjesdag data op basis van gegenereerde seizoenen
+        prinsjesdag_info = []
+        
+        for _, season in combined_seasons_df.iterrows():
+            try:
+                year = season['jaar']
+                prinsjesdag = season['prinsjesdag']
+                seizoen_naam = season['seizoen_naam']
+                
+                # Check of er wedstrijden zijn in dit seizoen
                 try:
                     # Converteer datums naar vergelijkbaar formaat (zonder timezone)
                     match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
                     season_matches = matches_df[
-                        (match_dates >= prev_prinsjesdag) & 
-                        (match_dates <= prinsjesdag)
+                        (match_dates >= season['startdatum']) & 
+                        (match_dates <= season['einddatum'])
                     ]
                 except Exception as date_error:
                     if not matches_df.empty:
                         st.warning(f"Probleem bij seizoen {year} datum vergelijking: {date_error}")
                     season_matches = pd.DataFrame()
-            
-            prinsjesdag_info.append({
-                'Jaar': year,
-                'Prinsjesdag': prinsjesdag.strftime('%d-%m-%Y (%A)'),
-                'Seizoen': seizoen_naam,
-                'Wedstrijden': len(season_matches),
-                'Status': '🏆 Actief' if len(season_matches) > 0 else '📋 Geen data'
-            })
-        except Exception as e:
-            # Als er een fout is, toon toch de basis info
-            try:
-                prinsjesdag = get_prinsjesdag(year)
-                prinsjesdag_info.append({
-                    'Jaar': year,
-                    'Prinsjesdag': prinsjesdag.strftime('%d-%m-%Y (%A)'),
-                    'Seizoen': f'Prinsjesdag Seizoen {year-1}-{year}',
-                    'Wedstrijden': 0,
-                    'Status': '❌ Error'
-                })
-            except:
+                
+                # Alleen tonen als er wedstrijden zijn
+                if len(season_matches) > 0:
+                    prinsjesdag_info.append({
+                        'Jaar': year,
+                        'Prinsjesdag': prinsjesdag.strftime('%d-%m-%Y (%A)'),
+                        'Seizoen': seizoen_naam,
+                        'Wedstrijden': len(season_matches),
+                        'Status': '🏆 Actief'
+                    })
+            except Exception as e:
+                # Skip seizoenen met fouten
                 continue
-    
-    prinsjesdag_df = pd.DataFrame(prinsjesdag_info)
-    st.dataframe(prinsjesdag_df, use_container_width=True)
+        
+        if prinsjesdag_info:
+            prinsjesdag_df = pd.DataFrame(prinsjesdag_info)
+            st.dataframe(prinsjesdag_df, use_container_width=True)
+        else:
+            st.info("Geen seizoenen met wedstrijddata gevonden.")
+    else:
+        st.info("💡 Voeg wedstrijddata toe om Prinsjesdag seizoenen te zien.")
     
     # Visualisatie van Prinsjesdag data
     if not matches_df.empty and not prinsjesdag_seasons_df.empty:
@@ -451,7 +452,7 @@ with tab4:
             # Seizoen selectie
             st.subheader("🎯 Seizoen Selectie")
             
-            # Maak seizoen opties
+            # Maak seizoen opties - alleen seizoenen met wedstrijden
             season_options = []
             current_date = date.today()
             current_season_id = None
@@ -460,12 +461,38 @@ with tab4:
                 try:
                     start_date = pd.to_datetime(season['startdatum']).date()
                     end_date = pd.to_datetime(season['einddatum']).date()
-                    season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
-                    season_options.append((season_name, idx))
                     
-                    # Check huidige seizoen
-                    if start_date <= current_date <= end_date:
-                        current_season_id = idx
+                    # Check of er wedstrijden zijn in dit seizoen
+                    try:
+                        match_dates = pd.to_datetime(matches_df['datum'])
+                        if match_dates.dt.tz is not None:
+                            match_dates = match_dates.dt.tz_localize(None)
+                        
+                        start_date_naive = pd.to_datetime(start_date)
+                        if start_date_naive.tz is not None:
+                            start_date_naive = start_date_naive.tz_localize(None)
+                        
+                        end_date_naive = pd.to_datetime(end_date) 
+                        if end_date_naive.tz is not None:
+                            end_date_naive = end_date_naive.tz_localize(None)
+                        
+                        season_matches = matches_df[
+                            (match_dates >= start_date_naive) & 
+                            (match_dates <= end_date_naive)
+                        ]
+                        
+                        # Alleen toevoegen als er wedstrijden zijn
+                        if len(season_matches) > 0:
+                            season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                            match_count = len(season_matches)
+                            season_options.append((f"{season_name} ({match_count} wedstrijden)", idx))
+                            
+                            # Check of dit het huidige seizoen is
+                            if start_date <= current_date <= end_date:
+                                current_season_id = len(season_options) - 1
+                                
+                    except Exception:
+                        continue  # Skip seizoenen met datum problemen
                 except Exception:
                     continue
             
