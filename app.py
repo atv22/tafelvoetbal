@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 # Import nieuwe modules
 from analytics import show_timeline_chart, show_cross_season_charts, show_individual_season_analysis, create_all_time_leaderboards
-from season_utils import get_prinsjesdag, generate_prinsjesdag_seasons, create_season_options
+import season_utils  # Import hele module om functie parameters correct te kunnen gebruiken
 
 setup_page()
 
