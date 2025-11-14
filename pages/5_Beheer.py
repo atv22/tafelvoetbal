@@ -137,7 +137,22 @@ if not df_matches_delete.empty:
     
     with match_beheer_tab2:
         st.write("**Wedstrijd bewerken**")
-        st.warning("⚠️ **Let op:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens in de database. ELO scores worden niet automatisch herberekend.")
+        
+        # Keuze voor ELO herberekening
+        elo_option = st.radio(
+            "ELO herberekening optie:",
+            options=[
+                "🔄 Automatisch herberekenen (aanbevolen)",
+                "⚠️ Alleen wedstrijd aanpassen (geen ELO update)"
+            ],
+            help="Automatische herberekening zorgt voor correcte ELO scores maar duurt langer.",
+            key="elo_option_beheer"
+        )
+        
+        auto_recalculate = elo_option.startswith("🔄")
+        
+        if not auto_recalculate:
+            st.warning("⚠️ **Let op:** Het bewerken van wedstrijden zonder ELO herberekening kan leiden tot inconsistenties in de ratings.")
         
         players_df = db.get_players()
         if not players_df.empty:
@@ -242,18 +257,44 @@ if not df_matches_delete.empty:
                             }
                             
                             with st.spinner("Wedstrijd wordt bijgewerkt..."):
-                                success = db.update_match(match_data['match_id'], updated_match_data)
+                                if auto_recalculate:
+                                    success = db.update_match_with_elo_recalculation(match_data['match_id'], updated_match_data)
+                                    if success:
+                                        st.success("Wedstrijd succesvol bijgewerkt en ELO scores herberekend!")
+                                    else:
+                                        st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd of herberekenen van ELO scores.")
+                                else:
+                                    success = db.update_match(match_data['match_id'], updated_match_data)
+                                    if success:
+                                        st.success("Wedstrijd succesvol bijgewerkt!")
+                                        st.warning("⚠️ **Belangrijk:** ELO scores zijn niet herberekend. Dit kan leiden tot inconsistenties in de ratings.")
+                                    else:
+                                        st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd.")
                                 
                                 if success:
-                                    st.success("Wedstrijd succesvol bijgewerkt!")
-                                    st.warning("⚠️ **Belangrijk:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens. ELO scores van spelers worden niet automatisch herberekend. Dit kan leiden tot inconsistenties in de ratings.")
                                     st.rerun()
-                                else:
-                                    st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd.")
         else:
             st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
 else:
     st.info("Geen wedstrijden om te beheren.")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
+
+# --- ELO Beheer ---
+st.subheader("ELO Rating Beheer")
+
+st.write("**Complete ELO Reset & Herberekening**")
+st.info("💡 Dit reset alle ELO scores naar 1000 en herberekent ze opnieuw op basis van alle wedstrijden in chronologische volgorde.")
+
+if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary", key="reset_elo_beheer"):
+    with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
+        success = db.reset_all_elos()
+        if success:
+            st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
+            st.balloons()
+            st.rerun()
+        else:
+            st.error("❌ Er is een fout opgetreden bij het resetten van de ELO scores.")
 
 st.markdown("""<hr>""", unsafe_allow_html=True)
 

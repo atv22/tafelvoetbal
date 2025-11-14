@@ -318,6 +318,334 @@ def update_match(match_id, updated_match_data):
         print(f"Fout bij bijwerken van wedstrijd {match_id}: {e}")
         return False
 
+def recalculate_elo_from_match(match_timestamp):
+    """
+    Herberekent alle ELO scores vanaf een bepaalde wedstrijd timestamp.
+    Gebruikt voor het corrigeren van ELO's na het bewerken/verwijderen van wedstrijden.
+    """
+    try:
+        from utils import elo_calculation
+        
+        # Haal alle wedstrijden op, gesorteerd op timestamp
+        all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+        all_matches = []
+        for doc in all_matches_docs:
+            match_data = doc.to_dict()
+            match_data['match_id'] = doc.id
+            all_matches.append(match_data)
+        
+        if not all_matches:
+            return True
+            
+        # Converteer naar DataFrame voor makkelijker werken
+        matches_df = pd.DataFrame(all_matches)
+        
+        # Vind de index van de wedstrijd vanaf waar we moeten herberekenen
+        target_index = 0
+        for i, match in enumerate(all_matches):
+            if match.get('timestamp') >= match_timestamp:
+                target_index = i
+                break
+        
+        # Haal huidige spelers op
+        players_df = get_players()
+        if players_df.empty:
+            return True
+            
+        # Maak een dictionary van de ELO's zoals ze waren VOOR de te herberekenen wedstrijd
+        if target_index > 0:
+            # Er zijn eerdere wedstrijden - bereken ELO's tot aan het herpunt
+            previous_matches = all_matches[:target_index]
+            player_elos = {}
+            
+            # Start alle spelers met 1000 ELO
+            for _, player in players_df.iterrows():
+                player_elos[player['speler_naam']] = 1000
+            
+            # Bereken ELO's door alle wedstrijden vóór het herpunt
+            for match in previous_matches:
+                # ELO berekening voor deze wedstrijd
+                home_team = [match.get('thuis_1'), match.get('thuis_2')]
+                away_team = [match.get('uit_1'), match.get('uit_2')]
+                home_score = int(match.get('thuis_score', 0))
+                away_score = int(match.get('uit_score', 0))
+                
+                # Bereken gemiddelde ELO's
+                home_elos = [player_elos.get(player, 1000) for player in home_team if player]
+                away_elos = [player_elos.get(player, 1000) for player in away_team if player]
+                
+                if len(home_elos) == 2 and len(away_elos) == 2:
+                    avg_home_elo = sum(home_elos) / 2
+                    avg_away_elo = sum(away_elos) / 2
+                    
+                    # Update ELO's voor thuisspelers
+                    for player in home_team:
+                        if player:
+                            player_elos[player] = elo_calculation(
+                                player_elos.get(player, 1000), avg_away_elo, home_score, away_score
+                            )
+                    
+                    # Update ELO's voor uitspelers
+                    for player in away_team:
+                        if player:
+                            player_elos[player] = elo_calculation(
+                                player_elos.get(player, 1000), avg_home_elo, away_score, home_score
+                            )
+        else:
+            # Geen eerdere wedstrijden - start met 1000 voor iedereen
+            player_elos = {}
+            for _, player in players_df.iterrows():
+                player_elos[player['speler_naam']] = 1000
+        
+        # Nu herberekenen vanaf target_index
+        matches_to_recalculate = all_matches[target_index:]
+        
+        # Batch voor ELO updates
+        batch = db.batch()
+        batch_counter = 0
+        
+        for match in matches_to_recalculate:
+            home_team = [match.get('thuis_1'), match.get('thuis_2')]
+            away_team = [match.get('uit_1'), match.get('uit_2')]
+            home_score = int(match.get('thuis_score', 0))
+            away_score = int(match.get('uit_score', 0))
+            
+            # Bereken gemiddelde ELO's
+            home_elos = [player_elos.get(player, 1000) for player in home_team if player]
+            away_elos = [player_elos.get(player, 1000) for player in away_team if player]
+            
+            if len(home_elos) == 2 and len(away_elos) == 2:
+                avg_home_elo = sum(home_elos) / 2
+                avg_away_elo = sum(away_elos) / 2
+                
+                # Update ELO's voor thuisspelers
+                for player in home_team:
+                    if player:
+                        new_elo = elo_calculation(
+                            player_elos.get(player, 1000), avg_away_elo, home_score, away_score
+                        )
+                        player_elos[player] = new_elo
+                        
+                        # Voeg nieuwe ELO toe aan batch
+                        new_elo_ref = elo_ref.document()
+                        batch.set(new_elo_ref, {
+                            'speler_naam': player,
+                            'rating': new_elo,
+                            'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                        })
+                        batch_counter += 1
+                
+                # Update ELO's voor uitspelers
+                for player in away_team:
+                    if player:
+                        new_elo = elo_calculation(
+                            player_elos.get(player, 1000), avg_home_elo, away_score, home_score
+                        )
+                        player_elos[player] = new_elo
+                        
+                        # Voeg nieuwe ELO toe aan batch
+                        new_elo_ref = elo_ref.document()
+                        batch.set(new_elo_ref, {
+                            'speler_naam': player,
+                            'rating': new_elo,
+                            'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                        })
+                        batch_counter += 1
+                
+                # Commit batch als deze te groot wordt
+                if batch_counter >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_counter = 0
+        
+        # Commit resterende updates
+        if batch_counter > 0:
+            batch.commit()
+        
+        st.cache_data.clear()
+        return True
+        
+    except Exception as e:
+        print(f"Fout bij herberekenen van ELO's: {e}")
+        return False
+
+def reset_all_elos():
+    """
+    Reset alle ELO scores en herberekent ze opnieuw vanaf het begin.
+    Gebruikt voor complete ELO reset.
+    """
+    try:
+        from utils import elo_calculation
+        
+        # Verwijder alle bestaande ELO entries
+        existing_elo_docs = elo_ref.stream()
+        batch = db.batch()
+        for doc in existing_elo_docs:
+            batch.delete(doc.reference)
+        batch.commit()
+        
+        # Haal alle wedstrijden op, gesorteerd op timestamp
+        all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+        all_matches = []
+        for doc in all_matches_docs:
+            match_data = doc.to_dict()
+            match_data['match_id'] = doc.id
+            all_matches.append(match_data)
+        
+        # Haal alle spelers op
+        players_df = get_players()
+        if players_df.empty:
+            return True
+            
+        # Start alle spelers met 1000 ELO
+        player_elos = {}
+        batch = db.batch()
+        batch_counter = 0
+        
+        for _, player in players_df.iterrows():
+            player_name = player['speler_naam']
+            player_elos[player_name] = 1000
+            
+            # Voeg initiële ELO toe
+            new_elo_ref = elo_ref.document()
+            batch.set(new_elo_ref, {
+                'speler_naam': player_name,
+                'rating': 1000,
+                'timestamp': pd.Timestamp.now()  # Vroege timestamp voor initiële waarden
+            })
+            batch_counter += 1
+        
+        # Commit initiële ELO's
+        if batch_counter > 0:
+            batch.commit()
+            
+        # Nu alle wedstrijden doorlopen en ELO's berekenen
+        batch = db.batch()
+        batch_counter = 0
+        
+        for match in all_matches:
+            home_team = [match.get('thuis_1'), match.get('thuis_2')]
+            away_team = [match.get('uit_1'), match.get('uit_2')]
+            home_score = int(match.get('thuis_score', 0))
+            away_score = int(match.get('uit_score', 0))
+            
+            # Bereken gemiddelde ELO's
+            home_elos = [player_elos.get(player, 1000) for player in home_team if player]
+            away_elos = [player_elos.get(player, 1000) for player in away_team if player]
+            
+            if len(home_elos) == 2 and len(away_elos) == 2:
+                avg_home_elo = sum(home_elos) / 2
+                avg_away_elo = sum(away_elos) / 2
+                
+                # Update ELO's voor thuisspelers
+                for player in home_team:
+                    if player:
+                        new_elo = elo_calculation(
+                            player_elos.get(player, 1000), avg_away_elo, home_score, away_score
+                        )
+                        player_elos[player] = new_elo
+                        
+                        # Voeg nieuwe ELO toe aan batch
+                        new_elo_ref = elo_ref.document()
+                        batch.set(new_elo_ref, {
+                            'speler_naam': player,
+                            'rating': new_elo,
+                            'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                        })
+                        batch_counter += 1
+                
+                # Update ELO's voor uitspelers
+                for player in away_team:
+                    if player:
+                        new_elo = elo_calculation(
+                            player_elos.get(player, 1000), avg_home_elo, away_score, home_score
+                        )
+                        player_elos[player] = new_elo
+                        
+                        # Voeg nieuwe ELO toe aan batch
+                        new_elo_ref = elo_ref.document()
+                        batch.set(new_elo_ref, {
+                            'speler_naam': player,
+                            'rating': new_elo,
+                            'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                        })
+                        batch_counter += 1
+                
+                # Commit batch als deze te groot wordt
+                if batch_counter >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_counter = 0
+        
+        # Commit resterende updates
+        if batch_counter > 0:
+            batch.commit()
+        
+        st.cache_data.clear()
+        return True
+        
+    except Exception as e:
+        print(f"Fout bij resetten van alle ELO's: {e}")
+        return False
+
+def update_match_with_elo_recalculation(match_id, updated_match_data):
+    """
+    Werkt een wedstrijd bij en herberekent automatisch alle ELO's vanaf die wedstrijd.
+    """
+    try:
+        # Haal de originele wedstrijd op voor de timestamp
+        original_match = matches_ref.document(match_id).get()
+        if not original_match.exists:
+            return False
+        
+        original_data = original_match.to_dict()
+        if not original_data:
+            return False
+            
+        original_timestamp = original_data.get('timestamp')
+        
+        # Update de wedstrijd
+        matches_ref.document(match_id).update(updated_match_data)
+        
+        # Herberekenen ELO's vanaf deze wedstrijd
+        success = recalculate_elo_from_match(original_timestamp)
+        
+        st.cache_data.clear()
+        return success
+        
+    except Exception as e:
+        print(f"Fout bij bijwerken van wedstrijd met ELO herberekening {match_id}: {e}")
+        return False
+
+def delete_match_with_elo_recalculation(match_id):
+    """
+    Verwijdert een wedstrijd en herberekent automatisch alle ELO's vanaf dat punt.
+    """
+    try:
+        # Haal de wedstrijd op voor de timestamp
+        match_doc = matches_ref.document(match_id).get()
+        if not match_doc.exists:
+            return True  # Al verwijderd
+        
+        match_data = match_doc.to_dict()
+        if not match_data:
+            return True
+            
+        match_timestamp = match_data.get('timestamp')
+        
+        # Verwijder de wedstrijd
+        matches_ref.document(match_id).delete()
+        
+        # Herberekenen ELO's vanaf dit punt
+        success = recalculate_elo_from_match(match_timestamp)
+        
+        st.cache_data.clear()
+        return success
+        
+    except Exception as e:
+        print(f"Fout bij verwijderen van wedstrijd met ELO herberekening {match_id}: {e}")
+        return False
+
 def clear_collection(collection_name):
     """Verwijdert alle documenten uit een collectie."""
     try:

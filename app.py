@@ -292,6 +292,22 @@ with tab5:
             with beheer_tab1:
                 st.write("**Wedstrijd(en) verwijderen**")
                 
+                # Keuze voor ELO herberekening bij verwijdering
+                elo_delete_option = st.radio(
+                    "ELO herberekening bij verwijdering:",
+                    options=[
+                        "🔄 Automatisch herberekenen na verwijdering (aanbevolen)",
+                        "⚠️ Alleen verwijderen (geen ELO update)"
+                    ],
+                    help="Automatische herberekening zorgt voor correcte ELO scores na verwijdering.",
+                    key="elo_delete_option"
+                )
+                
+                auto_recalc_delete = elo_delete_option.startswith("🔄")
+                
+                if not auto_recalc_delete:
+                    st.warning("⚠️ **Let op:** Verwijderen zonder ELO herberekening kan leiden tot inconsistenties in de ratings.")
+                
                 # Maak een leesbare weergave voor de matches
                 matches_display_df = matches_df.copy()
                 matches_display_df['display'] = matches_display_df.apply(
@@ -312,12 +328,23 @@ with tab5:
                     match_id = matches_display_df.loc[match_idx, 'match_id']
                     
                     with st.spinner("Wedstrijd wordt verwijderd..."):
-                        if db.delete_match_by_id(match_id):
-                            st.success("Wedstrijd succesvol verwijderd.")
+                        if auto_recalc_delete:
+                            success = db.delete_match_with_elo_recalculation(match_id)
+                            if success:
+                                st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
+                            else:
+                                st.error("Kon de wedstrijd niet verwijderen of ELO scores herberekenen.")
+                        else:
+                            success = db.delete_match_by_id(match_id)
+                            if success:
+                                st.success("Wedstrijd succesvol verwijderd.")
+                                st.warning("⚠️ ELO scores zijn niet herberekend.")
+                            else:
+                                st.error("Kon de wedstrijd niet verwijderen.")
+                        
+                        if success:
                             time.sleep(1)
                             st.rerun()
-                        else:
-                            st.error("Kon de wedstrijd niet verwijderen.")
                 
                 st.write("**Meerdere wedstrijden verwijderen:**")
                 matches_to_delete = st.multiselect(
@@ -329,15 +356,29 @@ with tab5:
                 if matches_to_delete and st.button("Verwijder geselecteerde wedstrijden", key="delete_multiple"):
                     with st.spinner(f"Bezig met verwijderen van {len(matches_to_delete)} wedstrijden..."):
                         success_count = 0
+                        deleted_match_ids = []
+                        
+                        # Eerst alle wedstrijden verwijderen
                         for match_display in matches_to_delete:
                             match_idx = matches_display_df[matches_display_df['display'] == match_display].index[0]
                             match_id = matches_display_df.loc[match_idx, 'match_id']
                             
                             if db.delete_match_by_id(match_id):
                                 success_count += 1
+                                deleted_match_ids.append(match_id)
+                        
+                        # Als auto herberekening is ingeschakeld en er wedstrijden zijn verwijderd
+                        if auto_recalc_delete and success_count > 0:
+                            with st.spinner("ELO scores worden herberekend..."):
+                                # Voor bulk verwijdering: herberekenen vanaf het begin (veiligste optie)
+                                db.reset_all_elos()
                         
                         if success_count == len(matches_to_delete):
-                            st.success(f"Alle {success_count} wedstrijden succesvol verwijderd.")
+                            if auto_recalc_delete:
+                                st.success(f"Alle {success_count} wedstrijden succesvol verwijderd en ELO scores volledig herberekend!")
+                            else:
+                                st.success(f"Alle {success_count} wedstrijden succesvol verwijderd.")
+                                st.warning("⚠️ ELO scores zijn niet herberekend.")
                         else:
                             st.warning(f"{success_count} van de {len(matches_to_delete)} wedstrijden verwijderd.")
                         time.sleep(1)
@@ -345,7 +386,21 @@ with tab5:
             
             with beheer_tab2:
                 st.write("**Wedstrijd bewerken**")
-                st.warning("⚠️ **Let op:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens in de database. ELO scores worden niet automatisch herberekend.")
+                
+                # Keuze voor ELO herberekening
+                elo_option = st.radio(
+                    "ELO herberekening optie:",
+                    options=[
+                        "🔄 Automatisch herberekenen (aanbevolen)",
+                        "⚠️ Alleen wedstrijd aanpassen (geen ELO update)"
+                    ],
+                    help="Automatische herberekening zorgt voor correcte ELO scores maar duurt langer."
+                )
+                
+                auto_recalculate = elo_option.startswith("🔄")
+                
+                if not auto_recalculate:
+                    st.warning("⚠️ **Let op:** Het bewerken van wedstrijden zonder ELO herberekening kan leiden tot inconsistenties in de ratings.")
                 
                 if not players_df.empty:
                     player_names = sorted(players_df['speler_naam'].tolist())
@@ -439,19 +494,46 @@ with tab5:
                                     }
                                     
                                     with st.spinner("Wedstrijd wordt bijgewerkt..."):
-                                        success = db.update_match(match_data['match_id'], updated_match_data)
+                                        if auto_recalculate:
+                                            success = db.update_match_with_elo_recalculation(match_data['match_id'], updated_match_data)
+                                            if success:
+                                                st.success("Wedstrijd succesvol bijgewerkt en ELO scores herberekend!")
+                                            else:
+                                                st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd of herberekenen van ELO scores.")
+                                        else:
+                                            success = db.update_match(match_data['match_id'], updated_match_data)
+                                            if success:
+                                                st.success("Wedstrijd succesvol bijgewerkt!")
+                                                st.warning("⚠️ **Belangrijk:** ELO scores zijn niet herberekend. Dit kan leiden tot inconsistenties in de ratings.")
+                                            else:
+                                                st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd.")
                                         
                                         if success:
-                                            st.success("Wedstrijd succesvol bijgewerkt!")
-                                            st.warning("⚠️ **Belangrijk:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens. ELO scores van spelers worden niet automatisch herberekend. Dit kan leiden tot inconsistenties in de ratings.")
                                             time.sleep(2)
                                             st.rerun()
-                                        else:
-                                            st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd.")
                 else:
                     st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
         else:
             st.info("Geen wedstrijden om te beheren.")
+
+        st.markdown("""<hr>""", unsafe_allow_html=True)
+
+        # --- ELO Beheer ---
+        st.subheader("ELO Rating Beheer")
+        
+        st.write("**Complete ELO Reset & Herberekening**")
+        st.info("💡 Dit reset alle ELO scores naar 1000 en herberekent ze opnieuw op basis van alle wedstrijden in chronologische volgorde.")
+        
+        if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
+            with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
+                success = db.reset_all_elos()
+                if success:
+                    st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
+                    st.balloons()
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error("❌ Er is een fout opgetreden bij het resetten van de ELO scores.")
 
         st.markdown("""<hr>""", unsafe_allow_html=True)
 
