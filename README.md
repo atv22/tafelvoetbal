@@ -1,6 +1,6 @@
-# 🏓 Tafelvoetbal Competitie App
+# Tafelvoetbal Competitie App
 
-Een moderne webapplicatie voor het beheren van tafelvoetbal competities, ontwikkeld tijdens de **Hackatron van oktober 2025**.
+Een webapplicatie voor het beheren van tafelvoetbal competities, ontwikkeld tijdens de **Hackatron van oktober 2025**.
 
 ## 👥 Team
 
