@@ -981,4 +981,37 @@ with tab5:
 # ===== TAB 6: COLOFON =====
 with tab6:
     st.header("Colofon")
-    st.write("Deze webapp is gemaakt met behulp van ChatGPT door Rick en Arthur")
+    
+    st.markdown("""
+    ### 🏓 Tafelvoetbal Competitie App
+    
+    Deze webapp is ontwikkeld tijdens de **Hackatron van oktober 2025** door:
+    
+    **Team Leden:**
+    - Rick
+    - Bernd  
+    - Dewi
+    - Isis
+    - Johannes
+    - Arthur
+    
+    **Technische Details:**
+    - 🐍 **Python** met Streamlit framework
+    - 🔥 **Firestore** database voor data opslag
+    - 🤖 **AI-assistentie** van ChatGPT voor ontwikkeling
+    - 📊 **ELO rating systeem** voor speler rankings
+    - 📁 **CSV import/export** functionaliteit
+    
+    **Features:**
+    - Wedstrijd registratie en beheer
+    - Automatische ELO score berekening
+    - Speler en seizoen beheer
+    - Historische data import
+    - Real-time statistieken en rankings
+    
+    ---
+    *Gemaakt met ❤️ tijdens de Hackatron 2025*
+    """)
+    
+    # Voeg wat extra styling toe
+    st.balloons() if st.button("🎉 Vier het teamwork!") else None
