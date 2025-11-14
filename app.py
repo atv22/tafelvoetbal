@@ -358,57 +358,11 @@ with tab4:
             st.subheader("🎯 Seizoen Selectie")
             
             # Maak seizoen opties - alleen seizoenen met wedstrijden
-            season_options = []
-            current_date = date.today()
-            current_season_id = None
-            
-            for idx, season in combined_seasons_df.iterrows():
-                try:
-                    start_date = pd.to_datetime(season['startdatum']).date()
-                    end_date = pd.to_datetime(season['einddatum']).date()
-                    
-                    # Check of er wedstrijden zijn in dit seizoen
-                    try:
-                        match_dates = pd.to_datetime(matches_df['datum'])
-                        if match_dates.dt.tz is not None:
-                            match_dates = match_dates.dt.tz_localize(None)
-                        
-                        start_date_naive = pd.to_datetime(start_date)
-                        if start_date_naive.tz is not None:
-                            start_date_naive = start_date_naive.tz_localize(None)
-                        
-                        end_date_naive = pd.to_datetime(end_date) 
-                        if end_date_naive.tz is not None:
-                            end_date_naive = end_date_naive.tz_localize(None)
-                        
-                        season_matches = matches_df[
-                            (match_dates >= start_date_naive) & 
-                            (match_dates <= end_date_naive)
-                        ]
-                        
-                        # Alleen toevoegen als er wedstrijden zijn
-                        if len(season_matches) > 0:
-                            season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
-                            match_count = len(season_matches)
-                            season_options.append((f"{season_name} ({match_count} wedstrijden)", idx))
-                            
-                            # Check of dit het huidige seizoen is
-                            if start_date <= current_date <= end_date:
-                                current_season_id = len(season_options) - 1
-                                
-                    except Exception:
-                        continue  # Skip seizoenen met datum problemen
-                except Exception:
-                    continue
+            season_options, current_season_id = season_utils.create_season_options(combined_seasons_df, matches_df)
             
             if not season_options:
                 st.error("❌ Geen geldige seizoenen gevonden.")
             else:
-                # Voeg "Alle seizoenen" optie toe
-                season_options.insert(0, ("📊 Alle Seizoenen", "all"))
-                if current_season_id is not None:
-                    season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
-                
                 selected_season_display = st.selectbox(
                     "Kies een seizoen om te analyseren:",
                     options=[option[0] for option in season_options],
@@ -423,100 +377,13 @@ with tab4:
                     st.subheader("📈 Overzicht Alle Prinsjesdag Seizoenen")
                     
                     # Seizoen metrics
-                    season_metrics = []
-                    for idx, season in combined_seasons_df.iterrows():
-                        try:
-                            start_date = pd.to_datetime(season['startdatum'])
-                            end_date = pd.to_datetime(season['einddatum'])
-                            
-                            # Filter wedstrijden voor dit seizoen
-                            try:
-                                # Zorg voor consistente timezone handling
-                                match_dates = pd.to_datetime(matches_df['datum'])
-                                if match_dates.dt.tz is not None:
-                                    match_dates = match_dates.dt.tz_localize(None)
-                                
-                                start_date_naive = pd.to_datetime(start_date)
-                                if start_date_naive.tz is not None:
-                                    start_date_naive = start_date_naive.tz_localize(None)
-                                
-                                end_date_naive = pd.to_datetime(end_date) 
-                                if end_date_naive.tz is not None:
-                                    end_date_naive = end_date_naive.tz_localize(None)
-                                
-                                season_matches = matches_df[
-                                    (match_dates >= start_date_naive) & 
-                                    (match_dates <= end_date_naive)
-                                ]
-                            except Exception:
-                                season_matches = pd.DataFrame()
-                            
-                            # Bereken metrics
-                            total_matches = len(season_matches)
-                            unique_players = set()
-                            if total_matches > 0:
-                                # Gebruik correcte kolom namen
-                                for _, match in season_matches.iterrows():
-                                    if pd.notna(match.get('thuis_1')):
-                                        unique_players.add(match['thuis_1'])
-                                    if pd.notna(match.get('thuis_2')):
-                                        unique_players.add(match['thuis_2'])
-                                    if pd.notna(match.get('uit_1')):
-                                        unique_players.add(match['uit_1'])
-                                    if pd.notna(match.get('uit_2')):
-                                        unique_players.add(match['uit_2'])
-                            
-                            total_goals = 0
-                            if total_matches > 0:
-                                total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
-                            
-                            avg_goals_per_match = total_goals / total_matches if total_matches > 0 else 0
-                            
-                            prinsjesdag_str = season['prinsjesdag'].strftime('%d-%m-%Y') if 'prinsjesdag' in season else 'N/A'
-                            
-                            season_metrics.append({
-                                'Seizoen': season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}"),
-                                'Prinsjesdag': prinsjesdag_str,
-                                'Aantal Wedstrijden': total_matches,
-                                'Aantal Spelers': len(unique_players),
-                                'Totaal Doelpunten': total_goals,
-                                'Gem. Doelpunten/Wedstrijd': round(avg_goals_per_match, 2),
-                                'Seizoen Actief': '✅' if start_date.date() <= current_date <= end_date.date() else '❌'
-                            })
-                        except Exception:
-                            continue
+                    metrics_df = season_utils.process_all_seasons_metrics(combined_seasons_df, matches_df)
                     
-                    if season_metrics:
-                        metrics_df = pd.DataFrame(season_metrics)
+                    if not metrics_df.empty:
                         st.dataframe(metrics_df, use_container_width=True)
                         
-                        # Visualisaties voor alle seizoenen
-                        if len(metrics_df) > 0:
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                # Wedstrijden per seizoen
-                                try:
-                                    fig_matches = px.bar(
-                                        metrics_df, 
-                                        x='Seizoen', 
-                                        y='Aantal Wedstrijden',
-                                        title='📊 Wedstrijden per Seizoen',
-                                        color='Aantal Wedstrijden',
-                                        color_continuous_scale='Blues'
-                                    )
-                                    fig_matches.update_layout(xaxis_tickangle=45)
-                                    st.plotly_chart(fig_matches, use_container_width=True)
-                                except Exception as e:
-                                    st.error(f"Fout bij maken van wedstrijden chart: {e}")
-                            
-                            with col2:
-                                # Spelers per seizoen
-                                try:
-                                    fig_players = px.bar(
-                                        metrics_df, 
-                                        x='Seizoen', 
-                                        y='Aantal Spelers',
+                        # Visualisaties voor alle seizoenen met analytics module
+                        analytics.show_cross_season_charts(matches_df, combined_seasons_df)
                                         title='👥 Actieve Spelers per Seizoen',
                                         color='Aantal Spelers',
                                         color_continuous_scale='Greens'
@@ -741,65 +608,30 @@ with tab4:
                     # Specifiek seizoen analyse
                     try:
                         season = combined_seasons_df.iloc[selected_season_id]
-                        start_date = pd.to_datetime(season['startdatum'])
-                        end_date = pd.to_datetime(season['einddatum'])
+                        season_matches = season_utils.get_season_matches(matches_df, season)
                         
-                        # Seizoen header met Prinsjesdag info
-                        seizoen_naam = season.get('seizoen_naam', f"Seizoen {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
-                        st.subheader(f"📈 {seizoen_naam}")
+                        # Haal ELO data op voor dit seizoen (indien beschikbaar)
+                        season_elo = None  # TODO: implement season ELO lookup
                         
-                        # Prinsjesdag info
-                        if 'prinsjesdag' in season:
-                            prinsjesdag = pd.to_datetime(season['prinsjesdag'])
-                            st.info(f"🏛️ **Prinsjesdag {season.get('jaar', 'N/A')}:** {prinsjesdag.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
+                        # Roep de analytics functie aan
+                        analytics.show_individual_season_analysis(season, season_matches, season_elo)
                         
-                        # Filter wedstrijden voor dit seizoen
-                        try:
-                            # Zorg voor consistente timezone handling
-                            match_dates = pd.to_datetime(matches_df['datum'])
-                            if match_dates.dt.tz is not None:
-                                match_dates = match_dates.dt.tz_localize(None)
-                            
-                            start_date_naive = pd.to_datetime(start_date)
-                            if start_date_naive.tz is not None:
-                                start_date_naive = start_date_naive.tz_localize(None)
-                            
-                            end_date_naive = pd.to_datetime(end_date) 
-                            if end_date_naive.tz is not None:
-                                end_date_naive = end_date_naive.tz_localize(None)
-                            
-                            season_matches = matches_df[
-                                (match_dates >= start_date_naive) & 
-                                (match_dates <= end_date_naive)
-                            ]
-                        except Exception as date_error:
-                            st.error(f"Datum vergelijkingsfout: {date_error}")
-                            season_matches = pd.DataFrame()
-                        
-                        if not season_matches.empty:
-                            # Basis statistieken
-                            col1, col2, col3, col4 = st.columns(4)
-                            
-                            with col1:
-                                st.metric("📊 Totaal Wedstrijden", len(season_matches))
-                            
-                            with col2:
-                                unique_players = set()
-                                # Gebruik de correcte kolom namen van Firestore
-                                for _, match in season_matches.iterrows():
-                                    if pd.notna(match.get('thuis_1')):
-                                        unique_players.add(match['thuis_1'])
-                                    if pd.notna(match.get('thuis_2')):
-                                        unique_players.add(match['thuis_2'])
-                                    if pd.notna(match.get('uit_1')):
-                                        unique_players.add(match['uit_1'])
-                                    if pd.notna(match.get('uit_2')):
-                                        unique_players.add(match['uit_2'])
-                                st.metric("👥 Actieve Spelers", len(unique_players))
-                            
-                            with col3:
-                                total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
-                                st.metric("⚽ Totaal Doelpunten", int(total_goals))
+                    except Exception as e:
+                        st.error(f"Fout bij laden van seizoen data: {e}")
+        
+        except Exception as e:
+            st.error(f"Algemene fout bij seizoen analyse: {e}")
+
+# ===== TAB 5: RUWE DATA =====
+with tab5:
+    st.header("Ruwe Data uit Firestore")
+
+    # --- Spelers ---
+    st.subheader("Spelers")
+    if not players_df.empty:
+        st.dataframe(players_df, use_container_width=True)
+    else:
+        st.info("Geen spelers gevonden in Firestore.")
                             
                             with col4:
                                 avg_goals = total_goals / len(season_matches)

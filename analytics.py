@@ -405,3 +405,67 @@ def show_cross_season_charts(all_matches, seasons_df):
                         markers=True
                     )
                     st.plotly_chart(fig_season_goals, use_container_width=True)
+
+
+def show_individual_season_analysis(season_info, season_matches, season_elo=None):
+    """Toon uitgebreide analyse voor een individueel seizoen"""
+    import streamlit as st
+    
+    if season_matches.empty:
+        st.warning("Geen wedstrijden gevonden voor dit seizoen.")
+        return
+    
+    # Seizoen header
+    seizoen_naam = season_info.get('seizoen_naam', 'Onbekend Seizoen')
+    st.subheader(f"📈 {seizoen_naam}")
+    
+    # Prinsjesdag info
+    if 'prinsjesdag' in season_info:
+        import pandas as pd
+        prinsjesdag = pd.to_datetime(season_info['prinsjesdag'])
+        st.info(f"🏛️ **Prinsjesdag {season_info.get('seizoen_jaar', 'N/A')}:** {prinsjesdag.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
+    
+    # Basis statistieken
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Totaal Wedstrijden", len(season_matches))
+    
+    with col2:
+        total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
+        st.metric("Totaal Goals", total_goals)
+    
+    with col3:
+        avg_goals = total_goals / len(season_matches) if len(season_matches) > 0 else 0
+        st.metric("Gem. Goals/Wedstrijd", f"{avg_goals:.1f}")
+    
+    with col4:
+        # Unieke spelers
+        unique_players = set()
+        for _, match in season_matches.iterrows():
+            unique_players.update([
+                match['thuis_speler_1'], match['thuis_speler_2'],
+                match['uit_speler_1'], match['uit_speler_2']
+            ])
+        st.metric("Actieve Spelers", len(unique_players))
+    
+    # Visualisaties in columns
+    st.subheader("📊 Seizoen Visualisaties")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        show_matches_bar_chart(season_matches)
+        show_goals_bar_chart_season(season_matches)
+    
+    with col2:
+        show_unique_players_bar_chart(season_matches)
+        show_winrate_bar_chart(season_matches)
+    
+    # ELO ratings als beschikbaar
+    if season_elo is not None and not season_elo.empty:
+        st.subheader("🏆 ELO Rankings")
+        show_elo_bar_chart(season_elo)
+    
+    # Goals trend over tijd
+    show_goals_line_chart(season_matches)

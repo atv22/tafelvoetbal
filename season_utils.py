@@ -252,3 +252,76 @@ def get_current_season(seasons_df):
             return season
             
     return None
+
+
+def create_season_options(seasons_df, matches_df):
+    """Maak seizoen opties voor selectbox met match counts"""
+    season_options = []
+    current_date = date.today()
+    current_season_id = None
+    
+    for idx, season in seasons_df.iterrows():
+        try:
+            start_date = pd.to_datetime(season['start_datum']).date()
+            end_date = pd.to_datetime(season['eind_datum']).date()
+            
+            # Check of er wedstrijden zijn in dit seizoen
+            season_matches = get_season_matches(matches_df, season)
+            
+            # Alleen toevoegen als er wedstrijden zijn
+            if len(season_matches) > 0:
+                season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                match_count = len(season_matches)
+                season_options.append((f"{season_name} ({match_count} wedstrijden)", idx))
+                
+                # Check of dit het huidige seizoen is
+                if start_date <= current_date <= end_date:
+                    current_season_id = len(season_options) - 1
+                    
+        except Exception:
+            continue  # Skip seizoenen met problemen
+    
+    # Voeg "Alle seizoenen" optie toe
+    if season_options:
+        season_options.insert(0, ("📊 Alle Seizoenen", "all"))
+        if current_season_id is not None:
+            season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
+    
+    return season_options, current_season_id
+
+
+def process_all_seasons_metrics(seasons_df, matches_df):
+    """Verwerk metrics voor alle seizoenen"""
+    season_metrics = []
+    
+    for idx, season in seasons_df.iterrows():
+        try:
+            season_matches = get_season_matches(matches_df, season)
+            
+            if len(season_matches) == 0:
+                continue  # Skip seizoenen zonder wedstrijden
+                
+            # Bereken metrics
+            total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
+            avg_goals = total_goals / len(season_matches) if len(season_matches) > 0 else 0
+            
+            # Unieke spelers
+            unique_players = set()
+            for _, match in season_matches.iterrows():
+                unique_players.update([
+                    match['thuis_speler_1'], match['thuis_speler_2'],
+                    match['uit_speler_1'], match['uit_speler_2']
+                ])
+            
+            season_metrics.append({
+                'Seizoen': season.get('seizoen_naam', f"Seizoen {idx+1}"),
+                'Aantal Wedstrijden': len(season_matches),
+                'Aantal Spelers': len(unique_players),
+                'Totaal Goals': total_goals,
+                'Gem. Goals per Wedstrijd': round(avg_goals, 1)
+            })
+            
+        except Exception:
+            continue  # Skip seizoenen met problemen
+    
+    return pd.DataFrame(season_metrics)
