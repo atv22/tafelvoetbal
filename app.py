@@ -5,6 +5,8 @@ from datetime import date, datetime
 import firestore_service as db # Use Firestore
 from styles import setup_page
 from utils import elo_calculation, add_name, get_download_filename
+import analytics
+import season_utils
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -240,90 +242,6 @@ with tab3:
 with tab4:
     st.header("📅 Seizoenen Overzicht")
     
-    # Functie om Prinsjesdag te berekenen
-    def get_prinsjesdag(year):
-        """Bereken Prinsjesdag (derde dinsdag van september) voor een gegeven jaar"""
-        from datetime import date, timedelta
-        
-        # Eerste dag van september
-        first_september = date(year, 9, 1)
-        
-        # Vind de eerste dinsdag (weekday 1 = dinsdag)
-        days_until_tuesday = (1 - first_september.weekday()) % 7
-        first_tuesday = first_september + timedelta(days=days_until_tuesday)
-        
-        # Derde dinsdag is twee weken later
-        prinsjesdag = first_tuesday + timedelta(days=14)
-        
-        return prinsjesdag
-    
-    # Genereer Prinsjesdag seizoenen op basis van wedstrijd data
-    def generate_prinsjesdag_seasons():
-        """Genereer automatische seizoenen op basis van Prinsjesdag"""
-        prinsjesdag_seasons = []
-        
-        try:
-            from datetime import date
-            current_year = date.today().year
-            
-            # Bepaal jaar bereik - alleen seizoenen tot huidig jaar
-            if not matches_df.empty:
-                try:
-                    # Converteer datum kolom naar datetime en haal timezone info weg
-                    match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
-                    min_year = max(2020, match_dates.min().year - 1)  # Vanaf 2020 of eerste match jaar
-                    max_year = min(current_year + 1, match_dates.max().year + 1)  # Tot huidig jaar
-                except Exception as date_error:
-                    # Alleen waarschuwen bij daadwerkelijke data problemen
-                    if not matches_df.empty:
-                        st.warning(f"Probleem met datum conversie: {date_error}")
-                    # Fallback naar huidige datum bereik
-                    min_year = 2020
-                    max_year = current_year + 1
-            else:
-                # Geen wedstrijden - geen seizoenen tonen
-                return pd.DataFrame()
-            
-            for year in range(min_year, max_year + 1):
-                try:
-                    # Skip jaar 1900 of andere ongeldige jaren, en toekomstige jaren
-                    if year < 1900 or year > current_year + 1:
-                        continue
-                        
-                    prinsjesdag = get_prinsjesdag(year)
-                    prev_prinsjesdag = get_prinsjesdag(year - 1)
-                    
-                    # Seizoen loopt van vorige Prinsjesdag tot huidige Prinsjesdag 24:00
-                    season_start = prev_prinsjesdag
-                    season_end = prinsjesdag
-                    
-                    prinsjesdag_seasons.append({
-                        'startdatum': season_start,
-                        'einddatum': season_end,
-                        'seizoen_naam': f'Prinsjesdag Seizoen {year-1}-{year}',
-                        'prinsjesdag': prinsjesdag,
-                        'jaar': year
-                    })
-                except Exception as e:
-                    # Log specifieke fout alleen als er wedstrijddata is - anders te veel noise
-                    if not matches_df.empty:
-                        st.warning(f"⚠️ Fout bij jaar {year}: {str(e)} (type: {type(e).__name__})")
-                    continue
-            
-            return pd.DataFrame(prinsjesdag_seasons)
-        
-        except Exception as e:
-            # Toon alleen error bij daadwerkelijk probleem met beschikbare data
-            if not matches_df.empty:
-                st.error(f"Algemene fout bij genereren Prinsjesdag seizoenen: {str(e)}")
-                # Debug info voor troubleshooting
-                st.write(f"🔍 Debug info - Error type: {type(e).__name__}")
-                st.write(f"📊 Matches data shape: {matches_df.shape}")
-                st.write(f"📅 Datum column type: {matches_df['datum'].dtype}")
-                st.write(f"📋 Sample datum values: {matches_df['datum'].head()}")
-                st.write(f"🏛️ Column names: {list(matches_df.columns)}")
-            return pd.DataFrame()
-    
     # Info sectie over Prinsjesdag seizoenen
     st.info("""
     🏛️ **Prinsjesdag Seizoen Systeem**
@@ -335,7 +253,7 @@ with tab4:
     """)
     
     # Genereer Prinsjesdag seizoenen
-    prinsjesdag_seasons_df = generate_prinsjesdag_seasons()
+    prinsjesdag_seasons_df = season_utils.generate_prinsjesdag_seasons(matches_df)
     
     # Combineer database seizoenen met Prinsjesdag seizoenen
     if not prinsjesdag_seasons_df.empty:
@@ -425,20 +343,7 @@ with tab4:
         
         if not timeline_df.empty:
             # Wedstrijden per Prinsjesdag seizoen
-            fig_timeline = px.bar(
-                timeline_df,
-                x='Jaar',
-                y='Wedstrijden', 
-                title='⚽ Wedstrijden per Prinsjesdag Seizoen',
-                hover_data=['Seizoen', 'Prinsjesdag'],
-                color='Wedstrijden',
-                color_continuous_scale='Blues'
-            )
-            fig_timeline.update_layout(
-                xaxis_title="Seizoen Jaar",
-                yaxis_title="Aantal Wedstrijden"
-            )
-            st.plotly_chart(fig_timeline, use_container_width=True)
+            analytics.show_timeline_chart(matches_df)
     
     # Controleer of er data beschikbaar is voor analyse
     if combined_seasons_df.empty:
