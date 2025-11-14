@@ -310,29 +310,45 @@ with tab4:
             if not season_options:
                 st.error("❌ Geen geldige seizoenen gevonden.")
             else:
-                # Fallback: meest recente seizoen (laatste in lijst) als er geen actief seizoen is
-                fallback_latest_season_tuple = season_options[-1]  # (display, idx)
-                fallback_latest_index_in_options = len(season_options) - 1
-
                 # Voeg "Alle seizoenen" optie toe voor algemene vergelijking
                 season_options.insert(0, ("📊 Alle Seizoenen", "all"))
 
-                # Indien er een actief (huidig) seizoen is, voeg expliciete optie toe
+                # Bepaal het standaard te selecteren seizoen
+                default_option_index = 0  # Fallback naar "Alle Seizoenen"
+                display_options = [option[0] for option in season_options]
+
                 if current_season_id is not None:
-                    season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
-                    default_index = 1  # selecteer actief seizoen
-                else:
-                    # Zoek positie van fallback seizoen na insertion; +1 door "Alle Seizoenen" insert
-                    default_index = fallback_latest_index_in_options + 1
+                    # Zoek de optie die overeenkomt met het huidige seizoen
+                    for i, option in enumerate(season_options):
+                        if option[1] == current_season_id:
+                            # Pas de weergavenaam aan
+                            original_name = option[0]
+                            display_options[i] = f"⭐ Huidig: {original_name}"
+                            default_option_index = i  # Stel dit in als de standaard
+                            break
+                elif len(season_options) > 1: # Als er geen huidig seizoen is, neem de meest recente (meer dan alleen "Alle seizoenen")
+                    # De meest recente is de laatste die is toegevoegd
+                    default_option_index = len(season_options) - 1
+                    original_name = season_options[-1][0]
+                    display_options[-1] = f"🕰️ Meest Recent: {original_name}"
 
                 selected_season_display = st.selectbox(
                     "Kies een seizoen om te analyseren:",
-                    options=[option[0] for option in season_options],
-                    index=default_index
+                    options=display_options,
+                    index=default_option_index
                 )
 
-                # Vind de geselecteerde seizoen ID
-                selected_season_id = next(option[1] for option in season_options if option[0] == selected_season_display)
+                # Vind de originele naam en de geselecteerde seizoen ID
+                selected_season_id = "all" # Default
+                if selected_season_display:
+                    original_selected_name = selected_season_display
+                    if "⭐ Huidig: " in selected_season_display:
+                        original_selected_name = selected_season_display.replace("⭐ Huidig: ", "")
+                    elif "🕰️ Meest Recent: " in selected_season_display:
+                        original_selected_name = selected_seizoen_display.replace("🕰️ Meest Recent: ", "")
+
+                    # Zoek de ID die bij de originele naam hoort
+                    selected_season_id = next((option[1] for option in season_options if option[0] == original_selected_name), "all")
                 
                 if selected_season_id == "all":
                     # Alle seizoenen analyse
@@ -656,7 +672,8 @@ with tab4:
                 else:
                     # Specifiek seizoen analyse
                     try:
-                        season = combined_seasons_df.iloc[selected_season_id]
+                        # Gebruik .loc met de index uit de tuple, niet .iloc
+                        season = combined_seasons_df.loc[selected_season_id]
                         start_date = pd.to_datetime(season['startdatum'])
                         end_date = pd.to_datetime(season['einddatum'])
                         today_date = date.today()
