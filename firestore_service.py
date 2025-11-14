@@ -308,6 +308,16 @@ def delete_match_by_id(match_id):
         print(f"Fout bij verwijderen van wedstrijd {match_id}: {e}")
         return False
 
+def update_match(match_id, updated_match_data):
+    """Werkt een wedstrijd bij op basis van zijn ID."""
+    try:
+        matches_ref.document(match_id).update(updated_match_data)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Fout bij bijwerken van wedstrijd {match_id}: {e}")
+        return False
+
 def clear_collection(collection_name):
     """Verwijdert alle documenten uit een collectie."""
     try:

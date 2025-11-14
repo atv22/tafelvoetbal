@@ -81,32 +81,179 @@ else:
 st.markdown("""<hr>""", unsafe_allow_html=True)
 
 # --- Wedstrijd Verwijderen ---
-st.subheader("Wedstrijd Verwijderen")
+st.subheader("Wedstrijd Beheer")
 df_matches_delete = db.get_matches()
 if not df_matches_delete.empty:
-    # Maak een leesbare weergave voor de selectbox
-    df_matches_delete['display'] = df_matches_delete.apply(
-        lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'No Timestamp'} - {row.get('thuis_1', 'N/A')}/{row.get('thuis_2', 'N/A')} vs {row.get('uit_1', 'N/A')}/{row.get('uit_2', 'N/A')}: {row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
-        axis=1
-    )
-    match_display_list = df_matches_delete['display'].tolist()
-    match_id_map = {display: id for display, id in zip(match_display_list, df_matches_delete['match_id'].tolist())}
-
-    match_to_delete_display = st.selectbox("Selecteer een wedstrijd om te verwijderen", options=match_display_list)
+    # Maak tabs voor verschillende beheer functies
+    match_beheer_tab1, match_beheer_tab2 = st.tabs(["🗑️ Verwijderen", "✏️ Bewerken"])
     
-    if st.button(f"Verwijder geselecteerde wedstrijd permanent"):
-        match_id_to_delete = match_id_map.get(match_to_delete_display)
-        if match_id_to_delete:
+    with match_beheer_tab1:
+        st.write("**Wedstrijd(en) verwijderen**")
+        
+        # Maak een leesbare weergave voor de selectbox
+        df_matches_delete['display'] = df_matches_delete.apply(
+            lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'No Timestamp'} - {row.get('thuis_1', 'N/A')}/{row.get('thuis_2', 'N/A')} vs {row.get('uit_1', 'N/A')}/{row.get('uit_2', 'N/A')}: {row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
+            axis=1
+        )
+        
+        # Optie voor enkelvoudige verwijdering
+        st.write("**Enkele wedstrijd verwijderen:**")
+        match_to_delete_display = st.selectbox("Selecteer een wedstrijd om te verwijderen", 
+                                             options=df_matches_delete['display'].tolist(),
+                                             key="single_delete_beheer")
+        
+        if st.button("Verwijder geselecteerde wedstrijd", key="delete_single_beheer"):
+            match_idx = df_matches_delete[df_matches_delete['display'] == match_to_delete_display].index[0]
+            match_id = df_matches_delete.loc[match_idx, 'match_id']
+            
             with st.spinner("Wedstrijd wordt verwijderd..."):
-                if db.delete_match_by_id(match_id_to_delete):
+                if db.delete_match_by_id(match_id):
                     st.success("Wedstrijd succesvol verwijderd.")
                     st.rerun()
                 else:
                     st.error("Kon de wedstrijd niet verwijderen.")
+        
+        # Optie voor meerdere verwijderingen
+        st.write("**Meerdere wedstrijden verwijderen:**")
+        matches_to_delete = st.multiselect("Selecteer wedstrijden om te verwijderen",
+                                         options=df_matches_delete['display'].tolist(),
+                                         key="multi_delete_beheer")
+        
+        if matches_to_delete and st.button("Verwijder geselecteerde wedstrijden", key="delete_multi_beheer"):
+            with st.spinner(f"Bezig met verwijderen van {len(matches_to_delete)} wedstrijden..."):
+                success_count = 0
+                for match_display in matches_to_delete:
+                    match_idx = df_matches_delete[df_matches_delete['display'] == match_display].index[0]
+                    match_id = df_matches_delete.loc[match_idx, 'match_id']
+                    
+                    if db.delete_match_by_id(match_id):
+                        success_count += 1
+                
+                if success_count == len(matches_to_delete):
+                    st.success(f"Alle {success_count} wedstrijden succesvol verwijderd.")
+                else:
+                    st.warning(f"{success_count} van de {len(matches_to_delete)} wedstrijden verwijderd.")
+                st.rerun()
+    
+    with match_beheer_tab2:
+        st.write("**Wedstrijd bewerken**")
+        st.warning("⚠️ **Let op:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens in de database. ELO scores worden niet automatisch herberekend.")
+        
+        players_df = db.get_players()
+        if not players_df.empty:
+            player_names = sorted(players_df['speler_naam'].tolist())
+            
+            # Selecteer wedstrijd om te bewerken
+            match_to_edit = st.selectbox(
+                "Selecteer een wedstrijd om te bewerken",
+                options=df_matches_delete['display'].tolist(),
+                key="match_edit_select_beheer"
+            )
+            
+            if match_to_edit:
+                match_idx = df_matches_delete[df_matches_delete['display'] == match_to_edit].index[0]
+                match_data = df_matches_delete.loc[match_idx]
+                
+                st.write("**Huidige wedstrijd gegevens:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Thuis team:** {match_data.get('thuis_1')} & {match_data.get('thuis_2')}")
+                    st.write(f"**Thuis score:** {match_data.get('thuis_score')}")
+                    st.write(f"**Klinkers thuis:** {match_data.get('klinkers_thuis_1', 0)} & {match_data.get('klinkers_thuis_2', 0)}")
+                with col2:
+                    st.write(f"**Uit team:** {match_data.get('uit_1')} & {match_data.get('uit_2')}")
+                    st.write(f"**Uit score:** {match_data.get('uit_score')}")
+                    st.write(f"**Klinkers uit:** {match_data.get('klinkers_uit_1', 0)} & {match_data.get('klinkers_uit_2', 0)}")
+                
+                st.write("**Bewerk wedstrijd:**")
+                
+                with st.form("edit_match_form_beheer"):
+                    # Speler selecties
+                    edit_cols = st.columns(4)
+                    with edit_cols[0]:
+                        new_thuis_1 = st.selectbox("Thuis 1", player_names, 
+                                                 index=player_names.index(match_data.get('thuis_1')) if match_data.get('thuis_1') in player_names else 0,
+                                                 key="edit_thuis_1_beheer")
+                    with edit_cols[1]:
+                        new_thuis_2 = st.selectbox("Thuis 2", player_names,
+                                                 index=player_names.index(match_data.get('thuis_2')) if match_data.get('thuis_2') in player_names else 1,
+                                                 key="edit_thuis_2_beheer")
+                    with edit_cols[2]:
+                        new_uit_1 = st.selectbox("Uit 1", player_names,
+                                                index=player_names.index(match_data.get('uit_1')) if match_data.get('uit_1') in player_names else 2,
+                                                key="edit_uit_1_beheer")
+                    with edit_cols[3]:
+                        new_uit_2 = st.selectbox("Uit 2", player_names,
+                                                index=player_names.index(match_data.get('uit_2')) if match_data.get('uit_2') in player_names else 3,
+                                                key="edit_uit_2_beheer")
+                    
+                    # Scores
+                    score_cols = st.columns(2)
+                    with score_cols[0]:
+                        new_thuis_score = st.number_input("Thuis Score", min_value=0, max_value=10, 
+                                                        value=int(match_data.get('thuis_score', 0)), step=1,
+                                                        key="edit_thuis_score_beheer")
+                    with score_cols[1]:
+                        new_uit_score = st.number_input("Uit Score", min_value=0, max_value=10, 
+                                                       value=int(match_data.get('uit_score', 0)), step=1,
+                                                       key="edit_uit_score_beheer")
+                    
+                    # Klinkers
+                    klinker_cols = st.columns(4)
+                    with klinker_cols[0]:
+                        new_klinkers_thuis_1 = st.number_input("Klinkers Thuis 1", min_value=0, max_value=10, 
+                                                             value=int(match_data.get('klinkers_thuis_1', 0)), step=1,
+                                                             key="edit_klinkers_thuis_1_beheer")
+                    with klinker_cols[1]:
+                        new_klinkers_thuis_2 = st.number_input("Klinkers Thuis 2", min_value=0, max_value=10, 
+                                                             value=int(match_data.get('klinkers_thuis_2', 0)), step=1,
+                                                             key="edit_klinkers_thuis_2_beheer")
+                    with klinker_cols[2]:
+                        new_klinkers_uit_1 = st.number_input("Klinkers Uit 1", min_value=0, max_value=10, 
+                                                           value=int(match_data.get('klinkers_uit_1', 0)), step=1,
+                                                           key="edit_klinkers_uit_1_beheer")
+                    with klinker_cols[3]:
+                        new_klinkers_uit_2 = st.number_input("Klinkers Uit 2", min_value=0, max_value=10, 
+                                                           value=int(match_data.get('klinkers_uit_2', 0)), step=1,
+                                                           key="edit_klinkers_uit_2_beheer")
+                    
+                    if st.form_submit_button("Bewaar wijzigingen"):
+                        # Validaties
+                        if new_thuis_score == 10 and new_uit_score == 10:
+                            st.error('Beide scores kunnen niet 10 zijn.')
+                        elif new_thuis_score != 10 and new_uit_score != 10:
+                            st.error('Eén van de scores moet 10 zijn.')
+                        elif len(set([new_thuis_1, new_thuis_2, new_uit_1, new_uit_2])) < 4:
+                            st.error("Selecteer vier unieke spelers.")
+                        else:
+                            # Update wedstrijd in Firestore
+                            updated_match_data = {
+                                'thuis_1': new_thuis_1,
+                                'thuis_2': new_thuis_2,
+                                'uit_1': new_uit_1,
+                                'uit_2': new_uit_2,
+                                'thuis_score': new_thuis_score,
+                                'uit_score': new_uit_score,
+                                'klinkers_thuis_1': new_klinkers_thuis_1,
+                                'klinkers_thuis_2': new_klinkers_thuis_2,
+                                'klinkers_uit_1': new_klinkers_uit_1,
+                                'klinkers_uit_2': new_klinkers_uit_2,
+                                'timestamp': match_data.get('timestamp')  # Behoud originele timestamp
+                            }
+                            
+                            with st.spinner("Wedstrijd wordt bijgewerkt..."):
+                                success = db.update_match(match_data['match_id'], updated_match_data)
+                                
+                                if success:
+                                    st.success("Wedstrijd succesvol bijgewerkt!")
+                                    st.warning("⚠️ **Belangrijk:** Het bewerken van wedstrijden wijzigt alleen de wedstrijdgegevens. ELO scores van spelers worden niet automatisch herberekend. Dit kan leiden tot inconsistenties in de ratings.")
+                                    st.rerun()
+                                else:
+                                    st.error("Er is een fout opgetreden bij het bijwerken van de wedstrijd.")
         else:
-            st.error("Kon de wedstrijd ID niet vinden.")
+            st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
 else:
-    st.info("Geen wedstrijden om te verwijderen.")
+    st.info("Geen wedstrijden om te beheren.")
 
 st.markdown("""<hr>""", unsafe_allow_html=True)
 
