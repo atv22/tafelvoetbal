@@ -603,10 +603,27 @@ with tab4:
                             st.info(f"🏛️ **Prinsjesdag {season.get('jaar', 'N/A')}:** {prinsjesdag.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
                         
                         # Filter wedstrijden voor dit seizoen
-                        season_matches = matches_df[
-                            (pd.to_datetime(matches_df['datum']) >= start_date) & 
-                            (pd.to_datetime(matches_df['datum']) <= end_date)
-                        ]
+                        try:
+                            # Zorg voor consistente timezone handling
+                            match_dates = pd.to_datetime(matches_df['datum'])
+                            if match_dates.dt.tz is not None:
+                                match_dates = match_dates.dt.tz_localize(None)
+                            
+                            start_date_naive = pd.to_datetime(start_date)
+                            if start_date_naive.tz is not None:
+                                start_date_naive = start_date_naive.tz_localize(None)
+                            
+                            end_date_naive = pd.to_datetime(end_date) 
+                            if end_date_naive.tz is not None:
+                                end_date_naive = end_date_naive.tz_localize(None)
+                            
+                            season_matches = matches_df[
+                                (match_dates >= start_date_naive) & 
+                                (match_dates <= end_date_naive)
+                            ]
+                        except Exception as date_error:
+                            st.error(f"Datum vergelijkingsfout: {date_error}")
+                            season_matches = pd.DataFrame()
                         
                         if not season_matches.empty:
                             # Basis statistieken
@@ -617,12 +634,20 @@ with tab4:
                             
                             with col2:
                                 unique_players = set()
-                                unique_players.update(season_matches['thuisteam_naam'].unique())
-                                unique_players.update(season_matches['uitteam_naam'].unique())
+                                # Gebruik de correcte kolom namen van Firestore
+                                for _, match in season_matches.iterrows():
+                                    if pd.notna(match.get('thuis_1')):
+                                        unique_players.add(match['thuis_1'])
+                                    if pd.notna(match.get('thuis_2')):
+                                        unique_players.add(match['thuis_2'])
+                                    if pd.notna(match.get('uit_1')):
+                                        unique_players.add(match['uit_1'])
+                                    if pd.notna(match.get('uit_2')):
+                                        unique_players.add(match['uit_2'])
                                 st.metric("👥 Actieve Spelers", len(unique_players))
                             
                             with col3:
-                                total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
+                                total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
                                 st.metric("⚽ Totaal Doelpunten", int(total_goals))
                             
                             with col4:
@@ -634,56 +659,55 @@ with tab4:
                             # Seizoen ranking berekenen
                             st.subheader("🏆 Seizoen Ranking")
                             
-                            # ELO scores aan begin van seizoen ophalen
+                            # Speler statistieken berekenen
                             season_players_stats = {}
                             for player in unique_players:
                                 try:
-                                    # Filter wedstrijden voor deze speler in dit seizoen
-                                    player_matches = season_matches[
-                                        (season_matches['thuisteam_naam'] == player) | 
-                                        (season_matches['uitteam_naam'] == player)
-                                    ].sort_values('datum')
+                                    wins = 0
+                                    losses = 0
+                                    goals_for = 0
+                                    goals_against = 0
+                                    matches_played = 0
                                     
-                                    if not player_matches.empty:
-                                        wins = 0
-                                        losses = 0
-                                        goals_for = 0
-                                        goals_against = 0
+                                    for _, match in season_matches.iterrows():
+                                        player_is_home = match.get('thuis_1') == player or match.get('thuis_2') == player
+                                        player_is_away = match.get('uit_1') == player or match.get('uit_2') == player
                                         
-                                        for _, match in player_matches.iterrows():
-                                            if match['thuisteam_naam'] == player:
-                                                goals_for += match['thuisteam_score']
-                                                goals_against += match['uitteam_score']
-                                                if match['thuisteam_score'] > match['uitteam_score']:
-                                                    wins += 1
-                                                else:
-                                                    losses += 1
+                                        if player_is_home:
+                                            matches_played += 1
+                                            goals_for += int(match.get('thuis_score', 0))
+                                            goals_against += int(match.get('uit_score', 0))
+                                            if int(match.get('thuis_score', 0)) > int(match.get('uit_score', 0)):
+                                                wins += 1
                                             else:
-                                                goals_for += match['uitteam_score']
-                                                goals_against += match['thuisteam_score']
-                                                if match['uitteam_score'] > match['thuisteam_score']:
-                                                    wins += 1
-                                                else:
-                                                    losses += 1
-                                        
-                                        # Huidige ELO score
-                                        current_elo = 1000  # Default
-                                        if not players_df.empty:
-                                            player_row = players_df[players_df['speler_naam'] == player]
-                                            if not player_row.empty:
-                                                current_elo = player_row.iloc[0]['elo_score']
-                                        
-                                        season_players_stats[player] = {
-                                            'Speler': player,
-                                            'Wedstrijden': len(player_matches),
-                                            'Gewonnen': wins,
-                                            'Verloren': losses,
-                                            'Win %': round((wins / len(player_matches)) * 100, 1) if len(player_matches) > 0 else 0,
-                                            'Doelpunten Voor': int(goals_for),
-                                            'Doelpunten Tegen': int(goals_against),
-                                            'Doelsaldo': int(goals_for - goals_against),
-                                            'Huidige ELO': int(current_elo)
-                                        }
+                                                losses += 1
+                                        elif player_is_away:
+                                            matches_played += 1
+                                            goals_for += int(match.get('uit_score', 0))
+                                            goals_against += int(match.get('thuis_score', 0))
+                                            if int(match.get('uit_score', 0)) > int(match.get('thuis_score', 0)):
+                                                wins += 1
+                                            else:
+                                                losses += 1
+                                    
+                                    # Huidige ELO score
+                                    current_elo = 1000  # Default
+                                    if not players_df.empty:
+                                        player_row = players_df[players_df['speler_naam'] == player]
+                                        if not player_row.empty:
+                                            current_elo = player_row.iloc[0].get('rating', 1000)
+                                    
+                                    season_players_stats[player] = {
+                                        'Speler': player,
+                                        'Wedstrijden': matches_played,
+                                        'Gewonnen': wins,
+                                        'Verloren': losses,
+                                        'Win %': round((wins / matches_played) * 100, 1) if matches_played > 0 else 0,
+                                        'Doelpunten Voor': int(goals_for),
+                                        'Doelpunten Tegen': int(goals_against),
+                                        'Doelsaldo': int(goals_for - goals_against),
+                                        'Huidige ELO': int(current_elo)
+                                    }
                                 except Exception:
                                     continue
                             
