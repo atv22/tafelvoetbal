@@ -14,19 +14,21 @@ import season_utils  # Import hele module om functie parameters correct te kunne
 from tab_home import render_home_tab, calculate_stats
 from tab_input import render_input_tab
 from tab_players import render_players_tab
+from tab_requests import render_requests_tab
 
 setup_page()
 
 st.title("Tafelvoetbal Competitie ⚽")
 
 # --- Tab navigatie ---
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Home", 
     "📝 Invullen", 
     "👥 Spelers", 
     "📅 Seizoenen",
     "📊 Ruwe Data", 
     "⚙️ Beheer", 
+    "💬 Verzoeken",
     "ℹ️ Colofon"
 ])
 
@@ -1078,8 +1080,12 @@ from tab_admin import render_admin_tab
 with tab6:
     render_admin_tab(db, players_df, matches_df)
 
-# ===== TAB 7: COLOFON =====
+# ===== TAB 7: VERZOEKEN =====
 with tab7:
+    render_requests_tab()
+
+# ===== TAB 8: COLOFON =====
+with tab8:
     st.header("Colofon")
     
     st.markdown("""
