@@ -67,7 +67,7 @@ players_ref = db.collection('spelers')
 matches_ref = db.collection('uitslag')
 elo_ref = db.collection('elo')
 requests_ref = db.collection('requests')
-seasons_ref = db.collection('seizoenen')
+# seasons_ref = db.collection('seizoenen')  # Niet meer nodig - seizoenen worden automatisch bepaald
 
 
 # DATA LEESFUNCTIES
@@ -116,13 +116,17 @@ def get_matches():
     
     df = pd.DataFrame(matches)
     
+    # Voeg datum kolom toe op basis van timestamp (voor compatibiliteit met seizoen logic)
+    if not df.empty and 'timestamp' in df.columns:
+        df['datum'] = df['timestamp']
+    
     # Herorder kolommen in logische volgorde
     if not df.empty:
         desired_columns = [
             'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
             'thuis_score', 'uit_score',
             'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
-            'timestamp', 'match_id'
+            'datum', 'timestamp', 'match_id'
         ]
         # Alleen kolommen gebruiken die daadwerkelijk bestaan
         available_columns = [col for col in desired_columns if col in df.columns]
@@ -147,14 +151,8 @@ def get_elo_history(_ttl, speler_naam):
 
 @st.cache_data
 def get_seasons():
-    """Haalt alle seizoenen op."""
-    seasons_docs = seasons_ref.order_by("startdatum", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    seasons = []
-    for doc in seasons_docs:
-        season_data = doc.to_dict()
-        season_data['seizoen_id'] = doc.id
-        seasons.append(season_data)
-    return pd.DataFrame(seasons)
+    """Seizoenen worden nu automatisch bepaald door Prinsjesdag - geen aparte tabel meer nodig."""
+    return pd.DataFrame()  # Lege DataFrame
 
 @st.cache_data
 def get_requests():
@@ -165,31 +163,8 @@ def get_requests():
 
 # DATA SCHRIJFFUNCTIES
 def add_season(startdatum, einddatum):
-    """Voegt een nieuw seizoen toe."""
-    try:
-        # Haal het hoogste bestaande seizoen_id op
-        seasons_query = seasons_ref.order_by("seizoen_id", direction=google.cloud.firestore.Query.DESCENDING).limit(1)
-        last_season_docs = list(seasons_query.stream())
-        
-        new_id = 1
-        if last_season_docs:
-            last_season_data = last_season_docs[0].to_dict()
-            if last_season_data and 'seizoen_id' in last_season_data:
-                new_id = last_season_data['seizoen_id'] + 1
-
-        # Voeg het nieuwe seizoen toe met het correcte ID
-        new_season_ref = seasons_ref.document()
-        new_season_ref.set({
-            'seizoen_id': new_id,
-            'startdatum': startdatum,
-            'einddatum': einddatum
-        })
-        
-        st.cache_data.clear()
-        return "Success"
-    except Exception as e:
-        print(f"Fout bij toevoegen van seizoen: {e}")
-        return f"Error: {e}"
+    """Seizoenen worden nu automatisch bepaald door Prinsjesdag - handmatige toevoeging niet meer nodig."""
+    return "Success"  # Dummy return voor compatibiliteit
 
 
 def add_player(name, start_elo):
@@ -289,14 +264,8 @@ def delete_player_by_id(player_id):
         return False
 
 def delete_season_by_id(season_id):
-    """Verwijdert een seizoen op basis van zijn ID."""
-    try:
-        seasons_ref.document(season_id).delete()
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        print(f"Fout bij verwijderen van seizoen {season_id}: {e}")
-        return False
+    """Seizoenen worden nu automatisch bepaald door Prinsjesdag - handmatige verwijdering niet meer nodig."""
+    return True  # Dummy return voor compatibiliteit
 
 def delete_match_by_id(match_id):
     """Verwijdert een wedstrijd op basis van zijn ID."""
@@ -751,33 +720,6 @@ def import_matches(matches_data):
 
 def import_seasons(seasons_data):
     """
-    Importeert seizoenen uit een lijst van dictionaries.
-    Controleert op duplicaten op basis van start- en einddatum.
+    Seizoenen worden nu automatisch bepaald door Prinsjesdag - import niet meer nodig.
     """
-    added_count = 0
-    duplicate_count = 0
-    
-    existing_seasons_docs = seasons_ref.stream()
-    existing_seasons = set()
-    for doc in existing_seasons_docs:
-        d = doc.to_dict()
-        # Converteer Firestore timestamps naar vergelijkbare objecten
-        start = pd.to_datetime(d.get('startdatum')).strftime('%Y-%m-%d')
-        eind = pd.to_datetime(d.get('einddatum')).strftime('%Y-%m-%d')
-        existing_seasons.add((start, eind))
-
-    for season in seasons_data:
-        start_str = pd.to_datetime(season.get('startdatum')).strftime('%Y-%m-%d')
-        eind_str = pd.to_datetime(season.get('einddatum')).strftime('%Y-%m-%d')
-
-        if (start_str, eind_str) in existing_seasons:
-            duplicate_count += 1
-        else:
-            # Gebruik de bestaande add_season functie
-            result = add_season(pd.to_datetime(season.get('startdatum')), pd.to_datetime(season.get('einddatum')))
-            if result == "Success":
-                added_count += 1
-                existing_seasons.add((start_str, eind_str))
-
-    st.cache_data.clear()
-    return added_count, duplicate_count
+    return 0, 0  # Geen toegevoegd, geen duplicaten

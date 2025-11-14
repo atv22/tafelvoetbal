@@ -271,7 +271,9 @@ with tab4:
                     min_year = min(2020, match_dates.min().year - 1)
                     max_year = max(2030, match_dates.max().year + 1)
                 except Exception as date_error:
-                    st.warning(f"Probleem met datum conversie: {date_error}")
+                    # Alleen waarschuwen bij daadwerkelijke data problemen
+                    if not matches_df.empty:
+                        st.warning(f"Probleem met datum conversie: {date_error}")
                     # Fallback naar default bereik
                     min_year = 2020
                     max_year = 2030
@@ -301,17 +303,19 @@ with tab4:
                         'jaar': year
                     })
                 except Exception as e:
-                    # Log specifieke fout voor debugging maar ga verder
-                    st.warning(f"⚠️ Fout bij jaar {year}: {str(e)} (type: {type(e).__name__})")
+                    # Log specifieke fout alleen als er wedstrijddata is - anders te veel noise
+                    if not matches_df.empty:
+                        st.warning(f"⚠️ Fout bij jaar {year}: {str(e)} (type: {type(e).__name__})")
                     continue
             
             return pd.DataFrame(prinsjesdag_seasons)
         
         except Exception as e:
-            st.error(f"Algemene fout bij genereren Prinsjesdag seizoenen: {str(e)}")
-            # Debug info voor troubleshooting
-            st.write(f"🔍 Debug info - Error type: {type(e).__name__}")
+            # Toon alleen error bij daadwerkelijk probleem met beschikbare data
             if not matches_df.empty:
+                st.error(f"Algemene fout bij genereren Prinsjesdag seizoenen: {str(e)}")
+                # Debug info voor troubleshooting
+                st.write(f"🔍 Debug info - Error type: {type(e).__name__}")
                 st.write(f"📊 Matches data shape: {matches_df.shape}")
                 st.write(f"📅 Datum column type: {matches_df['datum'].dtype}")
                 st.write(f"📋 Sample datum values: {matches_df['datum'].head()}")
@@ -362,7 +366,8 @@ with tab4:
                         (match_dates <= prinsjesdag)
                     ]
                 except Exception as date_error:
-                    st.warning(f"Probleem bij seizoen {year} datum vergelijking: {date_error}")
+                    if not matches_df.empty:
+                        st.warning(f"Probleem bij seizoen {year} datum vergelijking: {date_error}")
                     season_matches = pd.DataFrame()
             
             prinsjesdag_info.append({
@@ -404,7 +409,8 @@ with tab4:
                     (match_dates <= season['einddatum'])
                 ]
             except Exception as viz_error:
-                st.warning(f"Visualisatie fout voor seizoen {season['seizoen_naam']}: {viz_error}")
+                if not matches_df.empty:
+                    st.warning(f"Visualisatie fout voor seizoen {season['seizoen_naam']}: {viz_error}")
                 season_matches = pd.DataFrame()
             
             timeline_data.append({
