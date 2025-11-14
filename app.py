@@ -140,9 +140,8 @@ with tab4:
     🏛️ **Prinsjesdag Seizoen Systeem**
     
     Dit systeem gebruikt **Prinsjesdag** (derde dinsdag van september) als seizoensgrens:
-    - **Seizoen loopt:** van Prinsjesdag vorig jaar tot Prinsjesdag dit jaar (24:00)
+    - **Seizoen loopt:** van Prinsjesdag 24:00 tot de volgende Prinsjesdag 24:00
     - **Automatisch berekend:** voor alle jaren met wedstrijddata
-    - **Traditioneel Nederlands:** gebaseerd op de opening van het parlementaire jaar
     """)
     
     # Genereer Prinsjesdag seizoenen
@@ -151,7 +150,7 @@ with tab4:
     # Combineer database seizoenen met Prinsjesdag seizoenen
     if not prinsjesdag_seasons_df.empty:
         combined_seasons_df = prinsjesdag_seasons_df
-        st.success(f"✅ {len(combined_seasons_df)} Prinsjesdag seizoenen automatisch gegenereerd met wedstrijddata")
+        # Removed user-facing success message per request; silently proceed.
     else:
         combined_seasons_df = pd.DataFrame()
         if matches_df.empty:
