@@ -345,7 +345,8 @@ with tab4:
                     if "⭐ Huidig: " in selected_season_display:
                         original_selected_name = selected_season_display.replace("⭐ Huidig: ", "")
                     elif "🕰️ Meest Recent: " in selected_season_display:
-                        original_selected_name = selected_seizoen_display.replace("🕰️ Meest Recent: ", "")
+                        # Typo fix: selected_seizoen_display -> selected_season_display
+                        original_selected_name = selected_season_display.replace("🕰️ Meest Recent: ", "")
 
                     # Zoek de ID die bij de originele naam hoort
                     selected_season_id = next((option[1] for option in season_options if option[0] == original_selected_name), "all")
@@ -674,26 +675,34 @@ with tab4:
                     try:
                         # Gebruik .loc met de index uit de tuple, niet .iloc
                         season = combined_seasons_df.loc[selected_season_id]
-                        start_date = pd.to_datetime(season['startdatum'])
-                        end_date = pd.to_datetime(season['einddatum'])
+                        # Helper om Firestore Timestamp / string / datetime robuust naar python datetime te converteren
+                        def _to_datetime(v):
+                            try:
+                                if hasattr(v, 'to_datetime'):
+                                    v = v.to_datetime()
+                                return pd.to_datetime(v).to_pydatetime()
+                            except Exception:
+                                return pd.to_datetime(str(v)).to_pydatetime()
+
+                        start_dt = _to_datetime(season['startdatum'])
+                        end_dt = _to_datetime(season['einddatum'])
                         today_date = date.today()
-                        is_current = start_date.date() <= today_date <= end_date.date()
-                        # Gebruik voor analyse: truncate end datum naar vandaag indien huidig seizoen
-                        analysis_end = pd.to_datetime(today_date) if is_current else end_date
+                        is_current = (start_dt.date() <= today_date <= end_dt.date())
+                        analysis_end = datetime.combine(today_date, datetime.min.time()) if is_current else end_dt
                         
                         # Seizoen header met Prinsjesdag info
-                        seizoen_naam = season.get('seizoen_naam', f"Seizoen {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                        seizoen_naam = season.get('seizoen_naam', f"Seizoen {start_dt.strftime('%Y-%m-%d')} tot {end_dt.strftime('%Y-%m-%d')}")
                         st.subheader(f"📈 {seizoen_naam}")
                         # Toon gebruikte periode voor deze analyse
                         if is_current:
-                            st.caption(f"🔍 Analyse periode: {start_date.strftime('%d-%m-%Y')} t/m {today_date.strftime('%d-%m-%Y')} (tot vandaag)")
+                            st.caption(f"🔍 Analyse periode: {start_dt.strftime('%d-%m-%Y')} t/m {today_date.strftime('%d-%m-%Y')} (tot vandaag)")
                         else:
-                            st.caption(f"🔍 Analyse periode: {start_date.strftime('%d-%m-%Y')} t/m {end_date.strftime('%d-%m-%Y')}")
+                            st.caption(f"🔍 Analyse periode: {start_dt.strftime('%d-%m-%Y')} t/m {end_dt.strftime('%d-%m-%Y')}")
                         
                         # Prinsjesdag info
                         if 'prinsjesdag' in season:
-                            prinsjesdag = pd.to_datetime(season['prinsjesdag'])
-                            st.info(f"🏛️ **Prinsjesdag {season.get('jaar', 'N/A')}:** {prinsjesdag.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
+                            prinsjesdag_dt = _to_datetime(season['prinsjesdag'])
+                            st.info(f"🏛️ **Prinsjesdag {season.get('jaar', 'N/A')}:** {prinsjesdag_dt.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
                         
                         # Filter wedstrijden voor dit seizoen
                         try:
@@ -702,18 +711,14 @@ with tab4:
                             if match_dates.dt.tz is not None:
                                 match_dates = match_dates.dt.tz_localize(None)
                             
-                            start_date_naive = pd.to_datetime(start_date)
-                            if start_date_naive.tz is not None:
-                                start_date_naive = start_date_naive.tz_localize(None)
-                            
-                            end_date_naive = pd.to_datetime(end_date) 
-                            if end_date_naive.tz is not None:
-                                end_date_naive = end_date_naive.tz_localize(None)
+                            # Gebruik directe timestamps (tz lokaal maken indien nodig)
+                            start_date_naive = pd.to_datetime(start_dt)
+                            end_date_naive = pd.to_datetime(end_dt)
                             
                             # Gebruik analysis_end voor huidige seizoen
                             season_matches = matches_df[
                                 (match_dates >= start_date_naive) & 
-                                (match_dates <= (analysis_end if analysis_end.tz is None else analysis_end.tz_localize(None)))
+                                (match_dates <= pd.to_datetime(analysis_end))
                             ]
                         except Exception as date_error:
                             st.error(f"Datum vergelijkingsfout: {date_error}")
