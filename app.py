@@ -287,7 +287,7 @@ with tab5:
         
         if not matches_df.empty:
             # Maak tabs voor verschillende beheer functies
-            beheer_tab1, beheer_tab2, beheer_tab3 = st.tabs(["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload"])
+            beheer_tab1, beheer_tab2, beheer_tab3, beheer_tab4 = st.tabs(["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload", "⚙️ Systeem Beheer"])
             
             with beheer_tab1:
                 st.write("**Wedstrijd(en) verwijderen**")
@@ -516,7 +516,7 @@ with tab5:
             
             with beheer_tab3:
                 st.write("**Historische Data Upload**")
-                st.info("📋 Upload historische wedstrijdgegevens en spelergegevens via CSV bestanden. Dit is handig voor het importeren van oude data.")
+                st.info("📋 Upload historische wedstrijdgegevens en spelergegevens via CSV bestanden.")
                 
                 # Sub-tabs voor verschillende soorten data
                 upload_subtab1, upload_subtab2, upload_subtab3 = st.tabs(["🏆 Wedstrijden", "👥 Spelers", "📅 Seizoenen"])
@@ -527,32 +527,43 @@ with tab5:
                     st.markdown("""
                     **📋 Vereist CSV formaat voor wedstrijden:**
                     
-                    | Kolom | Type | Verplicht | Beschrijving | Voorbeeld |
-                    |-------|------|-----------|--------------|-----------|
-                    | `thuis_1` | tekst | ✅ | Naam eerste thuisspeler | "Jan" |
-                    | `thuis_2` | tekst | ✅ | Naam tweede thuisspeler | "Piet" |
-                    | `uit_1` | tekst | ✅ | Naam eerste uitspeler | "Marie" |
-                    | `uit_2` | tekst | ✅ | Naam tweede uitspeler | "Klaas" |
-                    | `thuis_score` | getal | ✅ | Score thuisteam (0-10) | 10 |
-                    | `uit_score` | getal | ✅ | Score uitteam (0-10) | 7 |
-                    | `klinkers_thuis_1` | getal | ❌ | Klinkers speler 1 thuis | 2 |
-                    | `klinkers_thuis_2` | getal | ❌ | Klinkers speler 2 thuis | 0 |
-                    | `klinkers_uit_1` | getal | ❌ | Klinkers speler 1 uit | 1 |
-                    | `klinkers_uit_2` | getal | ❌ | Klinkers speler 2 uit | 3 |
-                    | `timestamp` | datum/tijd | ❌ | Wanneer gespeeld (YYYY-MM-DD HH:MM:SS) | "2023-10-27 14:30:00" |
+                    **⚠️ BELANGRIJK: Kolom volgorde moet exact overeenkomen met onderstaande tabel voor compatibiliteit met de Firestore database.**
                     
-                    **📝 CSV Voorbeeld:**
+                    | Kolom # | Kolom Naam | Type | Verplicht | Beschrijving | Voorbeeld |
+                    |---------|------------|------|-----------|--------------|-----------|
+                    | 1 | `thuis_1` | tekst | ✅ | Naam eerste thuisspeler | "Afwasborstel" |
+                    | 2 | `thuis_2` | tekst | ✅ | Naam tweede thuisspeler | "Julius Ceasar" |
+                    | 3 | `uit_1` | tekst | ✅ | Naam eerste uitspeler | "Repelsteeltje" |
+                    | 4 | `uit_2` | tekst | ✅ | Naam tweede uitspeler | "Chairman Xi" |
+                    | 5 | `thuis_score` | getal | ✅ | Score thuisteam (0-10) | 10 |
+                    | 6 | `uit_score` | getal | ✅ | Score uitteam (0-10) | 7 |
+                    | 7 | `klinkers_thuis_1` | getal | ❌ | Klinkers speler 1 thuis | 2 |
+                    | 8 | `klinkers_thuis_2` | getal | ❌ | Klinkers speler 2 thuis | 0 |
+                    | 9 | `klinkers_uit_1` | getal | ❌ | Klinkers speler 1 uit | 1 |
+                    | 10 | `klinkers_uit_2` | getal | ❌ | Klinkers speler 2 uit | 3 |
+                    | 11 | `timestamp` | datum/tijd | ❌ | Wedstrijdtijdstip | Zie timestamp info ⬇️ |
+                    
+                    **📅 Timestamp Informatie:**
+                    - **Database formaat:** `YYYY-MM-DD HH:MM:SS.ffffff+TZ` (bijv. `2025-10-28 15:42:27.614000+00:00`)
+                    - **Geaccepteerde formaten:**
+                      - Volledig: `2025-10-28 15:42:27.614000+00:00`
+                      - Eenvoudig: `2025-10-28 15:42:27`
+                      - Alleen datum: `2025-10-28` *(tijd wordt automatisch 12:00:00 UTC)*
+                    - **Indien leeg:** Huidige uploadtijd wordt gebruikt
+                    
+                    **📝 Correct CSV Voorbeeld:**
                     ```csv
                     thuis_1,thuis_2,uit_1,uit_2,thuis_score,uit_score,klinkers_thuis_1,klinkers_thuis_2,klinkers_uit_1,klinkers_uit_2,timestamp
-                    Jan,Piet,Marie,Klaas,10,7,2,0,1,3,2023-10-27 14:30:00
-                    Arthur,Rick,Lisa,Tom,8,10,1,2,4,0,2023-10-27 15:15:00
+                    Afwasborstel,Julius Ceasar,Repelsteeltje,Chairman Xi,10,7,2,0,1,3,2025-10-28 15:42:27
+                    Arthur,Rick,Lisa,Tom,8,10,1,2,4,0,2025-10-28
+                    Sophie,Max,Nina,Paul,10,6,0,1,2,0,
                     ```
                     
                     **⚠️ Belangrijke opmerkingen:**
-                    - Alle spelers moeten al bestaan in de database (voeg ze eerst toe via de Spelers tab)
+                    - Alle spelers moeten al bestaan in de database (voeg ze eerst toe via de Spelers upload)
                     - Scores moeten geldig zijn (één team moet 10 hebben, ander team 0-9)
-                    - Timestamp is optioneel - indien niet opgegeven wordt de upload tijd gebruikt
-                    - Klinkers zijn optioneel en standaard 0
+                    - Klinkers zijn optioneel en standaard 0 indien niet opgegeven
+                    - Kolom volgorde is cruciaal voor database compatibiliteit
                     """)
                     
                     uploaded_matches = st.file_uploader(
@@ -582,10 +593,34 @@ with tab5:
                                     if col not in matches_upload_df.columns:
                                         matches_upload_df[col] = 0
                                 
-                                # Timestamp validatie
+                                # Timestamp verwerking
                                 if 'timestamp' not in matches_upload_df.columns:
                                     st.info("📅 Geen timestamp kolom gevonden - huidige tijd wordt gebruikt")
                                     matches_upload_df['timestamp'] = pd.Timestamp.now()
+                                else:
+                                    # Timestamp verwerking met ondersteuning voor verschillende formaten
+                                    for idx in range(len(matches_upload_df)):
+                                        timestamp_val = matches_upload_df.iloc[idx]['timestamp']
+                                        if pd.isna(timestamp_val) or timestamp_val == '':
+                                            # Leeg - gebruik huidige tijd
+                                            matches_upload_df.loc[idx, 'timestamp'] = pd.Timestamp.now()
+                                        else:
+                                            try:
+                                                # Probeer verschillende formaten te parsen
+                                                timestamp_str = str(timestamp_val).strip()
+                                                
+                                                # Check voor alleen datum (YYYY-MM-DD)
+                                                if len(timestamp_str) == 10 and timestamp_str.count('-') == 2:
+                                                    # Alleen datum - voeg standaard tijd toe
+                                                    parsed_ts = pd.to_datetime(timestamp_str + ' 12:00:00')
+                                                else:
+                                                    # Volledige timestamp
+                                                    parsed_ts = pd.to_datetime(timestamp_str)
+                                                
+                                                matches_upload_df.loc[idx, 'timestamp'] = parsed_ts
+                                            except Exception as e:
+                                                st.warning(f"⚠️ Ongeldige timestamp op rij {idx + 1}: '{timestamp_val}' - huidige tijd wordt gebruikt")
+                                                matches_upload_df.loc[idx, 'timestamp'] = pd.Timestamp.now()
                                 
                                 # Data validatie
                                 validation_errors = []
@@ -662,15 +697,15 @@ with tab5:
                     
                     | Kolom | Type | Verplicht | Beschrijving | Voorbeeld |
                     |-------|------|-----------|--------------|-----------|
-                    | `speler_naam` | tekst | ✅ | Naam van de speler | "Jan" |
+                    | `speler_naam` | tekst | ✅ | Naam van de speler | "Afwasborstel" |
                     | `rating` | getal | ❌ | Start ELO rating (standaard 1000) | 1050 |
                     
                     **📝 CSV Voorbeeld:**
                     ```csv
                     speler_naam,rating
-                    Jan,1050
-                    Piet,980
-                    Marie,1200
+                    Afwasborstel,1050
+                    Julius Ceasar,980
+                    Repelsteeltje,1200
                     ```
                     
                     **⚠️ Opmerkingen:**
@@ -836,6 +871,95 @@ with tab5:
                         
                         except Exception as e:
                             st.error(f"❌ Fout bij het verwerken van het CSV bestand: {e}")
+
+            with beheer_tab4:
+                st.header("⚙️ Systeem Beheer")
+                
+                # --- ELO Beheer ---
+                st.subheader("ELO Rating Beheer")
+                
+                st.write("**Complete ELO Reset & Herberekening**")
+                st.info("💡 Dit reset alle ELO scores naar 1000 en herberekent ze opnieuw op basis van alle wedstrijden in chronologische volgorde.")
+                
+                if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
+                    with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
+                        success = db.reset_all_elos()
+                        if success:
+                            st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
+                            st.balloons()
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Er is een fout opgetreden bij het resetten van de ELO scores.")
+
+                st.markdown("""<hr>""", unsafe_allow_html=True)
+
+                # --- Speler Verwijderen ---
+                st.subheader("Speler Verwijderen")
+
+                if not players_df.empty:
+                    player_names = players_df['speler_naam'].tolist()
+                    player_ids = players_df['speler_id'].tolist()
+                    player_map = {name: id for name, id in zip(player_names, player_ids)}
+
+                    player_to_delete = st.selectbox("Selecteer een speler om te verwijderen", options=sorted(player_names))
+                    
+                    if st.button(f"Verwijder {player_to_delete} Permanent"):
+                        player_id_to_delete = player_map.get(player_to_delete)
+                        if player_id_to_delete:
+                            with st.spinner(f"Bezig met verwijderen van {player_to_delete}..."):
+                                if db.delete_player_by_id(player_id_to_delete):
+                                    st.success(f"{player_to_delete} en alle bijbehorende data is verwijderd.")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Kon {player_to_delete} niet verwijderen.")
+                        else:
+                            st.error("Kon de speler ID niet vinden.")
+                else:
+                    st.info("Geen spelers om te beheren.")
+
+                st.markdown("""<hr>""", unsafe_allow_html=True)
+
+                # --- Seizoen Verwijderen ---
+                st.subheader("Seizoen Verwijderen")
+                
+                seasons_df = db.get_seasons()
+                if not seasons_df.empty:
+                    season_options = []
+                    for _, season in seasons_df.iterrows():
+                        season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
+                        season_options.append((season_str, season.name))
+                    
+                    if season_options:
+                        season_names = [opt[0] for opt in season_options]
+                        selected_season = st.selectbox("Selecteer een seizoen om te verwijderen", options=season_names)
+                        
+                        if st.button(f"Verwijder seizoen: {selected_season}"):
+                            season_index = next(opt[1] for opt in season_options if opt[0] == selected_season)
+                            season_doc_id = seasons_df.iloc[season_index].name
+                            
+                            with st.spinner(f"Bezig met verwijderen van seizoen..."):
+                                if db.delete_season_by_id(season_doc_id):
+                                    st.success(f"Seizoen {selected_season} is verwijderd.")
+                                    st.rerun()
+                                else:
+                                    st.error("Kon het seizoen niet verwijderen.")
+                else:
+                    st.info("Geen seizoenen om te beheren.")
+
+                st.markdown("""<hr>""", unsafe_allow_html=True)
+
+                # --- Overige Entries ---
+                st.subheader("Overige Database Cleanup")
+
+                if st.button("🗑️ Verwijder alle 'Requests'", type="secondary"):
+                    with st.spinner("Alle requests worden verwijderd..."):
+                        if db.clear_collection('requests'):
+                            st.success("Alle requests zijn succesvol verwijderd.")
+                            st.rerun()
+                        else:
+                            st.error("Kon de requests niet verwijderen.")
+                    
         else:
             st.info("Geen wedstrijden om te beheren.")
             
@@ -853,94 +977,6 @@ with tab5:
                 
             with upload_tabs[2]:
                 st.write("**Upload seizoengegevens voor betere organisatie.**")
-
-        st.markdown("""<hr>""", unsafe_allow_html=True)
-
-        # --- ELO Beheer ---
-        st.subheader("ELO Rating Beheer")
-        
-        st.write("**Complete ELO Reset & Herberekening**")
-        st.info("💡 Dit reset alle ELO scores naar 1000 en herberekent ze opnieuw op basis van alle wedstrijden in chronologische volgorde.")
-        
-        if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
-            with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
-                success = db.reset_all_elos()
-                if success:
-                    st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
-                    st.balloons()
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.error("❌ Er is een fout opgetreden bij het resetten van de ELO scores.")
-
-        st.markdown("""<hr>""", unsafe_allow_html=True)
-
-        # --- Speler Verwijderen ---
-        st.subheader("Speler Verwijderen")
-
-        if not players_df.empty:
-            player_names = players_df['speler_naam'].tolist()
-            player_ids = players_df['speler_id'].tolist()
-            player_map = {name: id for name, id in zip(player_names, player_ids)}
-
-            player_to_delete = st.selectbox("Selecteer een speler om te verwijderen", options=sorted(player_names))
-            
-            if st.button(f"Verwijder {player_to_delete} Permanent"):
-                player_id_to_delete = player_map.get(player_to_delete)
-                if player_id_to_delete:
-                    with st.spinner(f"Bezig met verwijderen van {player_to_delete}..."):
-                        if db.delete_player_by_id(player_id_to_delete):
-                            st.success(f"{player_to_delete} en alle bijbehorende data is verwijderd.")
-                            st.rerun()
-                        else:
-                            st.error(f"Kon {player_to_delete} niet verwijderen.")
-                else:
-                    st.error("Kon de speler ID niet vinden.")
-        else:
-            st.info("Geen spelers om te beheren.")
-
-        st.markdown("""<hr>""", unsafe_allow_html=True)
-
-        # --- Seizoen Verwijderen ---
-        st.subheader("Seizoen Verwijderen")
-        df_seizoenen_delete = db.get_seasons()
-        if not df_seizoenen_delete.empty:
-            # Maak een leesbare weergave voor de selectbox
-            df_seizoenen_delete['display'] = df_seizoenen_delete.apply(
-                lambda row: f"Seizoen {row.get('seizoen_id', 'N/A')}: {pd.to_datetime(row['startdatum']).strftime('%d-%m-%Y')} - {pd.to_datetime(row['einddatum']).strftime('%d-%m-%Y')}",
-                axis=1
-            )
-            season_display_list = df_seizoenen_delete['display'].tolist()
-            season_id_map = {display: id for display, id in zip(season_display_list, df_seizoenen_delete['seizoen_id'].tolist())}
-
-            season_to_delete_display = st.selectbox("Selecteer een seizoen om te verwijderen", options=season_display_list)
-            
-            if st.button(f"Verwijder geselecteerd seizoen permanent"):
-                season_id_to_delete = season_id_map.get(season_to_delete_display)
-                if season_id_to_delete:
-                    with st.spinner("Seizoen wordt verwijderd..."):
-                        if db.delete_season_by_id(season_id_to_delete):
-                            st.success("Seizoen succesvol verwijderd.")
-                            st.rerun()
-                        else:
-                            st.error("Kon het seizoen niet verwijderen.")
-                else:
-                    st.error("Kon het seizoen ID niet vinden.")
-        else:
-            st.info("Geen seizoenen om te verwijderen.")
-
-        st.markdown("""<hr>""", unsafe_allow_html=True)
-
-        # --- Overige entries ---
-        st.subheader("Overige Entries Verwijderen")
-
-        if st.button("Verwijder alle 'Requests'"):
-            with st.spinner("Alle requests worden verwijderd..."):
-                if db.clear_collection('requests'):
-                    st.success("Alle requests zijn succesvol verwijderd.")
-                    st.rerun()
-                else:
-                    st.error("Kon de requests niet verwijderen.")
 
 # ===== TAB 6: COLOFON =====
 with tab6:
