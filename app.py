@@ -998,7 +998,7 @@ with tab6:
     **Technische Details:**
     - 🐍 **Python** met Streamlit framework
     - 🔥 **Firestore** database voor data opslag
-    - 🤖 **AI-assistentie** van ChatGPT voor ontwikkeling
+    - 🤖 **AI-assistentie** van ChatGPT, Gemini, Copilot en Perplexity voor ontwikkeling
     - 📊 **ELO rating systeem** voor speler rankings
     - 📁 **CSV import/export** functionaliteit
     
@@ -1014,4 +1014,4 @@ with tab6:
     """)
     
     # Voeg wat extra styling toe
-    st.balloons() if st.button("🎉 Vier het teamwork!") else None
+    st.balloons() if st.button("🎉") else None

@@ -5,6 +5,7 @@ Een moderne webapplicatie voor het beheren van tafelvoetbal competities, ontwikk
 ## 👥 Team
 
 Ontwikkeld door:
+
 - **Rick**
 - **Bernd**
 - **Dewi**
@@ -15,18 +16,21 @@ Ontwikkeld door:
 ## 🚀 Features
 
 ### Wedstrijd Beheer
+
 - ✅ Wedstrijden invoeren en bewerken
 - ✅ Real-time score updates
 - ✅ Wedstrijden verwijderen (individueel of bulk)
 - ✅ Automatische timestamp registratie
 
 ### ELO Rating Systeem
+
 - 📊 Automatische ELO score berekening (K-factor 32)
 - 🔄 ELO herberekening na wijzigingen
 - 📈 Real-time rankings
 - 🎯 Team-gebaseerde ELO updates
 
 ### Data Beheer
+
 - 📁 CSV import voor historische data
 - 👥 Speler beheer en registratie
 - 📅 Seizoen organisatie
@@ -34,6 +38,7 @@ Ontwikkeld door:
 - ⚙️ Database maintenance tools
 
 ### User Interface
+
 - 📱 Responsive Streamlit interface
 - 🎨 Georganiseerde tab structuur
 - 📊 Interactieve dataframes
@@ -52,21 +57,25 @@ Ontwikkeld door:
 ### Lokale Ontwikkeling
 
 1. **Clone de repository:**
+
 ```bash
 git clone https://github.com/atv22/tafelvoetbal.git
 cd tafelvoetbal
 ```
 
-2. **Installeer dependencies:**
+**Installeer dependencies:**
+
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Firestore configuratie:**
-   - Plaats je `firestore-key.json` in de project root
-   - Dit bestand staat in `.gitignore` voor security
+**Firestore configuratie:**
 
-4. **Start de applicatie:**
+- Plaats je `firestore-key.json` in de project root
+- Dit bestand staat in `.gitignore` voor security
+
+**Start de applicatie:**
+
 ```bash
 streamlit run app.py
 ```
@@ -98,22 +107,25 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/jouw-s
 
 ## 📊 Database Schema
 
-### Collections:
+### Collections
+
 - **players:** Speler informatie en ELO scores
 - **matches:** Wedstrijd resultaten en timestamps  
 - **seasons:** Seizoen definities
 - **elo_history:** ELO score historie
 - **requests:** Tijdelijke data opslag
 
-### CSV Import Formaten:
+### CSV Import Formaten
 
 **Wedstrijden:**
+
 ```csv
 datum,thuisteam_id,thuisteam_naam,uitteam_id,uitteam_naam,thuisteam_score,uitteam_score,timestamp
 2025-01-15,1,Rick,2,Arthur,3,2,2025-01-15 14:30:00
 ```
 
 **Spelers:**
+
 ```csv
 speler_id,speler_naam,elo_score
 1,Rick,1050
@@ -123,22 +135,27 @@ speler_id,speler_naam,elo_score
 ## 🎯 Gebruik
 
 ### 1. **Home Tab**
+
 - Overzicht van recente wedstrijden
 - Quick stats en rankings
 
 ### 2. **Invullen Tab**
+
 - Nieuwe wedstrijden registreren
 - Speler selectie en score invoer
 
 ### 3. **Spelers Tab**
+
 - ELO rankings bekijken
 - Speler statistieken
 
 ### 4. **Ruwe Data Tab**
+
 - Alle wedstrijden in tabelvorm
 - Exporteer mogelijkheden
 
 ### 5. **Beheer Tab**
+
 - **Verwijderen:** Wedstrijden/spelers verwijderen
 - **Bewerken:** Wedstrijden aanpassen
 - **Data Upload:** CSV imports
