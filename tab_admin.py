@@ -601,6 +601,59 @@ def _render_system_management(db, players_df: pd.DataFrame):
             else:
                 st.error("Kon de requests niet verwijderen.")
 
+    # Database Inspectie & Schema Vergelijking
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🔎 Database Inspectie & Schema")
+    st.caption("Bekijk welke collecties en velden in Firestore aanwezig zijn en vergelijk met wat de app verwacht.")
+
+    if st.button("Analyseer Firestore schema"):
+        with st.spinner("Firestore wordt geïnspecteerd..."):
+            try:
+                expected = db.expected_schema()
+                actual = db.inspect_collections(max_docs=250)
+
+                for coll in ["spelers", "uitslag", "elo", "requests"]:
+                    st.markdown(f"**Collectie: `{coll}`**")
+                    exp = expected.get(coll, {})
+                    act = actual.get(coll, {"fields": [], "sample_size": 0, "examples": []})
+
+                    exp_required = exp.get("required", set())
+                    exp_optional = exp.get("optional", set())
+                    exp_derived = exp.get("derived_only_in_app", set())
+                    act_fields = set(act.get("fields", []))
+
+                    missing = sorted(list((exp_required | exp_optional) - act_fields))
+                    unexpected = sorted(list(act_fields - (exp_required | exp_optional)))
+
+                    colA, colB, colC = st.columns(3)
+                    with colA:
+                        st.write("Verwacht (required):")
+                        st.code(", ".join(sorted(list(exp_required))) or "—")
+                    with colB:
+                        st.write("Verwacht (optioneel):")
+                        st.code(", ".join(sorted(list(exp_optional))) or "—")
+                    with colC:
+                        st.write("Alleen in app (afgeleid):")
+                        st.code(", ".join(sorted(list(exp_derived))) or "—")
+
+                    st.write("Aangetroffen velden (sample):")
+                    st.code(", ".join(sorted(list(act_fields))) or "—")
+
+                    info_cols = st.columns(2)
+                    with info_cols[0]:
+                        st.write("Ontbrekend t.o.v. verwachting:")
+                        st.code(", ".join(missing) or "—")
+                    with info_cols[1]:
+                        st.write("Onverwacht (bestaat niet in app):")
+                        st.code(", ".join(unexpected) or "—")
+
+                    if act.get("examples"):
+                        st.write("Voorbeelden (max 5):")
+                        st.dataframe(pd.DataFrame(act["examples"]))
+                    st.markdown("---")
+            except Exception as e:
+                st.error(f"Schema inspectie mislukt: {e}")
+
 # ---------------------------------------------------------------------------
 # Hoofd entry
 # ---------------------------------------------------------------------------

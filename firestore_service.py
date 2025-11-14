@@ -160,6 +160,74 @@ def get_requests():
     requests = [doc.to_dict() for doc in docs]
     return pd.DataFrame(requests)
 
+# ---------------- Schema & Inspectie helpers ----------------
+def expected_schema():
+    """Geeft het verwachte schema terug dat de app gebruikt per collectie.
+
+    Let op: sommige velden zoals 'match_id', 'speler_id' en 'datum' bestaan alleen in DataFrames (afgeleid),
+    niet als daadwerkelijke Firestore-velden.
+    """
+    return {
+        'spelers': {
+            'required': {'speler_naam'},
+            'optional': set(),
+            'derived_only_in_app': {'speler_id'}
+        },
+        'elo': {
+            'required': {'speler_naam', 'rating', 'timestamp'},
+            'optional': set(),
+            'derived_only_in_app': set()
+        },
+        'uitslag': {
+            'required': {
+                'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
+                'thuis_score', 'uit_score', 'timestamp'
+            },
+            'optional': {
+                'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2'
+            },
+            'derived_only_in_app': {'match_id', 'datum'}
+        },
+        'requests': {
+            'required': {'Verzoek', 'Timestamp'},
+            'optional': set(),
+            'derived_only_in_app': set()
+        }
+    }
+
+def inspect_collections(max_docs: int = 200):
+    """Inspecteer Firestore en retourneer een overzicht per collectie met voorbeeldvelden.
+
+    Om performance/redenen beperken we ons tot maximaal `max_docs` voorbeeld-documenten per collectie.
+    """
+    summaries = {}
+    collections = {
+        'spelers': players_ref,
+        'uitslag': matches_ref,
+        'elo': elo_ref,
+        'requests': requests_ref,
+    }
+
+    for name, ref in collections.items():
+        sample_docs_iter = ref.limit(max_docs).stream()
+        sample_docs = []
+        field_union = set()
+        try:
+            for doc in sample_docs_iter:
+                d = doc.to_dict() or {}
+                sample_docs.append({k: d.get(k) for k in d.keys()})
+                field_union.update(d.keys())
+        except Exception as e:
+            print(f"Inspectie fout voor collectie {name}: {e}")
+
+        summaries[name] = {
+            'sample_size': len(sample_docs),
+            'fields': sorted(list(field_union)),
+            'examples': sample_docs[:5],  # toon maximaal 5 voorbeelden
+        }
+
+    return summaries
+
 # DATA SCHRIJFFUNCTIES
 def add_season(startdatum, einddatum):
     """Seizoenen worden nu automatisch bepaald door Prinsjesdag - handmatige toevoeging niet meer nodig."""
