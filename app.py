@@ -265,9 +265,16 @@ with tab4:
         try:
             # Bepaal jaar bereik - minimaal 2020-2030 voor historische context
             if not matches_df.empty:
-                match_dates = pd.to_datetime(matches_df['datum'])
-                min_year = min(2020, match_dates.min().year - 1)
-                max_year = max(2030, match_dates.max().year + 1)
+                try:
+                    # Converteer datum kolom naar datetime en haal timezone info weg
+                    match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+                    min_year = min(2020, match_dates.min().year - 1)
+                    max_year = max(2030, match_dates.max().year + 1)
+                except Exception as date_error:
+                    st.warning(f"Probleem met datum conversie: {date_error}")
+                    # Fallback naar default bereik
+                    min_year = 2020
+                    max_year = 2030
             else:
                 # Geen wedstrijden - toon toch historische Prinsjesdag data
                 min_year = 2020
@@ -275,6 +282,10 @@ with tab4:
             
             for year in range(min_year, max_year + 1):
                 try:
+                    # Skip jaar 1900 of andere ongeldige jaren
+                    if year < 1900 or year > 2100:
+                        continue
+                        
                     prinsjesdag = get_prinsjesdag(year)
                     prev_prinsjesdag = get_prinsjesdag(year - 1)
                     
@@ -291,12 +302,20 @@ with tab4:
                     })
                 except Exception as e:
                     # Log specifieke fout voor debugging maar ga verder
+                    st.warning(f"⚠️ Fout bij jaar {year}: {str(e)} (type: {type(e).__name__})")
                     continue
             
             return pd.DataFrame(prinsjesdag_seasons)
         
         except Exception as e:
-            st.error(f"Algemene fout bij genereren Prinsjesdag seizoenen: {e}")
+            st.error(f"Algemene fout bij genereren Prinsjesdag seizoenen: {str(e)}")
+            # Debug info voor troubleshooting
+            st.write(f"🔍 Debug info - Error type: {type(e).__name__}")
+            if not matches_df.empty:
+                st.write(f"📊 Matches data shape: {matches_df.shape}")
+                st.write(f"📅 Datum column type: {matches_df['datum'].dtype}")
+                st.write(f"📋 Sample datum values: {matches_df['datum'].head()}")
+                st.write(f"🏛️ Column names: {list(matches_df.columns)}")
             return pd.DataFrame()
     
     # Info sectie over Prinsjesdag seizoenen
@@ -335,10 +354,16 @@ with tab4:
             # Check of er wedstrijden zijn in dit seizoen
             season_matches = pd.DataFrame()
             if not matches_df.empty:
-                season_matches = matches_df[
-                    (pd.to_datetime(matches_df['datum']) >= prev_prinsjesdag) & 
-                    (pd.to_datetime(matches_df['datum']) <= prinsjesdag)
-                ]
+                try:
+                    # Converteer datums naar vergelijkbaar formaat (zonder timezone)
+                    match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+                    season_matches = matches_df[
+                        (match_dates >= prev_prinsjesdag) & 
+                        (match_dates <= prinsjesdag)
+                    ]
+                except Exception as date_error:
+                    st.warning(f"Probleem bij seizoen {year} datum vergelijking: {date_error}")
+                    season_matches = pd.DataFrame()
             
             prinsjesdag_info.append({
                 'Jaar': year,
@@ -371,10 +396,16 @@ with tab4:
         # Maak timeline data
         timeline_data = []
         for _, season in prinsjesdag_seasons_df.iterrows():
-            season_matches = matches_df[
-                (pd.to_datetime(matches_df['datum']) >= season['startdatum']) & 
-                (pd.to_datetime(matches_df['datum']) <= season['einddatum'])
-            ]
+            try:
+                # Verbeterde datum vergelijking
+                match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+                season_matches = matches_df[
+                    (match_dates >= season['startdatum']) & 
+                    (match_dates <= season['einddatum'])
+                ]
+            except Exception as viz_error:
+                st.warning(f"Visualisatie fout voor seizoen {season['seizoen_naam']}: {viz_error}")
+                season_matches = pd.DataFrame()
             
             timeline_data.append({
                 'Jaar': season['jaar'],
