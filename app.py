@@ -7,6 +7,9 @@ from styles import setup_page
 from utils import elo_calculation, add_name, get_download_filename
 import plotly.express as px
 import plotly.graph_objects as go
+# Import nieuwe modules
+from analytics import show_timeline_chart, show_cross_season_charts, show_individual_season_analysis, create_all_time_leaderboards
+from season_utils import get_prinsjesdag, generate_prinsjesdag_seasons, create_season_options
 
 setup_page()
 
