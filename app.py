@@ -238,290 +238,261 @@ with tab3:
 
 # ===== TAB 4: SEIZOENEN =====
 with tab4:
-    from datetime import datetime, date
-    
     st.header("📅 Seizoenen Overzicht")
     
-    if not seasons_df.empty and not matches_df.empty:
-        
-        # Seizoen selectie
-        st.subheader("🎯 Seizoen Selectie")
-        
-        # Maak seizoen opties
-        season_options = []
-        current_date = date.today()
-        current_season_id = None
-        
-        for idx, season in seasons_df.iterrows():
-            start_date = pd.to_datetime(season['startdatum']).date()
-            end_date = pd.to_datetime(season['einddatum']).date()
-            season_name = f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}"
-            season_options.append((season_name, idx))
-            
-            # Check huidige seizoen
-            if start_date <= current_date <= end_date:
-                current_season_id = idx
-        
-        # Voeg "Alle seizoenen" optie toe
-        season_options.insert(0, ("📊 Alle Seizoenen", "all"))
-        if current_season_id is not None:
-            season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
-        
-        selected_season_display = st.selectbox(
-            "Kies een seizoen om te analyseren:",
-            options=[option[0] for option in season_options],
-            index=1 if current_season_id is not None else 0
-        )
-        
-        # Vind de geselecteerde seizoen ID
-        selected_season_id = next(option[1] for option in season_options if option[0] == selected_season_display)
-        
-        if selected_season_id == "all":
-            # Alle seizoenen analyse
-            st.subheader("📈 Overzicht Alle Seizoenen")
-            
-            # Seizoen metrics
-            season_metrics = []
-            for idx, season in seasons_df.iterrows():
-                start_date = pd.to_datetime(season['startdatum'])
-                end_date = pd.to_datetime(season['einddatum'])
-                
-                # Filter wedstrijden voor dit seizoen
-                season_matches = matches_df[
-                    (pd.to_datetime(matches_df['datum']) >= start_date) & 
-                    (pd.to_datetime(matches_df['datum']) <= end_date)
-                ]
-                
-                # Bereken metrics
-                total_matches = len(season_matches)
-                unique_players = set()
-                if total_matches > 0:
-                    unique_players.update(season_matches['thuisteam_naam'].unique())
-                    unique_players.update(season_matches['uitteam_naam'].unique())
-                
-                total_goals = 0
-                if total_matches > 0:
-                    total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
-                
-                avg_goals_per_match = total_goals / total_matches if total_matches > 0 else 0
-                
-                season_metrics.append({
-                    'Seizoen': f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}",
-                    'Aantal Wedstrijden': total_matches,
-                    'Aantal Spelers': len(unique_players),
-                    'Totaal Doelpunten': total_goals,
-                    'Gem. Doelpunten/Wedstrijd': round(avg_goals_per_match, 2),
-                    'Seizoen Actief': '✅' if start_date.date() <= current_date <= end_date.date() else '❌'
-                })
-            
-            if season_metrics:
-                metrics_df = pd.DataFrame(season_metrics)
-                st.dataframe(metrics_df, use_container_width=True)
-                
-                # Visualisaties voor alle seizoenen
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Wedstrijden per seizoen
-                    fig_matches = px.bar(
-                        metrics_df, 
-                        x='Seizoen', 
-                        y='Aantal Wedstrijden',
-                        title='📊 Wedstrijden per Seizoen',
-                        color='Aantal Wedstrijden',
-                        color_continuous_scale='Blues'
-                    )
-                    fig_matches.update_layout(xaxis_tickangle=45)
-                    st.plotly_chart(fig_matches, use_container_width=True)
-                
-                with col2:
-                    # Spelers per seizoen
-                    fig_players = px.bar(
-                        metrics_df, 
-                        x='Seizoen', 
-                        y='Aantal Spelers',
-                        title='👥 Actieve Spelers per Seizoen',
-                        color='Aantal Spelers',
-                        color_continuous_scale='Greens'
-                    )
-                    fig_players.update_layout(xaxis_tickangle=45)
-                    st.plotly_chart(fig_players, use_container_width=True)
-                
-                # Goals trend
-                fig_goals = px.line(
-                    metrics_df, 
-                    x='Seizoen', 
-                    y='Gem. Doelpunten/Wedstrijd',
-                    title='⚽ Gemiddeld Doelpunten per Wedstrijd Trend',
-                    markers=True
-                )
-                fig_goals.update_layout(xaxis_tickangle=45)
-                st.plotly_chart(fig_goals, use_container_width=True)
-            
-        else:
-            # Specifiek seizoen analyse
-            season = seasons_df.iloc[selected_season_id]
-            start_date = pd.to_datetime(season['startdatum'])
-            end_date = pd.to_datetime(season['einddatum'])
-            
-            st.subheader(f"📈 Seizoen: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
-            
-            # Filter wedstrijden voor dit seizoen
-            season_matches = matches_df[
-                (pd.to_datetime(matches_df['datum']) >= start_date) & 
-                (pd.to_datetime(matches_df['datum']) <= end_date)
-            ]
-            
-            if not season_matches.empty:
-                # Basis statistieken
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("📊 Totaal Wedstrijden", len(season_matches))
-                
-                with col2:
-                    unique_players = set()
-                    unique_players.update(season_matches['thuisteam_naam'].unique())
-                    unique_players.update(season_matches['uitteam_naam'].unique())
-                    st.metric("👥 Actieve Spelers", len(unique_players))
-                
-                with col3:
-                    total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
-                    st.metric("⚽ Totaal Doelpunten", int(total_goals))
-                
-                with col4:
-                    avg_goals = total_goals / len(season_matches)
-                    st.metric("📈 Gem. Doelpunten/Wedstrijd", f"{avg_goals:.2f}")
-                
-                st.markdown("---")
-                
-                # Seizoen ranking berekenen
-                st.subheader("🏆 Seizoen Ranking")
-                
-                # ELO scores aan begin van seizoen ophalen
-                season_players_stats = {}
-                for player in unique_players:
-                    # Filter wedstrijden voor deze speler in dit seizoen
-                    player_matches = season_matches[
-                        (season_matches['thuisteam_naam'] == player) | 
-                        (season_matches['uitteam_naam'] == player)
-                    ].sort_values('datum')
-                    
-                    if not player_matches.empty:
-                        wins = 0
-                        losses = 0
-                        goals_for = 0
-                        goals_against = 0
-                        
-                        for _, match in player_matches.iterrows():
-                            if match['thuisteam_naam'] == player:
-                                goals_for += match['thuisteam_score']
-                                goals_against += match['uitteam_score']
-                                if match['thuisteam_score'] > match['uitteam_score']:
-                                    wins += 1
-                                else:
-                                    losses += 1
-                            else:
-                                goals_for += match['uitteam_score']
-                                goals_against += match['thuisteam_score']
-                                if match['uitteam_score'] > match['thuisteam_score']:
-                                    wins += 1
-                                else:
-                                    losses += 1
-                        
-                        # Huidige ELO score
-                        current_elo = 1000  # Default
-                        if not players_df.empty:
-                            player_row = players_df[players_df['speler_naam'] == player]
-                            if not player_row.empty:
-                                current_elo = player_row.iloc[0]['elo_score']
-                        
-                        season_players_stats[player] = {
-                            'Speler': player,
-                            'Wedstrijden': len(player_matches),
-                            'Gewonnen': wins,
-                            'Verloren': losses,
-                            'Win %': round((wins / len(player_matches)) * 100, 1) if len(player_matches) > 0 else 0,
-                            'Doelpunten Voor': int(goals_for),
-                            'Doelpunten Tegen': int(goals_against),
-                            'Doelsaldo': int(goals_for - goals_against),
-                            'Huidige ELO': int(current_elo)
-                        }
-                
-                if season_players_stats:
-                    ranking_df = pd.DataFrame(list(season_players_stats.values()))
-                    ranking_df = ranking_df.sort_values(['Huidige ELO'], ascending=False).reset_index(drop=True)
-                    ranking_df.index = ranking_df.index + 1  # Start ranking bij 1
-                    
-                    st.dataframe(ranking_df, use_container_width=True)
-                    
-                    # Visualisaties
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Win percentage chart
-                        fig_winrate = px.bar(
-                            ranking_df.head(10), 
-                            x='Win %', 
-                            y='Speler',
-                            title='🏆 Win Percentage Top 10',
-                            orientation='h',
-                            color='Win %',
-                            color_continuous_scale='RdYlGn'
-                        )
-                        st.plotly_chart(fig_winrate, use_container_width=True)
-                    
-                    with col2:
-                        # ELO distribution
-                        fig_elo = px.histogram(
-                            ranking_df, 
-                            x='Huidige ELO',
-                            title='📊 ELO Score Verdeling',
-                            nbins=15,
-                            color_discrete_sequence=['#1f77b4']
-                        )
-                        st.plotly_chart(fig_elo, use_container_width=True)
-                    
-                    # Goals vs ELO scatter
-                    fig_scatter = px.scatter(
-                        ranking_df, 
-                        x='Doelsaldo', 
-                        y='Huidige ELO',
-                        size='Wedstrijden',
-                        hover_name='Speler',
-                        title='⚽ Doelsaldo vs ELO Score',
-                        color='Win %',
-                        color_continuous_scale='RdYlGn'
-                    )
-                    st.plotly_chart(fig_scatter, use_container_width=True)
-                    
-                    # Seizoen progressie
-                    st.subheader("📈 Seizoen Progressie")
-                    
-                    # Wedstrijden per week/maand
-                    season_matches_copy = season_matches.copy()
-                    season_matches_copy['datum'] = pd.to_datetime(season_matches_copy['datum'])
-                    season_matches_copy['week'] = season_matches_copy['datum'].dt.isocalendar().week
-                    season_matches_copy['maand'] = season_matches_copy['datum'].dt.to_period('M')
-                    
-                    matches_per_period = season_matches_copy.groupby('maand').size().reset_index(name='Aantal Wedstrijden')
-                    matches_per_period['maand'] = matches_per_period['maand'].astype(str)
-                    
-                    fig_timeline = px.bar(
-                        matches_per_period, 
-                        x='maand', 
-                        y='Aantal Wedstrijden',
-                        title='📅 Wedstrijden per Maand',
-                        color='Aantal Wedstrijden',
-                        color_continuous_scale='Blues'
-                    )
-                    st.plotly_chart(fig_timeline, use_container_width=True)
-                
-            else:
-                st.info(f"Geen wedstrijden gevonden voor het geselecteerde seizoen.")
-    
+    # Controleer of data beschikbaar is
+    if seasons_df.empty:
+        st.warning("⚠️ Geen seizoenen gevonden. Voeg eerst seizoenen toe via de Beheer tab.")
+        st.info("💡 Seizoenen zijn nodig om wedstrijden per periode te kunnen analyseren.")
+    elif matches_df.empty:
+        st.warning("⚠️ Geen wedstrijden gevonden. Voeg eerst wedstrijden toe.")
+        st.info("💡 Upload wedstrijddata via de Beheer tab om seizoen analyses te kunnen maken.")
     else:
-        st.info("📋 Geen seizoenen of wedstrijden gevonden. Voeg eerst seizoenen en wedstrijden toe via de Beheer tab.")
+        try:
+            # Seizoen selectie
+            st.subheader("🎯 Seizoen Selectie")
+            
+            # Maak seizoen opties
+            season_options = []
+            current_date = date.today()
+            current_season_id = None
+            
+            for idx, season in seasons_df.iterrows():
+                try:
+                    start_date = pd.to_datetime(season['startdatum']).date()
+                    end_date = pd.to_datetime(season['einddatum']).date()
+                    season_name = f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}"
+                    season_options.append((season_name, idx))
+                    
+                    # Check huidige seizoen
+                    if start_date <= current_date <= end_date:
+                        current_season_id = idx
+                except Exception:
+                    continue
+            
+            if not season_options:
+                st.error("❌ Geen geldige seizoenen gevonden.")
+            else:
+                # Voeg "Alle seizoenen" optie toe
+                season_options.insert(0, ("📊 Alle Seizoenen", "all"))
+                if current_season_id is not None:
+                    season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
+                
+                selected_season_display = st.selectbox(
+                    "Kies een seizoen om te analyseren:",
+                    options=[option[0] for option in season_options],
+                    index=1 if current_season_id is not None else 0
+                )
+                
+                # Vind de geselecteerde seizoen ID
+                selected_season_id = next(option[1] for option in season_options if option[0] == selected_season_display)
+                
+                if selected_season_id == "all":
+                    # Alle seizoenen analyse
+                    st.subheader("📈 Overzicht Alle Seizoenen")
+                    
+                    # Seizoen metrics
+                    season_metrics = []
+                    for idx, season in seasons_df.iterrows():
+                        try:
+                            start_date = pd.to_datetime(season['startdatum'])
+                            end_date = pd.to_datetime(season['einddatum'])
+                            
+                            # Filter wedstrijden voor dit seizoen
+                            season_matches = matches_df[
+                                (pd.to_datetime(matches_df['datum']) >= start_date) & 
+                                (pd.to_datetime(matches_df['datum']) <= end_date)
+                            ]
+                            
+                            # Bereken metrics
+                            total_matches = len(season_matches)
+                            unique_players = set()
+                            if total_matches > 0:
+                                unique_players.update(season_matches['thuisteam_naam'].unique())
+                                unique_players.update(season_matches['uitteam_naam'].unique())
+                            
+                            total_goals = 0
+                            if total_matches > 0:
+                                total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
+                            
+                            avg_goals_per_match = total_goals / total_matches if total_matches > 0 else 0
+                            
+                            season_metrics.append({
+                                'Seizoen': f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}",
+                                'Aantal Wedstrijden': total_matches,
+                                'Aantal Spelers': len(unique_players),
+                                'Totaal Doelpunten': total_goals,
+                                'Gem. Doelpunten/Wedstrijd': round(avg_goals_per_match, 2),
+                                'Seizoen Actief': '✅' if start_date.date() <= current_date <= end_date.date() else '❌'
+                            })
+                        except Exception:
+                            continue
+                    
+                    if season_metrics:
+                        metrics_df = pd.DataFrame(season_metrics)
+                        st.dataframe(metrics_df, use_container_width=True)
+                        
+                        # Visualisaties voor alle seizoenen
+                        if len(metrics_df) > 0:
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                # Wedstrijden per seizoen
+                                try:
+                                    fig_matches = px.bar(
+                                        metrics_df, 
+                                        x='Seizoen', 
+                                        y='Aantal Wedstrijden',
+                                        title='📊 Wedstrijden per Seizoen',
+                                        color='Aantal Wedstrijden',
+                                        color_continuous_scale='Blues'
+                                    )
+                                    fig_matches.update_layout(xaxis_tickangle=45)
+                                    st.plotly_chart(fig_matches, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Fout bij maken van wedstrijden chart: {e}")
+                            
+                            with col2:
+                                # Spelers per seizoen
+                                try:
+                                    fig_players = px.bar(
+                                        metrics_df, 
+                                        x='Seizoen', 
+                                        y='Aantal Spelers',
+                                        title='👥 Actieve Spelers per Seizoen',
+                                        color='Aantal Spelers',
+                                        color_continuous_scale='Greens'
+                                    )
+                                    fig_players.update_layout(xaxis_tickangle=45)
+                                    st.plotly_chart(fig_players, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Fout bij maken van spelers chart: {e}")
+                            
+                            # Goals trend
+                            try:
+                                fig_goals = px.line(
+                                    metrics_df, 
+                                    x='Seizoen', 
+                                    y='Gem. Doelpunten/Wedstrijd',
+                                    title='⚽ Gemiddeld Doelpunten per Wedstrijd Trend',
+                                    markers=True
+                                )
+                                fig_goals.update_layout(xaxis_tickangle=45)
+                                st.plotly_chart(fig_goals, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Fout bij maken van goals trend: {e}")
+                    else:
+                        st.info("Geen seizoen data beschikbaar voor analyse.")
+                
+                else:
+                    # Specifiek seizoen analyse
+                    try:
+                        season = seasons_df.iloc[selected_season_id]
+                        start_date = pd.to_datetime(season['startdatum'])
+                        end_date = pd.to_datetime(season['einddatum'])
+                        
+                        st.subheader(f"📈 Seizoen: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                        
+                        # Filter wedstrijden voor dit seizoen
+                        season_matches = matches_df[
+                            (pd.to_datetime(matches_df['datum']) >= start_date) & 
+                            (pd.to_datetime(matches_df['datum']) <= end_date)
+                        ]
+                        
+                        if not season_matches.empty:
+                            # Basis statistieken
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("📊 Totaal Wedstrijden", len(season_matches))
+                            
+                            with col2:
+                                unique_players = set()
+                                unique_players.update(season_matches['thuisteam_naam'].unique())
+                                unique_players.update(season_matches['uitteam_naam'].unique())
+                                st.metric("👥 Actieve Spelers", len(unique_players))
+                            
+                            with col3:
+                                total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
+                                st.metric("⚽ Totaal Doelpunten", int(total_goals))
+                            
+                            with col4:
+                                avg_goals = total_goals / len(season_matches)
+                                st.metric("📈 Gem. Doelpunten/Wedstrijd", f"{avg_goals:.2f}")
+                            
+                            st.markdown("---")
+                            
+                            # Seizoen ranking berekenen
+                            st.subheader("🏆 Seizoen Ranking")
+                            
+                            # ELO scores aan begin van seizoen ophalen
+                            season_players_stats = {}
+                            for player in unique_players:
+                                try:
+                                    # Filter wedstrijden voor deze speler in dit seizoen
+                                    player_matches = season_matches[
+                                        (season_matches['thuisteam_naam'] == player) | 
+                                        (season_matches['uitteam_naam'] == player)
+                                    ].sort_values('datum')
+                                    
+                                    if not player_matches.empty:
+                                        wins = 0
+                                        losses = 0
+                                        goals_for = 0
+                                        goals_against = 0
+                                        
+                                        for _, match in player_matches.iterrows():
+                                            if match['thuisteam_naam'] == player:
+                                                goals_for += match['thuisteam_score']
+                                                goals_against += match['uitteam_score']
+                                                if match['thuisteam_score'] > match['uitteam_score']:
+                                                    wins += 1
+                                                else:
+                                                    losses += 1
+                                            else:
+                                                goals_for += match['uitteam_score']
+                                                goals_against += match['thuisteam_score']
+                                                if match['uitteam_score'] > match['thuisteam_score']:
+                                                    wins += 1
+                                                else:
+                                                    losses += 1
+                                        
+                                        # Huidige ELO score
+                                        current_elo = 1000  # Default
+                                        if not players_df.empty:
+                                            player_row = players_df[players_df['speler_naam'] == player]
+                                            if not player_row.empty:
+                                                current_elo = player_row.iloc[0]['elo_score']
+                                        
+                                        season_players_stats[player] = {
+                                            'Speler': player,
+                                            'Wedstrijden': len(player_matches),
+                                            'Gewonnen': wins,
+                                            'Verloren': losses,
+                                            'Win %': round((wins / len(player_matches)) * 100, 1) if len(player_matches) > 0 else 0,
+                                            'Doelpunten Voor': int(goals_for),
+                                            'Doelpunten Tegen': int(goals_against),
+                                            'Doelsaldo': int(goals_for - goals_against),
+                                            'Huidige ELO': int(current_elo)
+                                        }
+                                except Exception:
+                                    continue
+                            
+                            if season_players_stats:
+                                ranking_df = pd.DataFrame(list(season_players_stats.values()))
+                                ranking_df = ranking_df.sort_values(['Huidige ELO'], ascending=False).reset_index(drop=True)
+                                ranking_df.index = ranking_df.index + 1  # Start ranking bij 1
+                                
+                                st.dataframe(ranking_df, use_container_width=True)
+                        else:
+                            st.info(f"Geen wedstrijden gevonden voor het geselecteerde seizoen.")
+                    
+                    except Exception as e:
+                        st.error(f"Fout bij seizoen analyse: {e}")
+        
+        except Exception as e:
+            st.error(f"❌ Algemene fout bij seizoen verwerking: {e}")
+            st.info("Probeer de pagina te vernieuwen of neem contact op met de beheerder.")
 
 # ===== TAB 5: RUWE DATA =====
 with tab5:
