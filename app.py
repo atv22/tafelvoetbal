@@ -310,17 +310,27 @@ with tab4:
             if not season_options:
                 st.error("❌ Geen geldige seizoenen gevonden.")
             else:
-                # Voeg "Alle seizoenen" optie toe
+                # Fallback: meest recente seizoen (laatste in lijst) als er geen actief seizoen is
+                fallback_latest_season_tuple = season_options[-1]  # (display, idx)
+                fallback_latest_index_in_options = len(season_options) - 1
+
+                # Voeg "Alle seizoenen" optie toe voor algemene vergelijking
                 season_options.insert(0, ("📊 Alle Seizoenen", "all"))
+
+                # Indien er een actief (huidig) seizoen is, voeg expliciete optie toe
                 if current_season_id is not None:
                     season_options.insert(1, ("⭐ Huidig Seizoen", current_season_id))
-                
+                    default_index = 1  # selecteer actief seizoen
+                else:
+                    # Zoek positie van fallback seizoen na insertion; +1 door "Alle Seizoenen" insert
+                    default_index = fallback_latest_index_in_options + 1
+
                 selected_season_display = st.selectbox(
                     "Kies een seizoen om te analyseren:",
                     options=[option[0] for option in season_options],
-                    index=1 if current_season_id is not None else 0
+                    index=default_index
                 )
-                
+
                 # Vind de geselecteerde seizoen ID
                 selected_season_id = next(option[1] for option in season_options if option[0] == selected_season_display)
                 
@@ -649,10 +659,19 @@ with tab4:
                         season = combined_seasons_df.iloc[selected_season_id]
                         start_date = pd.to_datetime(season['startdatum'])
                         end_date = pd.to_datetime(season['einddatum'])
+                        today_date = date.today()
+                        is_current = start_date.date() <= today_date <= end_date.date()
+                        # Gebruik voor analyse: truncate end datum naar vandaag indien huidig seizoen
+                        analysis_end = pd.to_datetime(today_date) if is_current else end_date
                         
                         # Seizoen header met Prinsjesdag info
                         seizoen_naam = season.get('seizoen_naam', f"Seizoen {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
                         st.subheader(f"📈 {seizoen_naam}")
+                        # Toon gebruikte periode voor deze analyse
+                        if is_current:
+                            st.caption(f"🔍 Analyse periode: {start_date.strftime('%d-%m-%Y')} t/m {today_date.strftime('%d-%m-%Y')} (tot vandaag)")
+                        else:
+                            st.caption(f"🔍 Analyse periode: {start_date.strftime('%d-%m-%Y')} t/m {end_date.strftime('%d-%m-%Y')}")
                         
                         # Prinsjesdag info
                         if 'prinsjesdag' in season:
@@ -674,9 +693,10 @@ with tab4:
                             if end_date_naive.tz is not None:
                                 end_date_naive = end_date_naive.tz_localize(None)
                             
+                            # Gebruik analysis_end voor huidige seizoen
                             season_matches = matches_df[
                                 (match_dates >= start_date_naive) & 
-                                (match_dates <= end_date_naive)
+                                (match_dates <= (analysis_end if analysis_end.tz is None else analysis_end.tz_localize(None)))
                             ]
                         except Exception as date_error:
                             st.error(f"Datum vergelijkingsfout: {date_error}")
