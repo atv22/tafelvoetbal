@@ -207,18 +207,29 @@ def add_request(request_text):
 def add_match_and_update_elo(match_data, elo_updates):
     """
     Voegt een wedstrijd toe en logt de nieuwe ELO's in een atomaire batch write.
-    match_data: dict met wedstrijdinfo (volgens 'uitslag' structuur)
-    elo_updates: lijst van tuples, elk (speler_naam, new_elo)
+    Ondersteunt nu custom historische timestamp in match_data['timestamp'].
+    Als historische wedstrijd toegevoegd wordt (datum < vandaag), herbereken ELO's vanaf begin.
     """
     batch = db.batch()
+    from datetime import datetime, date
 
     try:
-        # 1. Voeg de nieuwe wedstrijd toe aan de 'uitslag' collectie
+        # 1. Timestamp bepalen: gebruik aangeleverde timestamp indien aanwezig, anders server
+        provided_ts = match_data.get('timestamp')
+        if provided_ts is not None:
+            # Zorg dat het een native datetime is
+            if hasattr(provided_ts, 'to_pydatetime'):
+                provided_ts = provided_ts.to_pydatetime()
+            if isinstance(provided_ts, date) and not isinstance(provided_ts, datetime):
+                provided_ts = datetime.combine(provided_ts, datetime.min.time())
+        match_timestamp = provided_ts if provided_ts else SERVER_TIMESTAMP
+
+        # 2. Voeg de nieuwe wedstrijd toe
         new_match_ref = matches_ref.document()
-        match_data_with_timestamp = {**match_data, 'timestamp': SERVER_TIMESTAMP}
+        match_data_with_timestamp = {**match_data, 'timestamp': match_timestamp}
         batch.set(new_match_ref, match_data_with_timestamp)
 
-        # 2. Log de nieuwe ELO-score voor elke betrokken speler in de 'elo' collectie
+        # 3. Log ELO updates (altijd met SERVER_TIMESTAMP voor log volgorde nu)
         for speler_naam, new_elo in elo_updates:
             new_elo_ref = elo_ref.document()
             batch.set(new_elo_ref, {
@@ -228,6 +239,22 @@ def add_match_and_update_elo(match_data, elo_updates):
             })
 
         batch.commit()
+
+        # 4. Indien historische wedstrijd (timestamp < vandaag) => volledige ELO herberekening
+        need_recalc = False
+        try:
+            if isinstance(match_timestamp, datetime):
+                today_midnight = datetime.combine(date.today(), datetime.min.time())
+                if match_timestamp < today_midnight:
+                    need_recalc = True
+        except Exception:
+            pass
+
+        if need_recalc:
+            # Volledige reset kan duur zijn; alternatief is recalc vanaf match_timestamp.
+            # Kies recalc vanaf die timestamp voor efficiency.
+            recalculate_elo_from_match(match_timestamp)
+
         st.cache_data.clear()
         return True
     except Exception as e:

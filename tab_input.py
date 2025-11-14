@@ -9,7 +9,7 @@ from utils import elo_calculation
 
 
 def render_match_input_form(player_names, player_elos):
-    """Render het wedstrijd invoer formulier"""
+    """Render het wedstrijd invoer formulier (nu met datum keuze)"""
     klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
 
     selected_names = {
@@ -37,8 +37,14 @@ def render_match_input_form(player_names, player_elos):
         with score_cols[1]:
             away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1)
 
+        # Datum keuze: standaard vandaag, mag historisch zijn
+        match_date = st.date_input("Datum van de wedstrijd", value=None, help="Laat leeg voor vandaag, of kies een historische datum")
+        if match_date is None:
+            from datetime import date as _date
+            match_date = _date.today()
+
         if st.form_submit_button("Verstuur Uitslag"):
-            return process_match_submission(selected_names, home_score, away_score, player_elos)
+            return process_match_submission(selected_names, home_score, away_score, player_elos, match_date)
     
     return False
 
@@ -82,8 +88,11 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
     return new_elos
 
 
-def prepare_match_data(selected_names, home_score, away_score):
-    """Bereid wedstrijd data voor om op te slaan"""
+def prepare_match_data(selected_names, home_score, away_score, match_date):
+    """Bereid wedstrijd data voor om op te slaan inclusief custom datum"""
+    from datetime import datetime
+    # Maak timestamp op basis van gekozen datum (middernacht) zodat ordering klopt
+    match_dt = datetime.combine(match_date, datetime.min.time())
     return {
         'thuis_1': selected_names['Thuis 1']['name'],
         'thuis_2': selected_names['Thuis 2']['name'],
@@ -95,10 +104,11 @@ def prepare_match_data(selected_names, home_score, away_score):
         'klinkers_thuis_2': selected_names['Thuis 2']['klinkers'],
         'klinkers_uit_1': selected_names['Uit 1']['klinkers'],
         'klinkers_uit_2': selected_names['Uit 2']['klinkers'],
+        'timestamp': match_dt,
     }
 
 
-def process_match_submission(selected_names, home_score, away_score, player_elos):
+def process_match_submission(selected_names, home_score, away_score, player_elos, match_date):
     """Proces de complete wedstrijd submissie"""
     # Valideer input
     if not validate_match_input(selected_names, home_score, away_score):
@@ -108,7 +118,7 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
     new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos)
 
     # Bereid data voor
-    match_data = prepare_match_data(selected_names, home_score, away_score)
+    match_data = prepare_match_data(selected_names, home_score, away_score, match_date)
     elo_updates = list(new_elos.items())
 
     # Opslaan in Firestore
