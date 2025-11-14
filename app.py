@@ -681,6 +681,106 @@ with tab4:
                                 avg_goals = total_goals / len(season_matches)
                                 st.metric("📈 Gem. Doelpunten/Wedstrijd", f"{avg_goals:.2f}")
                             
+                            # Uitgebreide seizoen statistieken
+                            st.markdown("---")
+                            st.subheader("📈 Uitgebreide Seizoen Statistieken")
+                            
+                            # Bereken uitgebreide statistieken
+                            goal_stats = {}
+                            klinker_stats = {}
+                            elo_changes = {}
+                            
+                            # Initialiseer statistieken voor alle spelers
+                            for player in unique_players:
+                                goal_stats[player] = 0
+                                klinker_stats[player] = 0
+                                
+                            # Bereken goal en klinker statistieken
+                            for _, match in season_matches.iterrows():
+                                # Reguliere goals
+                                if pd.notna(match.get('thuis_1')):
+                                    goal_stats[match['thuis_1']] += int(match.get('thuis_score', 0))
+                                if pd.notna(match.get('thuis_2')):
+                                    goal_stats[match['thuis_2']] += int(match.get('thuis_score', 0))
+                                if pd.notna(match.get('uit_1')):
+                                    goal_stats[match['uit_1']] += int(match.get('uit_score', 0))
+                                if pd.notna(match.get('uit_2')):
+                                    goal_stats[match['uit_2']] += int(match.get('uit_score', 0))
+                                
+                                # Klinker goals
+                                if pd.notna(match.get('klinkers_thuis_1')):
+                                    klinker_stats[match.get('thuis_1', '')] += int(match.get('klinkers_thuis_1', 0))
+                                if pd.notna(match.get('klinkers_thuis_2')):
+                                    klinker_stats[match.get('thuis_2', '')] += int(match.get('klinkers_thuis_2', 0))
+                                if pd.notna(match.get('klinkers_uit_1')):
+                                    klinker_stats[match.get('uit_1', '')] += int(match.get('klinkers_uit_1', 0))
+                                if pd.notna(match.get('klinkers_uit_2')):
+                                    klinker_stats[match.get('uit_2', '')] += int(match.get('klinkers_uit_2', 0))
+                            
+                            # Bereken ELO veranderingen (vereenvoudigd - zou eigenlijk seizoen start/eind ELO moeten vergelijken)
+                            for player in unique_players:
+                                # Haal huidige ELO op
+                                current_elo = 1000
+                                if not players_df.empty:
+                                    player_row = players_df[players_df['speler_naam'] == player]
+                                    if not player_row.empty:
+                                        current_elo = player_row.iloc[0].get('rating', 1000)
+                                
+                                # Schatting van seizoen start ELO (zou beter kunnen met ELO geschiedenis)
+                                estimated_start_elo = 1000  # Simplified - zou uit ELO geschiedenis moeten komen
+                                elo_changes[player] = current_elo - estimated_start_elo
+                            
+                            # Toon Top 3 statistieken
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.markdown("**🏆 Top 3 ELO Rating**")
+                                # Haal ELO scores voor alle spelers
+                                player_elos = []
+                                for player in unique_players:
+                                    current_elo = 1000
+                                    if not players_df.empty:
+                                        player_row = players_df[players_df['speler_naam'] == player]
+                                        if not player_row.empty:
+                                            current_elo = player_row.iloc[0].get('rating', 1000)
+                                    player_elos.append((player, current_elo))
+                                
+                                top_elo_players = sorted(player_elos, key=lambda x: x[1], reverse=True)[:3]
+                                for i, (player, elo) in enumerate(top_elo_players, 1):
+                                    emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+                                    st.write(f"{emoji} {player}: {elo:.0f} ELO")
+                            
+                            with col2:
+                                st.markdown("**🎯 Top 3 Doelpunten Makers**")
+                                top_scorers = sorted(goal_stats.items(), key=lambda x: x[1], reverse=True)[:3]
+                                for i, (player, goals) in enumerate(top_scorers, 1):
+                                    if goals > 0:
+                                        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+                                        st.write(f"{emoji} {player}: {goals} doelpunten")
+                                    else:
+                                        st.write(f"{i}. Geen doelpunten data")
+                            
+                            with col3:
+                                st.markdown("**🎪 Top 3 Klinker Scorers**")
+                                top_klinkers = sorted(klinker_stats.items(), key=lambda x: x[1], reverse=True)[:3]
+                                for i, (player, klinkers) in enumerate(top_klinkers, 1):
+                                    if klinkers > 0:
+                                        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+                                        st.write(f"{emoji} {player}: {klinkers} klinkers")
+                                    else:
+                                        st.write(f"{i}. Geen klinker data")
+                            
+                            with col4:
+                                st.markdown("**📈 Top 3 ELO Stijging (geschat)**")
+                                top_elo_gains = sorted(elo_changes.items(), key=lambda x: x[1], reverse=True)[:3]
+                                for i, (player, change) in enumerate(top_elo_gains, 1):
+                                    emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+                                    sign = "+" if change >= 0 else ""
+                                    st.write(f"{emoji} {player}: {sign}{change:.0f} ELO")
+                                    
+                                if len(top_elo_gains) == 0 or all(change == 0 for _, change in top_elo_gains):
+                                    st.caption("*Vereist ELO geschiedenis data*")
+                            
                             st.markdown("---")
                             
                             # Seizoen ranking berekenen
@@ -744,6 +844,123 @@ with tab4:
                                 ranking_df.index = ranking_df.index + 1  # Start ranking bij 1
                                 
                                 st.dataframe(ranking_df, use_container_width=True)
+                                
+                                # VISUALISATIES SECTIE
+                                st.markdown("---")
+                                st.subheader("📊 Seizoen Visualisaties")
+                                
+                                # Maak data voor charts
+                                chart_col1, chart_col2 = st.columns(2)
+                                
+                                with chart_col1:
+                                    # ELO Ranking Chart
+                                    try:
+                                        top_10_elo = ranking_df.head(10)
+                                        fig_elo = px.bar(
+                                            top_10_elo,
+                                            x='Speler',
+                                            y='Huidige ELO',
+                                            title='🏆 Top 10 Spelers (ELO Rating)',
+                                            color='Huidige ELO',
+                                            color_continuous_scale='Blues'
+                                        )
+                                        fig_elo.update_layout(xaxis_tickangle=45)
+                                        st.plotly_chart(fig_elo, use_container_width=True)
+                                    except Exception as e:
+                                        st.error(f"Fout bij ELO chart: {e}")
+                                
+                                with chart_col2:
+                                    # Win Percentage Chart
+                                    try:
+                                        active_players = ranking_df[ranking_df['Wedstrijden'] >= 3]  # Min 3 wedstrijden
+                                        if not active_players.empty:
+                                            fig_winrate = px.bar(
+                                                active_players.head(10),
+                                                x='Speler',
+                                                y='Win %',
+                                                title='📈 Win Percentage (min. 3 wedstrijden)',
+                                                color='Win %',
+                                                color_continuous_scale='Greens'
+                                            )
+                                            fig_winrate.update_layout(xaxis_tickangle=45)
+                                            st.plotly_chart(fig_winrate, use_container_width=True)
+                                        else:
+                                            st.info("Onvoldoende data voor win percentage chart")
+                                    except Exception as e:
+                                        st.error(f"Fout bij win rate chart: {e}")
+                                
+                                # Doelpunten statistieken
+                                chart_col3, chart_col4 = st.columns(2)
+                                
+                                with chart_col3:
+                                    # Goals per speler
+                                    try:
+                                        goals_data = []
+                                        for player, goals in goal_stats.items():
+                                            if goals > 0:  # Alleen spelers met doelpunten
+                                                goals_data.append({'Speler': player, 'Doelpunten': goals})
+                                        
+                                        if goals_data:
+                                            goals_df = pd.DataFrame(goals_data).sort_values('Doelpunten', ascending=False).head(10)
+                                            fig_goals = px.bar(
+                                                goals_df,
+                                                x='Speler',
+                                                y='Doelpunten',
+                                                title='⚽ Top 10 Doelpunten Makers',
+                                                color='Doelpunten',
+                                                color_continuous_scale='Reds'
+                                            )
+                                            fig_goals.update_layout(xaxis_tickangle=45)
+                                            st.plotly_chart(fig_goals, use_container_width=True)
+                                        else:
+                                            st.info("Geen doelpunten data beschikbaar")
+                                    except Exception as e:
+                                        st.error(f"Fout bij goals chart: {e}")
+                                
+                                with chart_col4:
+                                    # Klinker goals
+                                    try:
+                                        klinker_data = []
+                                        for player, klinkers in klinker_stats.items():
+                                            if klinkers > 0:  # Alleen spelers met klinkers
+                                                klinker_data.append({'Speler': player, 'Klinkers': klinkers})
+                                        
+                                        if klinker_data:
+                                            klinker_df = pd.DataFrame(klinker_data).sort_values('Klinkers', ascending=False).head(10)
+                                            fig_klinkers = px.bar(
+                                                klinker_df,
+                                                x='Speler',
+                                                y='Klinkers',
+                                                title='🎪 Top 10 Klinker Scorers',
+                                                color='Klinkers',
+                                                color_continuous_scale='Oranges'
+                                            )
+                                            fig_klinkers.update_layout(xaxis_tickangle=45)
+                                            st.plotly_chart(fig_klinkers, use_container_width=True)
+                                        else:
+                                            st.info("Geen klinker data beschikbaar")
+                                    except Exception as e:
+                                        st.error(f"Fout bij klinker chart: {e}")
+                                
+                                # Activiteit en Performance Chart
+                                try:
+                                    st.markdown("**📈 Speler Activiteit vs Performance**")
+                                    fig_scatter = px.scatter(
+                                        ranking_df,
+                                        x='Wedstrijden',
+                                        y='Huidige ELO',
+                                        size='Doelsaldo',
+                                        color='Win %',
+                                        hover_name='Speler',
+                                        title='Wedstrijden vs ELO Rating (grootte = doelsaldo, kleur = win %)',
+                                        color_continuous_scale='RdYlBu_r'
+                                    )
+                                    st.plotly_chart(fig_scatter, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Fout bij scatter plot: {e}")
+                                    
+                            else:
+                                st.info("Geen speler statistieken beschikbaar voor ranking.")
                         else:
                             st.info(f"Geen wedstrijden gevonden voor het geselecteerde seizoen.")
                     
