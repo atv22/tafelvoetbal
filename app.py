@@ -525,21 +525,45 @@ with tab4:
                             end_date = pd.to_datetime(season['einddatum'])
                             
                             # Filter wedstrijden voor dit seizoen
-                            season_matches = matches_df[
-                                (pd.to_datetime(matches_df['datum']) >= start_date) & 
-                                (pd.to_datetime(matches_df['datum']) <= end_date)
-                            ]
+                            try:
+                                # Zorg voor consistente timezone handling
+                                match_dates = pd.to_datetime(matches_df['datum'])
+                                if match_dates.dt.tz is not None:
+                                    match_dates = match_dates.dt.tz_localize(None)
+                                
+                                start_date_naive = pd.to_datetime(start_date)
+                                if start_date_naive.tz is not None:
+                                    start_date_naive = start_date_naive.tz_localize(None)
+                                
+                                end_date_naive = pd.to_datetime(end_date) 
+                                if end_date_naive.tz is not None:
+                                    end_date_naive = end_date_naive.tz_localize(None)
+                                
+                                season_matches = matches_df[
+                                    (match_dates >= start_date_naive) & 
+                                    (match_dates <= end_date_naive)
+                                ]
+                            except Exception:
+                                season_matches = pd.DataFrame()
                             
                             # Bereken metrics
                             total_matches = len(season_matches)
                             unique_players = set()
                             if total_matches > 0:
-                                unique_players.update(season_matches['thuisteam_naam'].unique())
-                                unique_players.update(season_matches['uitteam_naam'].unique())
+                                # Gebruik correcte kolom namen
+                                for _, match in season_matches.iterrows():
+                                    if pd.notna(match.get('thuis_1')):
+                                        unique_players.add(match['thuis_1'])
+                                    if pd.notna(match.get('thuis_2')):
+                                        unique_players.add(match['thuis_2'])
+                                    if pd.notna(match.get('uit_1')):
+                                        unique_players.add(match['uit_1'])
+                                    if pd.notna(match.get('uit_2')):
+                                        unique_players.add(match['uit_2'])
                             
                             total_goals = 0
                             if total_matches > 0:
-                                total_goals = season_matches['thuisteam_score'].sum() + season_matches['uitteam_score'].sum()
+                                total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
                             
                             avg_goals_per_match = total_goals / total_matches if total_matches > 0 else 0
                             
@@ -610,6 +634,201 @@ with tab4:
                                 st.plotly_chart(fig_goals, use_container_width=True)
                             except Exception as e:
                                 st.error(f"Fout bij maken van goals trend: {e}")
+                        
+                        # UITGEBREIDE CROSS-SEIZOEN ANALYSE
+                        st.markdown("---")
+                        st.subheader("📊 Uitgebreide Cross-Seizoen Analyse")
+                        
+                        # Bereken cross-seizoen statistieken
+                        all_season_players = {}  # player -> {goals, matches, wins, etc}
+                        all_season_matches = pd.DataFrame()
+                        
+                        # Verzamel data van alle seizoenen
+                        for idx, season in combined_seasons_df.iterrows():
+                            try:
+                                start_date = pd.to_datetime(season['startdatum'])
+                                end_date = pd.to_datetime(season['einddatum'])
+                                
+                                # Filter matches voor dit seizoen
+                                match_dates = pd.to_datetime(matches_df['datum'])
+                                if match_dates.dt.tz is not None:
+                                    match_dates = match_dates.dt.tz_localize(None)
+                                
+                                start_date_naive = pd.to_datetime(start_date)
+                                if start_date_naive.tz is not None:
+                                    start_date_naive = start_date_naive.tz_localize(None)
+                                
+                                end_date_naive = pd.to_datetime(end_date) 
+                                if end_date_naive.tz is not None:
+                                    end_date_naive = end_date_naive.tz_localize(None)
+                                
+                                season_matches = matches_df[
+                                    (match_dates >= start_date_naive) & 
+                                    (match_dates <= end_date_naive)
+                                ].copy()
+                                
+                                if not season_matches.empty:
+                                    season_matches['seizoen'] = season.get('seizoen_naam', f"Seizoen {start_date.year}")
+                                    all_season_matches = pd.concat([all_season_matches, season_matches], ignore_index=True)
+                                    
+                                    # Verzamel speler statistieken
+                                    for _, match in season_matches.iterrows():
+                                        # Process alle spelers in deze wedstrijd
+                                        players = []
+                                        if pd.notna(match.get('thuis_1')):
+                                            players.append((match['thuis_1'], 'thuis'))
+                                        if pd.notna(match.get('thuis_2')):
+                                            players.append((match['thuis_2'], 'thuis'))
+                                        if pd.notna(match.get('uit_1')):
+                                            players.append((match['uit_1'], 'uit'))
+                                        if pd.notna(match.get('uit_2')):
+                                            players.append((match['uit_2'], 'uit'))
+                                        
+                                        for player, team_type in players:
+                                            if player not in all_season_players:
+                                                all_season_players[player] = {
+                                                    'total_goals': 0, 'total_matches': 0, 'total_wins': 0, 
+                                                    'total_klinkers': 0, 'seizoenen': set()
+                                                }
+                                            
+                                            # Update statistieken
+                                            all_season_players[player]['total_matches'] += 1
+                                            all_season_players[player]['seizoenen'].add(season.get('seizoen_naam', f"Seizoen {start_date.year}"))
+                                            
+                                            if team_type == 'thuis':
+                                                all_season_players[player]['total_goals'] += int(match.get('thuis_score', 0))
+                                                if int(match.get('thuis_score', 0)) > int(match.get('uit_score', 0)):
+                                                    all_season_players[player]['total_wins'] += 1
+                                                # Klinkers
+                                                if player == match.get('thuis_1') and pd.notna(match.get('klinkers_thuis_1')):
+                                                    all_season_players[player]['total_klinkers'] += int(match.get('klinkers_thuis_1', 0))
+                                                elif player == match.get('thuis_2') and pd.notna(match.get('klinkers_thuis_2')):
+                                                    all_season_players[player]['total_klinkers'] += int(match.get('klinkers_thuis_2', 0))
+                                            else:  # uit
+                                                all_season_players[player]['total_goals'] += int(match.get('uit_score', 0))
+                                                if int(match.get('uit_score', 0)) > int(match.get('thuis_score', 0)):
+                                                    all_season_players[player]['total_wins'] += 1
+                                                # Klinkers
+                                                if player == match.get('uit_1') and pd.notna(match.get('klinkers_uit_1')):
+                                                    all_season_players[player]['total_klinkers'] += int(match.get('klinkers_uit_1', 0))
+                                                elif player == match.get('uit_2') and pd.notna(match.get('klinkers_uit_2')):
+                                                    all_season_players[player]['total_klinkers'] += int(match.get('klinkers_uit_2', 0))
+                            except Exception:
+                                continue
+                        
+                        # Toon Top performers across alle seizoenen
+                        if all_season_players:
+                            st.markdown("**🏆 All-Time Leaders (Alle Seizoenen)**")
+                            
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.markdown("**🎯 Top 5 All-Time Scorers**")
+                                top_scorers = sorted(all_season_players.items(), key=lambda x: x[1]['total_goals'], reverse=True)[:5]
+                                for i, (player, stats) in enumerate(top_scorers, 1):
+                                    emoji = "🥇🥈🥉🏅🏅"[i-1]
+                                    st.write(f"{emoji} {player}: {stats['total_goals']} goals")
+                            
+                            with col2:
+                                st.markdown("**💪 Top 5 Most Active**")
+                                most_active = sorted(all_season_players.items(), key=lambda x: x[1]['total_matches'], reverse=True)[:5]
+                                for i, (player, stats) in enumerate(most_active, 1):
+                                    emoji = "🥇🥈🥉🏅🏅"[i-1]
+                                    st.write(f"{emoji} {player}: {stats['total_matches']} wedstrijden")
+                            
+                            with col3:
+                                st.markdown("**🏆 Top 5 Most Wins**")
+                                most_wins = sorted(all_season_players.items(), key=lambda x: x[1]['total_wins'], reverse=True)[:5]
+                                for i, (player, stats) in enumerate(most_wins, 1):
+                                    emoji = "🥇🥈🥉🏅🏅"[i-1]
+                                    st.write(f"{emoji} {player}: {stats['total_wins']} overwinningen")
+                            
+                            with col4:
+                                st.markdown("**🎪 Top 5 Klinker Masters**")
+                                most_klinkers = sorted(all_season_players.items(), key=lambda x: x[1]['total_klinkers'], reverse=True)[:5]
+                                for i, (player, stats) in enumerate(most_klinkers, 1):
+                                    if stats['total_klinkers'] > 0:
+                                        emoji = "🥇🥈🥉🏅🏅"[i-1]
+                                        st.write(f"{emoji} {player}: {stats['total_klinkers']} klinkers")
+                        
+                            # CROSS-SEIZOEN VISUALISATIES
+                            st.markdown("**📈 Cross-Seizoen Performance Charts**")
+                            
+                            chart_col1, chart_col2 = st.columns(2)
+                            
+                            with chart_col1:
+                                # All-time goals leaders chart
+                                try:
+                                    goals_data = [{'Speler': player, 'Totaal Goals': stats['total_goals']} 
+                                                for player, stats in sorted(all_season_players.items(), 
+                                                key=lambda x: x[1]['total_goals'], reverse=True)[:10]]
+                                    goals_df = pd.DataFrame(goals_data)
+                                    
+                                    fig_all_goals = px.bar(
+                                        goals_df,
+                                        x='Speler',
+                                        y='Totaal Goals',
+                                        title='🎯 Top 10 All-Time Goal Scorers',
+                                        color='Totaal Goals',
+                                        color_continuous_scale='Reds'
+                                    )
+                                    fig_all_goals.update_layout(xaxis_tickangle=45)
+                                    st.plotly_chart(fig_all_goals, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Error bij all-time goals chart: {e}")
+                            
+                            with chart_col2:
+                                # Win rate vs activity scatter
+                                try:
+                                    scatter_data = []
+                                    for player, stats in all_season_players.items():
+                                        if stats['total_matches'] >= 3:  # Min 3 matches
+                                            win_rate = (stats['total_wins'] / stats['total_matches']) * 100
+                                            scatter_data.append({
+                                                'Speler': player,
+                                                'Wedstrijden': stats['total_matches'],
+                                                'Win Rate %': win_rate,
+                                                'Totaal Goals': stats['total_goals']
+                                            })
+                                    
+                                    if scatter_data:
+                                        scatter_df = pd.DataFrame(scatter_data)
+                                        fig_scatter = px.scatter(
+                                            scatter_df,
+                                            x='Wedstrijden',
+                                            y='Win Rate %',
+                                            size='Totaal Goals',
+                                            hover_name='Speler',
+                                            title='🏆 Activiteit vs Win Rate (grootte = goals)',
+                                            color='Win Rate %',
+                                            color_continuous_scale='RdYlBu_r'
+                                        )
+                                        st.plotly_chart(fig_scatter, use_container_width=True)
+                                except Exception as e:
+                                    st.error(f"Error bij scatter plot: {e}")
+                            
+                            # Seizoen vergelijking pie chart
+                            try:
+                                seizoen_counts = {}
+                                for player, stats in all_season_players.items():
+                                    for seizoen in stats['seizoenen']:
+                                        seizoen_counts[seizoen] = seizoen_counts.get(seizoen, 0) + 1
+                                
+                                if seizoen_counts:
+                                    pie_data = [{'Seizoen': k, 'Unieke Spelers': v} for k, v in seizoen_counts.items()]
+                                    pie_df = pd.DataFrame(pie_data)
+                                    
+                                    fig_pie = px.pie(
+                                        pie_df, 
+                                        values='Unieke Spelers', 
+                                        names='Seizoen',
+                                        title='👥 Speler Distributie per Seizoen'
+                                    )
+                                    st.plotly_chart(fig_pie, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Error bij pie chart: {e}")
+                        else:
+                            st.info("Geen cross-seizoen data beschikbaar.")
                     else:
                         st.info("Geen seizoen data beschikbaar voor analyse.")
                 
