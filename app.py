@@ -287,7 +287,7 @@ with tab5:
         
         if not matches_df.empty:
             # Maak tabs voor verschillende beheer functies
-            beheer_tab1, beheer_tab2 = st.tabs(["🗑️ Verwijderen", "✏️ Bewerken"])
+            beheer_tab1, beheer_tab2, beheer_tab3 = st.tabs(["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload"])
             
             with beheer_tab1:
                 st.write("**Wedstrijd(en) verwijderen**")
@@ -513,8 +513,346 @@ with tab5:
                                             st.rerun()
                 else:
                     st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
+            
+            with beheer_tab3:
+                st.write("**Historische Data Upload**")
+                st.info("📋 Upload historische wedstrijdgegevens en spelergegevens via CSV bestanden. Dit is handig voor het importeren van oude data.")
+                
+                # Sub-tabs voor verschillende soorten data
+                upload_subtab1, upload_subtab2, upload_subtab3 = st.tabs(["🏆 Wedstrijden", "👥 Spelers", "📅 Seizoenen"])
+                
+                with upload_subtab1:
+                    st.subheader("Wedstrijdgegevens Uploaden")
+                    
+                    st.markdown("""
+                    **📋 Vereist CSV formaat voor wedstrijden:**
+                    
+                    | Kolom | Type | Verplicht | Beschrijving | Voorbeeld |
+                    |-------|------|-----------|--------------|-----------|
+                    | `thuis_1` | tekst | ✅ | Naam eerste thuisspeler | "Jan" |
+                    | `thuis_2` | tekst | ✅ | Naam tweede thuisspeler | "Piet" |
+                    | `uit_1` | tekst | ✅ | Naam eerste uitspeler | "Marie" |
+                    | `uit_2` | tekst | ✅ | Naam tweede uitspeler | "Klaas" |
+                    | `thuis_score` | getal | ✅ | Score thuisteam (0-10) | 10 |
+                    | `uit_score` | getal | ✅ | Score uitteam (0-10) | 7 |
+                    | `klinkers_thuis_1` | getal | ❌ | Klinkers speler 1 thuis | 2 |
+                    | `klinkers_thuis_2` | getal | ❌ | Klinkers speler 2 thuis | 0 |
+                    | `klinkers_uit_1` | getal | ❌ | Klinkers speler 1 uit | 1 |
+                    | `klinkers_uit_2` | getal | ❌ | Klinkers speler 2 uit | 3 |
+                    | `timestamp` | datum/tijd | ❌ | Wanneer gespeeld (YYYY-MM-DD HH:MM:SS) | "2023-10-27 14:30:00" |
+                    
+                    **📝 CSV Voorbeeld:**
+                    ```csv
+                    thuis_1,thuis_2,uit_1,uit_2,thuis_score,uit_score,klinkers_thuis_1,klinkers_thuis_2,klinkers_uit_1,klinkers_uit_2,timestamp
+                    Jan,Piet,Marie,Klaas,10,7,2,0,1,3,2023-10-27 14:30:00
+                    Arthur,Rick,Lisa,Tom,8,10,1,2,4,0,2023-10-27 15:15:00
+                    ```
+                    
+                    **⚠️ Belangrijke opmerkingen:**
+                    - Alle spelers moeten al bestaan in de database (voeg ze eerst toe via de Spelers tab)
+                    - Scores moeten geldig zijn (één team moet 10 hebben, ander team 0-9)
+                    - Timestamp is optioneel - indien niet opgegeven wordt de upload tijd gebruikt
+                    - Klinkers zijn optioneel en standaard 0
+                    """)
+                    
+                    uploaded_matches = st.file_uploader(
+                        "📁 Upload wedstrijden CSV bestand",
+                        type=["csv"],
+                        key="matches_upload_main",
+                        help="Upload een CSV bestand met historische wedstrijdgegevens"
+                    )
+                    
+                    if uploaded_matches is not None:
+                        try:
+                            matches_upload_df = pd.read_csv(uploaded_matches)
+                            
+                            st.write("**Preview van geüploade data:**")
+                            st.dataframe(matches_upload_df.head(10), use_container_width=True)
+                            
+                            # Validatie
+                            required_columns = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
+                            missing_columns = [col for col in required_columns if col not in matches_upload_df.columns]
+                            
+                            if missing_columns:
+                                st.error(f"❌ Ontbrekende verplichte kolommen: {', '.join(missing_columns)}")
+                            else:
+                                # Optionele kolommen toevoegen als ze ontbreken
+                                optional_columns = ['klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2']
+                                for col in optional_columns:
+                                    if col not in matches_upload_df.columns:
+                                        matches_upload_df[col] = 0
+                                
+                                # Timestamp validatie
+                                if 'timestamp' not in matches_upload_df.columns:
+                                    st.info("📅 Geen timestamp kolom gevonden - huidige tijd wordt gebruikt")
+                                    matches_upload_df['timestamp'] = pd.Timestamp.now()
+                                
+                                # Data validatie
+                                validation_errors = []
+                                current_players = players_df['speler_naam'].tolist() if not players_df.empty else []
+                                
+                                for row_idx in range(len(matches_upload_df)):
+                                    row = matches_upload_df.iloc[row_idx]
+                                    row_num = row_idx + 1
+                                    
+                                    # Check spelers bestaan
+                                    players_in_match = [row['thuis_1'], row['thuis_2'], row['uit_1'], row['uit_2']]
+                                    for player in players_in_match:
+                                        if player not in current_players:
+                                            validation_errors.append(f"Rij {row_num}: Speler '{player}' bestaat niet in database")
+                                    
+                                    # Check scores
+                                    thuis_score = row['thuis_score']
+                                    uit_score = row['uit_score']
+                                    if not ((thuis_score == 10 and 0 <= uit_score <= 9) or (uit_score == 10 and 0 <= thuis_score <= 9)):
+                                        validation_errors.append(f"Rij {row_num}: Ongeldige score combinatie {thuis_score}-{uit_score}")
+                                    
+                                    # Check unieke spelers
+                                    if len(set(players_in_match)) != 4:
+                                        validation_errors.append(f"Rij {row_num}: Niet alle spelers zijn uniek")
+                                
+                                if validation_errors:
+                                    st.error("❌ **Validatie fouten gevonden:**")
+                                    for error in validation_errors[:10]:  # Toon max 10 fouten
+                                        st.error(f"• {error}")
+                                    if len(validation_errors) > 10:
+                                        st.error(f"• ... en {len(validation_errors) - 10} meer fouten")
+                                else:
+                                    st.success("✅ Alle data is geldig!")
+                                    
+                                    # ELO herberekening optie
+                                    elo_recalc_option = st.radio(
+                                        "ELO herberekening na upload:",
+                                        options=[
+                                            "🔄 Volledige ELO reset en herberekening (aanbevolen voor historische data)",
+                                            "⚠️ Geen herberekening (sneller maar mogelijk inconsistent)"
+                                        ],
+                                        key="elo_recalc_upload"
+                                    )
+                                    
+                                    col1, col2 = st.columns([2, 1])
+                                    with col1:
+                                        st.info(f"📊 **Upload samenvatting:** {len(matches_upload_df)} wedstrijden klaar voor import")
+                                    
+                                    with col2:
+                                        if st.button("🚀 Import Wedstrijden", type="primary"):
+                                            with st.spinner(f"Bezig met importeren van {len(matches_upload_df)} wedstrijden..."):
+                                                matches_data = matches_upload_df.to_dict('records')
+                                                added, duplicates = db.import_matches(matches_data)
+                                                
+                                                if elo_recalc_option.startswith("🔄") and added > 0:
+                                                    with st.spinner("ELO scores worden herberekend..."):
+                                                        db.reset_all_elos()
+                                                
+                                                st.success(f"🎉 Import voltooid! {added} wedstrijden toegevoegd, {duplicates} duplicaten genegeerd.")
+                                                if elo_recalc_option.startswith("🔄"):
+                                                    st.success("✅ ELO scores zijn volledig herberekend!")
+                                                
+                                                time.sleep(2)
+                                                st.rerun()
+                        
+                        except Exception as e:
+                            st.error(f"❌ Fout bij het verwerken van het CSV bestand: {e}")
+                
+                with upload_subtab2:
+                    st.subheader("Spelergegevens Uploaden")
+                    
+                    st.markdown("""
+                    **📋 Vereist CSV formaat voor spelers:**
+                    
+                    | Kolom | Type | Verplicht | Beschrijving | Voorbeeld |
+                    |-------|------|-----------|--------------|-----------|
+                    | `speler_naam` | tekst | ✅ | Naam van de speler | "Jan" |
+                    | `rating` | getal | ❌ | Start ELO rating (standaard 1000) | 1050 |
+                    
+                    **📝 CSV Voorbeeld:**
+                    ```csv
+                    speler_naam,rating
+                    Jan,1050
+                    Piet,980
+                    Marie,1200
+                    ```
+                    
+                    **⚠️ Opmerkingen:**
+                    - Speler namen moeten uniek zijn
+                    - ELO rating is optioneel, standaard wordt 1000 gebruikt
+                    - Bestaande spelers worden overgeslagen (geen duplicaten)
+                    """)
+                    
+                    uploaded_players = st.file_uploader(
+                        "📁 Upload spelers CSV bestand",
+                        type=["csv"],
+                        key="players_upload_main",
+                        help="Upload een CSV bestand met spelergegevens"
+                    )
+                    
+                    if uploaded_players is not None:
+                        try:
+                            players_upload_df = pd.read_csv(uploaded_players)
+                            
+                            st.write("**Preview van geüploade data:**")
+                            st.dataframe(players_upload_df.head(10), use_container_width=True)
+                            
+                            # Validatie
+                            if 'speler_naam' not in players_upload_df.columns:
+                                st.error("❌ Kolom 'speler_naam' is verplicht!")
+                            else:
+                                # Rating kolom toevoegen als deze ontbreekt
+                                if 'rating' not in players_upload_df.columns:
+                                    st.info("📊 Geen rating kolom gevonden - standaard ELO 1000 wordt gebruikt")
+                                    players_upload_df['rating'] = 1000
+                                
+                                # Validatie van namen
+                                invalid_names = []
+                                duplicate_names = []
+                                seen_names = set()
+                                
+                                for row_idx in range(len(players_upload_df)):
+                                    row = players_upload_df.iloc[row_idx]
+                                    name = str(row['speler_naam']).strip()
+                                    row_num = row_idx + 1
+                                    
+                                    # Check voor geldige naam
+                                    if not name or not name.replace(' ', '').isalpha() or len(name) < 2 or len(name) > 50:
+                                        invalid_names.append(f"Rij {row_num}: '{name}'")
+                                    
+                                    # Check voor duplicaten in upload
+                                    if name.lower() in seen_names:
+                                        duplicate_names.append(f"Rij {row_num}: '{name}'")
+                                    else:
+                                        seen_names.add(name.lower())
+                                
+                                validation_errors = []
+                                if invalid_names:
+                                    validation_errors.extend([f"Ongeldige naam: {name}" for name in invalid_names[:5]])
+                                if duplicate_names:
+                                    validation_errors.extend([f"Duplicaat in upload: {name}" for name in duplicate_names[:5]])
+                                
+                                if validation_errors:
+                                    st.error("❌ **Validatie fouten gevonden:**")
+                                    for error in validation_errors:
+                                        st.error(f"• {error}")
+                                else:
+                                    st.success("✅ Alle spelergegevens zijn geldig!")
+                                    
+                                    col1, col2 = st.columns([2, 1])
+                                    with col1:
+                                        st.info(f"📊 **Upload samenvatting:** {len(players_upload_df)} spelers klaar voor import")
+                                    
+                                    with col2:
+                                        if st.button("🚀 Import Spelers", type="primary"):
+                                            with st.spinner(f"Bezig met importeren van {len(players_upload_df)} spelers..."):
+                                                players_data = players_upload_df.to_dict('records')
+                                                added, duplicates = db.import_players(players_data)
+                                                
+                                                st.success(f"🎉 Import voltooid! {added} spelers toegevoegd, {duplicates} bestaande spelers genegeerd.")
+                                                time.sleep(2)
+                                                st.rerun()
+                        
+                        except Exception as e:
+                            st.error(f"❌ Fout bij het verwerken van het CSV bestand: {e}")
+                
+                with upload_subtab3:
+                    st.subheader("Seizoengegevens Uploaden")
+                    
+                    st.markdown("""
+                    **📋 Vereist CSV formaat voor seizoenen:**
+                    
+                    | Kolom | Type | Verplicht | Beschrijving | Voorbeeld |
+                    |-------|------|-----------|--------------|-----------|
+                    | `startdatum` | datum | ✅ | Start van het seizoen (YYYY-MM-DD) | "2023-01-01" |
+                    | `einddatum` | datum | ✅ | Einde van het seizoen (YYYY-MM-DD) | "2023-06-30" |
+                    
+                    **📝 CSV Voorbeeld:**
+                    ```csv
+                    startdatum,einddatum
+                    2023-01-01,2023-06-30
+                    2023-07-01,2023-12-31
+                    2024-01-01,2024-06-30
+                    ```
+                    
+                    **⚠️ Opmerkingen:**
+                    - Datums moeten in YYYY-MM-DD formaat zijn
+                    - Einddatum moet na startdatum liggen
+                    - Overlappende seizoenen zijn toegestaan
+                    """)
+                    
+                    uploaded_seasons = st.file_uploader(
+                        "📁 Upload seizoenen CSV bestand",
+                        type=["csv"],
+                        key="seasons_upload_main",
+                        help="Upload een CSV bestand met seizoengegevens"
+                    )
+                    
+                    if uploaded_seasons is not None:
+                        try:
+                            seasons_upload_df = pd.read_csv(uploaded_seasons)
+                            
+                            st.write("**Preview van geüploade data:**")
+                            st.dataframe(seasons_upload_df.head(10), use_container_width=True)
+                            
+                            # Validatie
+                            required_cols = ['startdatum', 'einddatum']
+                            missing_cols = [col for col in required_cols if col not in seasons_upload_df.columns]
+                            
+                            if missing_cols:
+                                st.error(f"❌ Ontbrekende verplichte kolommen: {', '.join(missing_cols)}")
+                            else:
+                                validation_errors = []
+                                
+                                for row_idx in range(len(seasons_upload_df)):
+                                    row = seasons_upload_df.iloc[row_idx]
+                                    row_num = row_idx + 1
+                                    try:
+                                        start_date = pd.to_datetime(row['startdatum'])
+                                        end_date = pd.to_datetime(row['einddatum'])
+                                        
+                                        if end_date <= start_date:
+                                            validation_errors.append(f"Rij {row_num}: Einddatum moet na startdatum liggen")
+                                    
+                                    except Exception:
+                                        validation_errors.append(f"Rij {row_num}: Ongeldige datum formaat")
+                                
+                                if validation_errors:
+                                    st.error("❌ **Validatie fouten gevonden:**")
+                                    for error in validation_errors[:5]:
+                                        st.error(f"• {error}")
+                                else:
+                                    st.success("✅ Alle seizoengegevens zijn geldig!")
+                                    
+                                    col1, col2 = st.columns([2, 1])
+                                    with col1:
+                                        st.info(f"📊 **Upload samenvatting:** {len(seasons_upload_df)} seizoenen klaar voor import")
+                                    
+                                    with col2:
+                                        if st.button("🚀 Import Seizoenen", type="primary"):
+                                            with st.spinner(f"Bezig met importeren van {len(seasons_upload_df)} seizoenen..."):
+                                                seasons_data = seasons_upload_df.to_dict('records')
+                                                added, duplicates = db.import_seasons(seasons_data)
+                                                
+                                                st.success(f"🎉 Import voltooid! {added} seizoenen toegevoegd, {duplicates} duplicaten genegeerd.")
+                                                time.sleep(2)
+                                                st.rerun()
+                        
+                        except Exception as e:
+                            st.error(f"❌ Fout bij het verwerken van het CSV bestand: {e}")
         else:
             st.info("Geen wedstrijden om te beheren.")
+            
+            # Ook data upload beschikbaar maken als er nog geen wedstrijden zijn
+            st.subheader("📁 Historische Data Upload")
+            st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
+            
+            upload_tabs = st.tabs(["👥 Spelers", "🏆 Wedstrijden", "📅 Seizoenen"])
+            
+            with upload_tabs[0]:
+                st.write("**Start met het uploaden van spelers voordat je wedstrijden kunt toevoegen.**")
+                
+            with upload_tabs[1]:
+                st.write("**Voeg eerst spelers toe voordat je wedstrijden kunt uploaden.**")
+                
+            with upload_tabs[2]:
+                st.write("**Upload seizoengegevens voor betere organisatie.**")
 
         st.markdown("""<hr>""", unsafe_allow_html=True)
 

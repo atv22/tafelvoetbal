@@ -347,103 +347,127 @@ else:
 st.markdown("""<hr>""", unsafe_allow_html=True)
 
 # --- Data Importeren ---
-st.subheader("Data Importeren")
+st.subheader("📁 Historische Data Upload")
 
-with st.expander("Spelers Importeren"):
+st.info("📋 Upload historische data via CSV bestanden. Handig voor het importeren van oude wedstrijd-, speler- en seizoengegevens.")
+
+# Tabs voor verschillende data types
+import_tab1, import_tab2, import_tab3 = st.tabs(["🏆 Wedstrijden", "👥 Spelers", "📅 Seizoenen"])
+
+with import_tab1:
     st.markdown("""
-    **Vereist CSV formaat:**
+    **📋 Vereist CSV formaat voor wedstrijden:**
+    
+    Verplichte kolommen: `thuis_1`, `thuis_2`, `uit_1`, `uit_2`, `thuis_score`, `uit_score`
+    
+    Optionele kolommen: `klinkers_thuis_1`, `klinkers_thuis_2`, `klinkers_uit_1`, `klinkers_uit_2`, `timestamp`
+    
+    **📝 Voorbeeld CSV:**
+    ```csv
+    thuis_1,thuis_2,uit_1,uit_2,thuis_score,uit_score,klinkers_thuis_1,klinkers_thuis_2,klinkers_uit_1,klinkers_uit_2,timestamp
+    Jan,Piet,Marie,Klaas,10,7,2,0,1,3,2023-10-27 14:30:00
+    ```
+    """)
+    uploaded_matches = st.file_uploader("Upload wedstrijden CSV", type=["csv"], key="matches_uploader_beheer")
+    if uploaded_matches is not None:
+        try:
+            matches_df_upload = pd.read_csv(uploaded_matches)
+            st.write("Voorbeeld van de geüploade data:")
+            st.dataframe(matches_df_upload.head())
+
+            required_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
+            if not all(col in matches_df_upload.columns for col in required_cols):
+                st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
+            else:
+                # ELO herberekening optie
+                elo_upload_option = st.radio(
+                    "ELO herberekening na upload:",
+                    options=[
+                        "🔄 Volledige ELO reset en herberekening (aanbevolen)",
+                        "⚠️ Geen herberekening"
+                    ],
+                    key="elo_upload_beheer"
+                )
+                
+                if st.button("Importeer Wedstrijden", key="import_matches_beheer"):
+                    with st.spinner("Wedstrijden aan het importeren..."):
+                        matches_data = matches_df_upload.to_dict('records')
+                        added, duplicates = db.import_matches(matches_data)
+                        
+                        if elo_upload_option.startswith("🔄") and added > 0:
+                            with st.spinner("ELO scores worden herberekend..."):
+                                db.reset_all_elos()
+                        
+                        st.success(f"Import voltooid! {added} wedstrijden toegevoegd, {duplicates} duplicaten gevonden.")
+                        if elo_upload_option.startswith("🔄"):
+                            st.success("ELO scores zijn volledig herberekend!")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
+
+with import_tab2:
+    st.markdown("""
+    **📋 Vereist CSV formaat voor spelers:**
     - Kolom 1: `speler_naam` (verplicht)
     - Kolom 2: `rating` (optioneel, standaard is 1000)
     
-    *Voorbeeld:*
+    **📝 Voorbeeld CSV:**
     ```csv
     speler_naam,rating
     Jan,1050
     Piet,980
     ```
     """)
-    uploaded_players = st.file_uploader("Upload spelers CSV", type=["csv"], key="players_uploader")
+    uploaded_players = st.file_uploader("Upload spelers CSV", type=["csv"], key="players_uploader_beheer")
     if uploaded_players is not None:
         try:
-            players_df = pd.read_csv(uploaded_players)
+            players_df_upload = pd.read_csv(uploaded_players)
             st.write("Voorbeeld van de geüploade data:")
-            st.dataframe(players_df.head())
+            st.dataframe(players_df_upload.head())
 
-            if 'speler_naam' not in players_df.columns:
+            if 'speler_naam' not in players_df_upload.columns:
                 st.error("De kolom 'speler_naam' is verplicht in het CSV-bestand.")
             else:
-                if st.button("Importeer Spelers"):
+                if st.button("Importeer Spelers", key="import_players_beheer"):
                     with st.spinner("Spelers aan het importeren..."):
-                        players_data = players_df.to_dict('records')
+                        players_data = players_df_upload.to_dict('records')
                         added, duplicates = db.import_players(players_data)
                         st.success(f"Import voltooid! {added} spelers toegevoegd, {duplicates} duplicaten gevonden.")
                         st.rerun()
         except Exception as e:
             st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
 
-with st.expander("Uitslagen Importeren"):
+with import_tab3:
     st.markdown("""
-    **Vereist CSV formaat:**
-    De kolomnamen moeten exact overeenkomen.
-    - `thuis_1`, `thuis_2`, `uit_1`, `uit_2`
-    - `thuis_score`, `uit_score`
-    - `timestamp` (optioneel, formaat: `YYYY-MM-DD HH:MM:SS`)
-
-    *Voorbeeld:*
-    ```csv
-    thuis_1,thuis_2,uit_1,uit_2,thuis_score,uit_score,timestamp
-    Jan,Piet,Klaas,Marie,10,5,2023-10-27 14:30:00
-    ```
-    """)
-    uploaded_matches = st.file_uploader("Upload uitslagen CSV", type=["csv"], key="matches_uploader")
-    if uploaded_matches is not None:
-        try:
-            matches_df = pd.read_csv(uploaded_matches)
-            st.write("Voorbeeld van de geüploade data:")
-            st.dataframe(matches_df.head())
-
-            required_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
-            if not all(col in matches_df.columns for col in required_cols):
-                st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
-            else:
-                if st.button("Importeer Uitslagen"):
-                    with st.spinner("Uitslagen aan het importeren..."):
-                        matches_data = matches_df.to_dict('records')
-                        added, duplicates = db.import_matches(matches_data)
-                        st.success(f"Import voltooid! {added} uitslagen toegevoegd, {duplicates} duplicaten gevonden.")
-                        st.rerun()
-        except Exception as e:
-            st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
-
-with st.expander("Seizoenen Importeren"):
-    st.markdown("""
-    **Vereist CSV formaat:**
+    **📋 Vereist CSV formaat voor seizoenen:**
     - `startdatum` (formaat: `YYYY-MM-DD`)
     - `einddatum` (formaat: `YYYY-MM-DD`)
 
-    *Voorbeeld:*
+    **📝 Voorbeeld CSV:**
     ```csv
     startdatum,einddatum
     2023-01-01,2023-06-30
     2023-07-01,2023-12-31
     ```
     """)
-    uploaded_seasons = st.file_uploader("Upload seizoenen CSV", type=["csv"], key="seasons_uploader")
+    uploaded_seasons = st.file_uploader("Upload seizoenen CSV", type=["csv"], key="seasons_uploader_beheer")
     if uploaded_seasons is not None:
         try:
-            seasons_df = pd.read_csv(uploaded_seasons)
+            seasons_df_upload = pd.read_csv(uploaded_seasons)
             st.write("Voorbeeld van de geüploade data:")
-            st.dataframe(seasons_df.head())
+            st.dataframe(seasons_df_upload.head())
 
             required_cols = ['startdatum', 'einddatum']
-            if not all(col in seasons_df.columns for col in required_cols):
+            if not all(col in seasons_df_upload.columns for col in required_cols):
                 st.error(f"Het CSV-bestand moet de volgende kolommen bevatten: {required_cols}")
             else:
-                if st.button("Importeer Seizoenen"):
+                if st.button("Importeer Seizoenen", key="import_seasons_beheer"):
                     with st.spinner("Seizoenen aan het importeren..."):
-                        seasons_data = seasons_df.to_dict('records')
+                        seasons_data = seasons_df_upload.to_dict('records')
                         added, duplicates = db.import_seasons(seasons_data)
                         st.success(f"Import voltooid! {added} seizoenen toegevoegd, {duplicates} duplicaten gevonden.")
                         st.rerun()
         except Exception as e:
             st.error(f"Er is een fout opgetreden bij het verwerken van het bestand: {e}")
+
+st.markdown("""<hr>""", unsafe_allow_html=True)
