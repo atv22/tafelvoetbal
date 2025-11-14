@@ -150,7 +150,6 @@ with tab4:
     # Combineer database seizoenen met Prinsjesdag seizoenen
     if not prinsjesdag_seasons_df.empty:
         combined_seasons_df = prinsjesdag_seasons_df
-        # Removed user-facing success message per request; silently proceed.
     else:
         combined_seasons_df = pd.DataFrame()
         if matches_df.empty:
