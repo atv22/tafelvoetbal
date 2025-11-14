@@ -240,13 +240,159 @@ with tab3:
 with tab4:
     st.header("📅 Seizoenen Overzicht")
     
-    # Controleer of data beschikbaar is
-    if seasons_df.empty:
-        st.warning("⚠️ Geen seizoenen gevonden. Voeg eerst seizoenen toe via de Beheer tab.")
-        st.info("💡 Seizoenen zijn nodig om wedstrijden per periode te kunnen analyseren.")
+    # Functie om Prinsjesdag te berekenen
+    def get_prinsjesdag(year):
+        """Bereken Prinsjesdag (derde dinsdag van september) voor een gegeven jaar"""
+        from datetime import date, timedelta
+        
+        # Eerste dag van september
+        first_september = date(year, 9, 1)
+        
+        # Vind de eerste dinsdag (weekday 1 = dinsdag)
+        days_until_tuesday = (1 - first_september.weekday()) % 7
+        first_tuesday = first_september + timedelta(days=days_until_tuesday)
+        
+        # Derde dinsdag is twee weken later
+        prinsjesdag = first_tuesday + timedelta(days=14)
+        
+        return prinsjesdag
+    
+    # Genereer Prinsjesdag seizoenen op basis van wedstrijd data
+    def generate_prinsjesdag_seasons():
+        """Genereer automatische seizoenen op basis van Prinsjesdag"""
+        if matches_df.empty:
+            return pd.DataFrame()
+        
+        # Vind het bereik van jaren in de wedstrijd data
+        try:
+            match_dates = pd.to_datetime(matches_df['datum'])
+            min_year = match_dates.min().year
+            max_year = match_dates.max().year
+            
+            # Voeg een jaar toe aan beide kanten voor volledigheid
+            start_year = min_year - 1
+            end_year = max_year + 1
+            
+            prinsjesdag_seasons = []
+            
+            for year in range(start_year, end_year + 1):
+                try:
+                    prinsjesdag = get_prinsjesdag(year)
+                    prev_prinsjesdag = get_prinsjesdag(year - 1)
+                    
+                    # Seizoen loopt van vorige Prinsjesdag tot huidige Prinsjesdag 24:00
+                    season_start = prev_prinsjesdag
+                    season_end = prinsjesdag
+                    
+                    prinsjesdag_seasons.append({
+                        'startdatum': season_start,
+                        'einddatum': season_end,
+                        'seizoen_naam': f'Prinsjesdag Seizoen {year-1}-{year}',
+                        'prinsjesdag': prinsjesdag,
+                        'jaar': year
+                    })
+                except:
+                    continue
+            
+            return pd.DataFrame(prinsjesdag_seasons)
+        
+        except Exception as e:
+            st.error(f"Fout bij genereren Prinsjesdag seizoenen: {e}")
+            return pd.DataFrame()
+    
+    # Info sectie over Prinsjesdag seizoenen
+    st.info("""
+    🏛️ **Prinsjesdag Seizoen Systeem**
+    
+    Dit systeem gebruikt **Prinsjesdag** (derde dinsdag van september) als seizoensgrens:
+    - **Seizoen loopt:** van Prinsjesdag vorig jaar tot Prinsjesdag dit jaar (24:00)
+    - **Automatisch berekend:** voor alle jaren met wedstrijddata
+    - **Traditioneel Nederlands:** gebaseerd op de opening van het parlementaire jaar
+    """)
+    
+    # Genereer Prinsjesdag seizoenen
+    prinsjesdag_seasons_df = generate_prinsjesdag_seasons()
+    
+    # Combineer database seizoenen met Prinsjesdag seizoenen
+    if not prinsjesdag_seasons_df.empty:
+        combined_seasons_df = prinsjesdag_seasons_df
+        st.success(f"✅ {len(combined_seasons_df)} Prinsjesdag seizoenen automatisch gegenereerd")
+    else:
+        combined_seasons_df = pd.DataFrame()
+    
+    # Toon Prinsjesdag data per jaar
+    st.subheader("🗓️ Prinsjesdag Data Per Jaar")
+    
+    if not prinsjesdag_seasons_df.empty:
+        prinsjesdag_info = []
+        for _, season in prinsjesdag_seasons_df.iterrows():
+            prinsjesdag = season['prinsjesdag']
+            year = season['jaar']
+            
+            # Check of er wedstrijden zijn in dit seizoen
+            season_matches = matches_df[
+                (pd.to_datetime(matches_df['datum']) >= season['startdatum']) & 
+                (pd.to_datetime(matches_df['datum']) <= season['einddatum'])
+            ] if not matches_df.empty else pd.DataFrame()
+            
+            prinsjesdag_info.append({
+                'Jaar': year,
+                'Prinsjesdag': prinsjesdag.strftime('%d-%m-%Y (%A)'),
+                'Seizoen': season['seizoen_naam'],
+                'Wedstrijden': len(season_matches),
+                'Status': '🏆 Actief' if len(season_matches) > 0 else '📋 Geen data'
+            })
+        
+        prinsjesdag_df = pd.DataFrame(prinsjesdag_info)
+        st.dataframe(prinsjesdag_df, use_container_width=True)
+        
+        # Visualisatie van Prinsjesdag data
+        if not matches_df.empty:
+            st.subheader("📊 Prinsjesdag Seizoenen Visualisatie")
+            
+            # Maak timeline data
+            timeline_data = []
+            for _, season in prinsjesdag_seasons_df.iterrows():
+                season_matches = matches_df[
+                    (pd.to_datetime(matches_df['datum']) >= season['startdatum']) & 
+                    (pd.to_datetime(matches_df['datum']) <= season['einddatum'])
+                ]
+                
+                timeline_data.append({
+                    'Jaar': season['jaar'],
+                    'Prinsjesdag': season['prinsjesdag'], 
+                    'Wedstrijden': len(season_matches),
+                    'Seizoen': season['seizoen_naam']
+                })
+            
+            timeline_df = pd.DataFrame(timeline_data)
+            
+            if not timeline_df.empty:
+                # Wedstrijden per Prinsjesdag seizoen
+                fig_timeline = px.bar(
+                    timeline_df,
+                    x='Jaar',
+                    y='Wedstrijden', 
+                    title='⚽ Wedstrijden per Prinsjesdag Seizoen',
+                    hover_data=['Seizoen', 'Prinsjesdag'],
+                    color='Wedstrijden',
+                    color_continuous_scale='Blues'
+                )
+                fig_timeline.update_layout(
+                    xaxis_title="Seizoen Jaar",
+                    yaxis_title="Aantal Wedstrijden"
+                )
+                st.plotly_chart(fig_timeline, use_container_width=True)
+    else:
+        st.info("Geen seizoen data beschikbaar om Prinsjesdag informatie te tonen.")
+    
+    # Controleer of er data beschikbaar is voor analyse
+    if combined_seasons_df.empty:
+        st.warning("⚠️ Geen seizoenen kunnen worden gegenereerd.")
+        st.info("💡 Voeg eerst wedstrijden toe om automatische Prinsjesdag seizoenen te genereren.")
     elif matches_df.empty:
-        st.warning("⚠️ Geen wedstrijden gevonden. Voeg eerst wedstrijden toe.")
-        st.info("💡 Upload wedstrijddata via de Beheer tab om seizoen analyses te kunnen maken.")
+        st.warning("⚠️ Geen wedstrijden gevonden voor seizoen analyse.")
+        st.info("💡 Upload wedstrijddata om seizoen analyses te kunnen maken.")
     else:
         try:
             # Seizoen selectie
@@ -257,11 +403,11 @@ with tab4:
             current_date = date.today()
             current_season_id = None
             
-            for idx, season in seasons_df.iterrows():
+            for idx, season in combined_seasons_df.iterrows():
                 try:
                     start_date = pd.to_datetime(season['startdatum']).date()
                     end_date = pd.to_datetime(season['einddatum']).date()
-                    season_name = f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}"
+                    season_name = season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
                     season_options.append((season_name, idx))
                     
                     # Check huidige seizoen
@@ -289,11 +435,11 @@ with tab4:
                 
                 if selected_season_id == "all":
                     # Alle seizoenen analyse
-                    st.subheader("📈 Overzicht Alle Seizoenen")
+                    st.subheader("📈 Overzicht Alle Prinsjesdag Seizoenen")
                     
                     # Seizoen metrics
                     season_metrics = []
-                    for idx, season in seasons_df.iterrows():
+                    for idx, season in combined_seasons_df.iterrows():
                         try:
                             start_date = pd.to_datetime(season['startdatum'])
                             end_date = pd.to_datetime(season['einddatum'])
@@ -317,8 +463,11 @@ with tab4:
                             
                             avg_goals_per_match = total_goals / total_matches if total_matches > 0 else 0
                             
+                            prinsjesdag_str = season['prinsjesdag'].strftime('%d-%m-%Y') if 'prinsjesdag' in season else 'N/A'
+                            
                             season_metrics.append({
-                                'Seizoen': f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}",
+                                'Seizoen': season.get('seizoen_naam', f"{start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}"),
+                                'Prinsjesdag': prinsjesdag_str,
                                 'Aantal Wedstrijden': total_matches,
                                 'Aantal Spelers': len(unique_players),
                                 'Totaal Doelpunten': total_goals,
@@ -387,11 +536,18 @@ with tab4:
                 else:
                     # Specifiek seizoen analyse
                     try:
-                        season = seasons_df.iloc[selected_season_id]
+                        season = combined_seasons_df.iloc[selected_season_id]
                         start_date = pd.to_datetime(season['startdatum'])
                         end_date = pd.to_datetime(season['einddatum'])
                         
-                        st.subheader(f"📈 Seizoen: {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                        # Seizoen header met Prinsjesdag info
+                        seizoen_naam = season.get('seizoen_naam', f"Seizoen {start_date.strftime('%Y-%m-%d')} tot {end_date.strftime('%Y-%m-%d')}")
+                        st.subheader(f"📈 {seizoen_naam}")
+                        
+                        # Prinsjesdag info
+                        if 'prinsjesdag' in season:
+                            prinsjesdag = pd.to_datetime(season['prinsjesdag'])
+                            st.info(f"🏛️ **Prinsjesdag {season.get('jaar', 'N/A')}:** {prinsjesdag.strftime('%d %B %Y (%A)')} - Seizoen eindigt om 24:00")
                         
                         # Filter wedstrijden voor dit seizoen
                         season_matches = matches_df[
