@@ -1058,36 +1058,10 @@ with tab4:
             st.info("Probeer de pagina te vernieuwen of neem contact op met de beheerder.")
 
 # ===== TAB 5: RUWE DATA =====
+
+from tab_data import render_data_tab
 with tab5:
-    st.header("Ruwe Data uit Firestore")
-
-    # --- Spelers ---
-    st.subheader("Spelers")
-    if not players_df.empty:
-        st.dataframe(players_df, use_container_width=True)
-    else:
-        st.info("Geen spelers gevonden in Firestore.")
-
-    # --- Uitslagen (Matches) ---
-    st.subheader("Uitslagen (Wedstrijden)")
-    st.download_button(
-        label="💾 Download Uitslagen",
-        data=matches_df.to_csv(index=False).encode('utf-8'),
-        file_name=get_download_filename('Tafelvoetbal_Uitslagen', 'csv'),
-        mime='text/csv',
-    )
-    st.dataframe(matches_df, use_container_width=True)
-
-    # --- ELO Geschiedenis ---
-    st.subheader("ELO Geschiedenis")
-    df_elo = db.get_elo_logs()
-    st.download_button(
-        label="💾 Download ELO Geschiedenis",
-        data=df_elo.to_csv(index=False).encode('utf-8'),
-        file_name=get_download_filename('Tafelvoetbal_ELO_Geschiedenis', 'csv'),
-        mime='text/csv',
-    )
-    st.dataframe(df_elo, use_container_width=True)
+    render_data_tab()
 
 # ===== TAB 6: BEHEER =====
 from tab_admin import render_admin_tab
