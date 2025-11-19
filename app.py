@@ -1148,9 +1148,9 @@ with tab8:
     - **Verwachting** = kans op winst volgens ELO
     
     **Voorbeeld:**
-    - Team A (ELO 1100 & 1050) wint met 5-2 van Team B (ELO 1000 & 950)
+    - Team A (ELO 1100 & 1050) wint met 10-7 van Team B (ELO 1000 & 950)
     - Team A krijgt meer ELO erbij, Team B verliest ELO
-    - Scoreverschil (3 goals) zorgt voor extra bonus
+    - Scoreverschil (3 punten) zorgt voor extra bonus
     
     **Waarom ELO?**
     - Houdt rekening met sterkte van tegenstanders
