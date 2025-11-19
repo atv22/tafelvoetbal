@@ -33,7 +33,7 @@ def render_requests_tab():
                 # Zorg voor nette weergave
                 if "Timestamp" in df.columns:
                     df = df.sort_values(by="Timestamp", ascending=False)
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.head(10), width='stretch')
             else:
                 st.info("Nog geen verzoeken ingediend.")
         except Exception as e:
