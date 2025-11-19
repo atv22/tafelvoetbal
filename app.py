@@ -811,6 +811,7 @@ with tab4:
                             
                             with col1:
                                 st.markdown("**🏆 Top 3 ELO Rating**")
+                                st.caption("Elke speler start met 1000 punten. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van het verwachte resultaat, het scoreverschil en het aantal gespeelde wedstrijden.")
                                 # Haal ELO scores voor alle spelers
                                 player_elos = []
                                 for player in unique_players:

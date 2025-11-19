@@ -22,12 +22,23 @@ Ontwikkeld door:
 - ✅ Wedstrijden verwijderen (individueel of bulk)
 - ✅ Automatische timestamp registratie
 
+
 ### ELO Rating Systeem
 
-- 📊 Automatische ELO score berekening (K-factor 32)
+- 📊 Automatische ELO score berekening
 - 🔄 ELO herberekening na wijzigingen
 - 📈 Real-time rankings
 - 🎯 Team-gebaseerde ELO updates
+
+#### Uitleg ELO Berekening
+
+Het ELO-systeem in deze app is speciaal aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
+
+- Het verwachte resultaat (op basis van de ELO van beide teams)
+- Het daadwerkelijke scoreverschil
+- Het aantal eerder gespeelde wedstrijden (K-factor daalt bij meer ervaring)
+
+De berekening is geïnspireerd op [dit artikel](https://towardsdatascience.com/developing-an-elo-based-data-driven-ranking-system-for-2v2-multiplayer-games-7689f7d42a53) en houdt rekening met teamdynamiek en scoreverschillen. Zo ontstaat een eerlijke en dynamische ranglijst.
 
 ### Data Beheer
 

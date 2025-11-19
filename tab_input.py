@@ -5,7 +5,7 @@ Bevat wedstrijd invoer formulier, validatie en ELO berekeningen
 import streamlit as st
 import time
 import firestore_service as db
-from utils import elo_calculation
+from utils_new_elo import calculate_new_elo
 
 
 def render_match_input_form(player_names, player_elos):
@@ -70,21 +70,22 @@ def validate_match_input(selected_names, home_score, away_score):
 
 def calculate_new_elos(selected_names, home_score, away_score, player_elos):
     """Bereken nieuwe ELO ratings voor alle spelers"""
-    home_team_names = [selected_names['Thuis 1']['name'], selected_names['Thuis 2']['name']]
-    away_team_names = [selected_names['Uit 1']['name'], selected_names['Uit 2']['name']]
-
-    home_team_elos = [player_elos[p] for p in home_team_names]
-    away_team_elos = [player_elos[p] for p in away_team_names]
-
-    avg_elo_home = sum(home_team_elos) / 2
-    avg_elo_away = sum(away_team_elos) / 2
-
-    new_elos = {}
-    for player_name in home_team_names:
-        new_elos[player_name] = elo_calculation(player_elos[player_name], avg_elo_away, home_score, away_score)
-    for player_name in away_team_names:
-        new_elos[player_name] = elo_calculation(player_elos[player_name], avg_elo_home, away_score, home_score)
-    
+    # Prepare match dict for new ELO calculation
+    match = {
+        "Thuis_1": selected_names['Thuis 1']['name'],
+        "Thuis_2": selected_names['Thuis 2']['name'],
+        "Uit_1": selected_names['Uit 1']['name'],
+        "Uit_2": selected_names['Uit 2']['name'],
+        "Thuis_score": home_score,
+        "Uit_score": away_score
+    }
+    # Build ELO history dict (only latest rating for now)
+    all_ELO_ratings = {}
+    for player in [match["Thuis_1"], match["Thuis_2"], match["Uit_1"], match["Uit_2"]]:
+        all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+    new_elo_df = calculate_new_elo(match, all_ELO_ratings)
+    # Convert DataFrame to dict
+    new_elos = dict(zip(new_elo_df["Speler"], new_elo_df["ELO"].astype(float)))
     return new_elos
 
 
