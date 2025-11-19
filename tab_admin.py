@@ -80,9 +80,18 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         with st.spinner("Wedstrijd wordt verwijderd..."):
             if auto_recalc_delete:
                 success = db.delete_match_with_elo_recalculation(match_id)
+                action_type = "delete_match_with_elo_recalculation"
             else:
                 success = db.delete_match_by_id(match_id)
+                action_type = "delete_match"
             if success:
+                from utils_beheer_log import log_admin_action
+                log_admin_action(
+                    action_type=action_type,
+                    user=st.session_state.get("user", "onbekend"),
+                    details={"match_id": match_id, "display": match_to_delete},
+                    db=db
+                )
                 if auto_recalc_delete:
                     st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
                 else:
@@ -250,8 +259,17 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
             with st.spinner("Wedstrijd wordt bijgewerkt..."):
                 if auto_recalculate:
                     success = db.update_match_with_elo_recalculation(match_data["match_id"], updated)
+                    action_type = "update_match_with_elo_recalculation"
                 else:
                     success = db.update_match(match_data["match_id"], updated)
+                    action_type = "update_match"
+                from utils_beheer_log import log_admin_action
+                log_admin_action(
+                    action_type=action_type,
+                    user=st.session_state.get("user", "onbekend"),
+                    details={"match_id": match_data["match_id"], "updated": updated},
+                    db=db
+                )
                 if success:
                     if auto_recalculate:
                         st.success("Wedstrijd succesvol bijgewerkt en ELO scores herberekend!")
@@ -534,6 +552,13 @@ def _render_system_management(db, players_df: pd.DataFrame):
             "Alle ELO scores worden gereset en herberekend... Dit kan even duren."
         ):
             success = db.reset_all_elos()
+            from utils_beheer_log import log_admin_action
+            log_admin_action(
+                action_type="reset_all_elos",
+                user=st.session_state.get("user", "onbekend"),
+                details={"action": "reset_all_elos"},
+                db=db
+            )
             if success:
                 st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
                 st.balloons()
