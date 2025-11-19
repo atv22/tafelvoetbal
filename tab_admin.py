@@ -322,7 +322,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
         if uploaded_matches is not None:
             try:
                 matches_upload_df = pd.read_csv(uploaded_matches)
-                st.dataframe(matches_upload_df.head(10), use_container_width=True)
+                st.dataframe(matches_upload_df.head(10), width='stretch')
                 required_columns = [
                     "thuis_1",
                     "thuis_2",
@@ -442,7 +442,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
         if uploaded_players is not None:
             try:
                 players_upload_df = pd.read_csv(uploaded_players)
-                st.dataframe(players_upload_df.head(10), use_container_width=True)
+                st.dataframe(players_upload_df.head(10), width='stretch')
                 if "speler_naam" not in players_upload_df.columns:
                     st.error("❌ Kolom 'speler_naam' is verplicht!")
                     return
@@ -502,7 +502,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
         if uploaded_seasons is not None:
             try:
                 seasons_upload_df = pd.read_csv(uploaded_seasons)
-                st.dataframe(seasons_upload_df.head(10), use_container_width=True)
+                st.dataframe(seasons_upload_df.head(10), width='stretch')
                 required = ["startdatum", "einddatum"]
                 missing = [c for c in required if c not in seasons_upload_df.columns]
                 if missing:
