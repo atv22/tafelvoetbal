@@ -112,6 +112,8 @@ def recalculate_elos_for_season(start_date, end_date):
         if batch_counter > 0:
             batch.commit()
         st.cache_data.clear()
+        get_players.clear()
+        get_matches.clear()
         return True
     except Exception as e:
         print(f"Fout bij herberekenen van ELO's voor seizoen: {e}")
