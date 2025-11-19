@@ -262,8 +262,29 @@ def get_elo_history(_ttl, speler_naam):
 
 @st.cache_data
 def get_seasons():
-    """Seizoenen worden nu automatisch bepaald door Prinsjesdag - geen aparte tabel meer nodig."""
-    return pd.DataFrame()  # Lege DataFrame
+    """Bepaalt seizoenen automatisch op basis van kalenderjaar uit de wedstrijddata."""
+    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+    matches = [doc.to_dict() for doc in matches_docs]
+    if not matches:
+        return pd.DataFrame()
+    df = pd.DataFrame(matches)
+    if 'timestamp' not in df.columns:
+        return pd.DataFrame()
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    df = df.dropna(subset=['timestamp'])
+    df['jaar'] = df['timestamp'].dt.year
+    seizoenen = []
+    for jaar in sorted(df['jaar'].unique()):
+        jaar_df = df[df['jaar'] == jaar]
+        startdatum = jaar_df['timestamp'].min()
+        einddatum = jaar_df['timestamp'].max()
+        seizoenen.append({
+            'startdatum': startdatum,
+            'einddatum': einddatum,
+            'jaar': jaar,
+            'aantal_wedstrijden': len(jaar_df)
+        })
+    return pd.DataFrame(seizoenen)
 
 @st.cache_data
 def get_requests():
