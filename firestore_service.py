@@ -14,11 +14,13 @@ def recalculate_elos_for_season(start_date, end_date):
             all_matches.append(match_data)
 
         if not all_matches:
+            print("[DEBUG] Geen wedstrijden gevonden.")
             return True
 
         # Haal alle spelers op
         players_df = get_players()
         if players_df.empty:
+            print("[DEBUG] Geen spelers gevonden.")
             return True
 
         # Split matches: before season, in season
@@ -30,6 +32,9 @@ def recalculate_elos_for_season(start_date, end_date):
                 matches_before_season.append(match)
             elif start_date <= match_ts <= end_date:
                 matches_in_season.append(match)
+
+        print(f"[DEBUG] Wedstrijden vóór seizoen: {len(matches_before_season)}")
+        print(f"[DEBUG] Wedstrijden in seizoen: {len(matches_in_season)}")
 
         # 1. Bereken ELO's tot aan het begin van het seizoen
         player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
@@ -48,6 +53,10 @@ def recalculate_elos_for_season(start_date, end_date):
             new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
             for _, row in new_elo_df.iterrows():
                 player_elos[row["Speler"]] = row["ELO"]
+
+        print(f"[DEBUG] Start-ELO's per speler aan begin seizoen:")
+        for speler, elo in player_elos.items():
+            print(f"  {speler}: {elo}")
 
         # 2. Verwijder bestaande ELO entries in het seizoen
         batch = db.batch()
