@@ -139,6 +139,13 @@ def get_elo_logs():
     elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
     elos = [doc.to_dict() for doc in elo_docs]
     return pd.DataFrame(elos)
+    
+    @st.cache_data
+    def get_beheer_log():
+        """Haalt alle beheer-log entries op uit Firestore."""
+        beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        beheer_logs = [doc.to_dict() for doc in beheer_docs]
+        return pd.DataFrame(beheer_logs)
 
 @st.cache_data
 def get_elo_history(_ttl, speler_naam):

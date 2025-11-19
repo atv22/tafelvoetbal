@@ -37,3 +37,17 @@ st.download_button(
     mime='text/csv',
 )
 st.dataframe(df_elo, width='stretch')
+
+# --- Beheer Logging ---
+st.header("Beheer Logging (Admin acties)")
+df_beheer_log = db.get_beheer_log()
+if not df_beheer_log.empty:
+    st.dataframe(df_beheer_log, width='stretch')
+    st.download_button(
+        label="💾 Download Beheer Logging",
+        data=df_beheer_log.to_csv(index=False).encode('utf-8'),
+        file_name=get_download_filename('Tafelvoetbal_Beheer_Log', 'csv'),
+        mime='text/csv',
+    )
+else:
+    st.info("Geen beheer-log entries gevonden.")

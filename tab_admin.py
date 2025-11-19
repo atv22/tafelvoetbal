@@ -90,7 +90,7 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
                     action_type=action_type,
                     user=st.session_state.get("user", "onbekend"),
                     details={"match_id": match_id, "display": match_to_delete},
-                    db=db
+                    db=db.db
                 )
                 if auto_recalc_delete:
                     st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
@@ -268,7 +268,7 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
                     action_type=action_type,
                     user=st.session_state.get("user", "onbekend"),
                     details={"match_id": match_data["match_id"], "updated": updated},
-                    db=db
+                    db=db.db
                 )
                 if success:
                     if auto_recalculate:
@@ -557,7 +557,7 @@ def _render_system_management(db, players_df: pd.DataFrame):
                 action_type="reset_all_elos",
                 user=st.session_state.get("user", "onbekend"),
                 details={"action": "reset_all_elos"},
-                db=db
+                db=db.db
             )
             if success:
                 st.success("✅ Alle ELO scores succesvol gereset en herberekend!")

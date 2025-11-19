@@ -22,7 +22,6 @@ Ontwikkeld door:
 - ✅ Wedstrijden verwijderen (individueel of bulk)
 - ✅ Automatische timestamp registratie
 
-
 ### ELO Rating Systeem
 
 - 📊 Automatische ELO score berekening
