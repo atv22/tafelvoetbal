@@ -1,24 +1,3 @@
-import datetime
-    st.markdown("---")
-    st.subheader("ELO Geschiedenis verwijderen voor een specifieke datum")
-    target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today())
-    if st.button("Verwijder ELO geschiedenis voor deze datum"):
-        from firestore_service import delete_elo_history_for_date
-        deleted_count = delete_elo_history_for_date(target_date)
-        if deleted_count > 0:
-            st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
-        else:
-            st.info(f"Geen ELO entries gevonden voor {target_date}.")
-"""Admin (Beheer) tab module.
-
-Deze module bevat alle logica voor TAB 6 (Beheer):
-- Authenticatie
-- Wedstrijd verwijderen & bewerken (incl. ELO herberekening opties)
-- Bulk data uploads (wedstrijden, spelers, seizoenen)
-- Systeem beheer (ELO reset, speler/seizoen verwijderen, collection cleanup)
-
-Publieke entrypoint: render_admin_tab(db, players_df, matches_df)
-"""
 from __future__ import annotations
 import time
 import pandas as pd
