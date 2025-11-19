@@ -78,7 +78,7 @@ def recalculate_elos_for_season(start_date, end_date):
             batch_counter = 0
 
         # 3. Bereken ELO's voor alle wedstrijden in het seizoen, beginnend bij de juiste startwaarden
-        for match in matches_in_season:
+        for i, match in enumerate(matches_in_season):
             match_dict = {
                 "Thuis_1": match.get('thuis_1'),
                 "Thuis_2": match.get('thuis_2'),
@@ -90,8 +90,12 @@ def recalculate_elos_for_season(start_date, end_date):
             all_ELO_ratings = {}
             for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
                 all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            print(f"[DEBUG] Wedstrijd {i+1}/{len(matches_in_season)}: {match_dict}")
+            print(f"[DEBUG] ELO input: {all_ELO_ratings}")
             new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
+            print(f"[DEBUG] ELO output:")
             for _, row in new_elo_df.iterrows():
+                print(f"  {row['Speler']}: {row['ELO']}")
                 player_elos[row["Speler"]] = row["ELO"]
                 new_elo_ref = elo_ref.document()
                 batch.set(new_elo_ref, {
@@ -100,6 +104,7 @@ def recalculate_elos_for_season(start_date, end_date):
                     'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
                 })
                 batch_counter += 1
+            print(f"[DEBUG] ELO's na deze wedstrijd: {player_elos}")
             if batch_counter >= 400:
                 batch.commit()
                 batch = db.batch()

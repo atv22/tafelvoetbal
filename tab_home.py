@@ -75,7 +75,7 @@ def show_elo_rankings(players_df, matches_df):
     
     # Sorteer en selecteer kolommen voor weergave
     display_df = stats_df.sort_values(by='ELO', ascending=False)
-    st.dataframe(display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']], use_container_width=True)
+    st.dataframe(display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']], width='stretch')
 
 
 def show_elo_history_selector(players_df):
