@@ -35,11 +35,12 @@ def calculate_new_elo(match, all_ELO_ratings):
     k3 = 50 / (1 + len(all_ELO_ratings[match["Uit_1"]]) / 300) 
     k4 = 50 / (1 + len(all_ELO_ratings[match["Uit_2"]]) / 300) 
 
-    # Calculate the new Elo ratings for each player
-    totaal_overzicht = pd.DataFrame(columns=["Speler", "ELO"])
-    totaal_overzicht = pd.concat([pd.DataFrame([[match["Thuis_1"],player1_rating + (k1 * point_factor) * (team_thuis - player1_expected_score)]], columns=totaal_overzicht.columns), totaal_overzicht], ignore_index=True)
-    totaal_overzicht = pd.concat([pd.DataFrame([[match["Thuis_2"],player2_rating + (k2 * point_factor) * (team_thuis - player2_expected_score)]], columns=totaal_overzicht.columns), totaal_overzicht], ignore_index=True)
-    totaal_overzicht = pd.concat([pd.DataFrame([[match["Uit_1"],player3_rating + (k3 * point_factor) * (team_uit - player3_expected_score)]], columns=totaal_overzicht.columns), totaal_overzicht], ignore_index=True)
-    totaal_overzicht = pd.concat([pd.DataFrame([[match["Uit_2"],player4_rating + (k4 * point_factor) * (team_uit - player4_expected_score)]], columns=totaal_overzicht.columns), totaal_overzicht], ignore_index=True)
-
+    # Bouw eerst een lijst van rijen en maak daarna één DataFrame
+    rows = [
+        [match["Thuis_1"], player1_rating + (k1 * point_factor) * (team_thuis - player1_expected_score)],
+        [match["Thuis_2"], player2_rating + (k2 * point_factor) * (team_thuis - player2_expected_score)],
+        [match["Uit_1"], player3_rating + (k3 * point_factor) * (team_uit - player3_expected_score)],
+        [match["Uit_2"], player4_rating + (k4 * point_factor) * (team_uit - player4_expected_score)],
+    ]
+    totaal_overzicht = pd.DataFrame(rows, columns=["Speler", "ELO"])
     return totaal_overzicht
