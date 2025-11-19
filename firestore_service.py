@@ -213,7 +213,7 @@ def get_players():
 @st.cache_data
 def get_matches():
     """Haalt alle wedstrijden op en normaliseert timestamps."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(500).stream()
     matches = []
     for doc in matches_docs:
         match_data = doc.to_dict()
@@ -242,7 +242,7 @@ def get_matches():
 @st.cache_data
 def get_elo_logs():
     """Haalt de volledige ELO geschiedenis op."""
-    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(500).stream()
     elos = [doc.to_dict() for doc in elo_docs]
     return pd.DataFrame(elos)
 
@@ -263,7 +263,7 @@ def get_elo_history(_ttl, speler_naam):
 @st.cache_data
 def get_seasons():
     """Bepaalt seizoenen automatisch op basis van kalenderjaar uit de wedstrijddata."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).limit(500).stream()
     matches = [doc.to_dict() for doc in matches_docs]
     if not matches:
         return pd.DataFrame()
