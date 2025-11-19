@@ -717,12 +717,16 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     st.header("Beheer")
     if not _ensure_authentication():
         return
-    if matches_df.empty:
-        st.info("Geen wedstrijden om te beheren.")
-        st.subheader("📁 Historische Data Upload")
-        st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
-        _render_uploads(db, players_df)
-        # Do not return here, so the ELO history deletion UI is always shown
+
+    st.markdown("---")
+    st.subheader("Hele ELO Geschiedenis wissen")
+    if st.button("Wis alle ELO geschiedenis"):
+        from firestore_service import delete_all_elo_history
+        deleted_count = delete_all_elo_history()
+        if deleted_count > 0:
+            st.success(f"Alle ELO entries ({deleted_count}) zijn verwijderd.")
+        else:
+            st.info("Er was geen ELO geschiedenis om te verwijderen.")
 
     st.markdown("---")
     st.subheader("ELO Geschiedenis verwijderen voor een specifieke datum")
@@ -734,6 +738,13 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
             st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
         else:
             st.info(f"Geen ELO entries gevonden voor {target_date}.")
+
+    if matches_df.empty:
+        st.info("Geen wedstrijden om te beheren.")
+        st.subheader("📁 Historische Data Upload")
+        st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
+        _render_uploads(db, players_df)
+
     # Hoofd tabs
     beheer_tab1, beheer_tab2, beheer_tab3, beheer_tab4 = st.tabs(
         ["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload", "⚙️ Systeem Beheer"]

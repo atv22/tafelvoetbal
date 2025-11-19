@@ -1,3 +1,24 @@
+# Verwijder alle ELO geschiedenis
+def delete_all_elo_history():
+    """
+    Verwijdert alle ELO entries uit Firestore.
+    """
+    batch = db.batch()
+    batch_counter = 0
+    elo_docs = elo_ref.stream()
+    deleted_count = 0
+    for doc in elo_docs:
+        batch.delete(doc.reference)
+        batch_counter += 1
+        deleted_count += 1
+        if batch_counter >= 400:
+            batch.commit()
+            batch = db.batch()
+            batch_counter = 0
+    if batch_counter > 0:
+        batch.commit()
+    st.cache_data.clear()
+    return deleted_count
 # Verwijder ELO entries voor een specifieke datum
 def delete_elo_history_for_date(target_date):
     """
