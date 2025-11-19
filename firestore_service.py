@@ -23,14 +23,21 @@ def recalculate_elos_for_season(start_date, end_date):
             print("[DEBUG] Geen spelers gevonden.")
             return True
 
-        # Split matches: before season, in season
+        # Zorg dat start_date en end_date altijd datetime.date zijn
+        if isinstance(start_date, pd.Timestamp):
+            start_date = start_date.date()
+        if isinstance(end_date, pd.Timestamp):
+            end_date = end_date.date()
+
         matches_before_season = []
         matches_in_season = []
         for match in all_matches:
-            match_ts = pd.to_datetime(match.get('timestamp')).date()
-            if match_ts < start_date:
+            ts = match.get('timestamp')
+            match_ts = pd.to_datetime(ts) if not isinstance(ts, pd.Timestamp) else ts
+            match_date = match_ts.date()
+            if match_date < start_date:
                 matches_before_season.append(match)
-            elif start_date <= match_ts <= end_date:
+            elif start_date <= match_date <= end_date:
                 matches_in_season.append(match)
 
         print(f"[DEBUG] Wedstrijden vóór seizoen: {len(matches_before_season)}")
