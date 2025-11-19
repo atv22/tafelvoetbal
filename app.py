@@ -250,7 +250,7 @@ with tab4:
                 xaxis_title="Seizoen Jaar",
                 yaxis_title="Aantal Wedstrijden"
             )
-            st.plotly_chart(fig_timeline, use_container_width=True)
+            st.plotly_chart(fig_timeline, config={'responsive': True}, width='stretch')
     
     # Controleer of er data beschikbaar is voor analyse
     if combined_seasons_df.empty:

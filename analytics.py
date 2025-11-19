@@ -24,7 +24,7 @@ def show_timeline_chart(matches_df):
             yaxis_title="Aantal wedstrijden",
             showlegend=False
         )
-        st.plotly_chart(fig_timeline, width='stretch')
+        st.plotly_chart(fig_timeline, config={'responsive': True}, width='stretch')
 
 
 def show_matches_bar_chart(season_matches):
@@ -46,7 +46,7 @@ def show_matches_bar_chart(season_matches):
         color_discrete_sequence=['#2ca02c']
     )
     fig_matches.update_layout(xaxis_title="Speler", yaxis_title="Aantal wedstrijden")
-    st.plotly_chart(fig_matches, width='stretch')
+    st.plotly_chart(fig_matches, config={'responsive': True}, width='stretch')
 
 
 def show_unique_players_bar_chart(season_matches):
@@ -70,7 +70,7 @@ def show_unique_players_bar_chart(season_matches):
         color_discrete_sequence=['#ff7f0e']
     )
     fig_players.update_layout(xaxis_title="Datum", yaxis_title="Unieke spelers")
-    st.plotly_chart(fig_players, width='stretch')
+    st.plotly_chart(fig_players, config={'responsive': True}, width='stretch')
 
 
 def show_goals_line_chart(season_matches):
@@ -94,7 +94,7 @@ def show_goals_line_chart(season_matches):
         xaxis_title="Datum", 
         yaxis_title="Gemiddelde goals per wedstrijd"
     )
-    st.plotly_chart(fig_goals, width='stretch')
+    st.plotly_chart(fig_goals, config={'responsive': True}, width='stretch')
 
 
 def show_all_time_goals_chart(all_matches):
@@ -122,7 +122,7 @@ def show_all_time_goals_chart(all_matches):
             color_continuous_scale='viridis'
         )
         fig_all_goals.update_layout(xaxis_title="Speler", yaxis_title="Goals")
-        st.plotly_chart(fig_all_goals, width='stretch')
+        st.plotly_chart(fig_all_goals, config={'responsive': True}, width='stretch')
 
 
 def show_activity_vs_winrate_scatter(all_matches):
@@ -165,7 +165,7 @@ def show_activity_vs_winrate_scatter(all_matches):
         )
         fig_scatter.update_traces(textposition="top center")
         fig_scatter.update_layout(xaxis_title="Aantal Wedstrijden", yaxis_title="Winpercentage (%)")
-        st.plotly_chart(fig_scatter, width='stretch')
+        st.plotly_chart(fig_scatter, config={'responsive': True}, width='stretch')
 
 
 def show_season_distribution_pie(seasons_df):
@@ -178,7 +178,7 @@ def show_season_distribution_pie(seasons_df):
             title="Distributie wedstrijden per seizoen"
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, width='stretch')
+        st.plotly_chart(fig_pie, config={'responsive': True}, width='stretch')
 
 
 def show_elo_bar_chart(season_elo):
@@ -193,7 +193,7 @@ def show_elo_bar_chart(season_elo):
             color_continuous_scale='viridis'
         )
         fig_elo.update_layout(xaxis_title="Speler", yaxis_title="ELO Rating")
-        st.plotly_chart(fig_elo, width='stretch')
+        st.plotly_chart(fig_elo, config={'responsive': True}, width='stretch')
 
 
 def show_winrate_bar_chart(season_matches, min_matches=5):
@@ -235,7 +235,7 @@ def show_winrate_bar_chart(season_matches, min_matches=5):
             color_continuous_scale='RdYlGn'
         )
         fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
-        st.plotly_chart(fig_winrate, width='stretch')
+        st.plotly_chart(fig_winrate, config={'responsive': True}, width='stretch')
 
 
 def show_goals_bar_chart_season(season_matches):
@@ -263,7 +263,7 @@ def show_goals_bar_chart_season(season_matches):
             color_continuous_scale='Blues'
         )
         fig_goals.update_layout(xaxis_title="Speler", yaxis_title="Goals")
-        st.plotly_chart(fig_goals, width='stretch')
+        st.plotly_chart(fig_goals, config={'responsive': True}, width='stretch')
 
 
 def create_all_time_leaderboards(all_matches):
