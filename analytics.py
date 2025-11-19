@@ -393,7 +393,7 @@ def show_cross_season_charts(all_matches, seasons_df):
                     color='Wedstrijden',
                     color_continuous_scale='Blues'
                 )
-                st.plotly_chart(fig_season_matches, width='stretch')
+                st.plotly_chart(fig_season_matches, config={'responsive': True}, width='stretch')
             
             with col2:
                 if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
@@ -404,7 +404,7 @@ def show_cross_season_charts(all_matches, seasons_df):
                         title="Gemiddelde Goals per Seizoen",
                         markers=True
                     )
-                    st.plotly_chart(fig_season_goals, width='stretch')
+                    st.plotly_chart(fig_season_goals, config={'responsive': True}, width='stretch')
 
 
 def show_individual_season_analysis(season_info, season_matches, season_elo=None):
