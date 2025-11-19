@@ -75,32 +75,31 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         key="single_match_delete",
     )
     if st.button("Verwijder geselecteerde wedstrijd", key="delete_single"):
-        match_idx = matches_display_df[matches_display_df["display"] == match_to_delete].index[0]
-        match_id = matches_display_df.loc[match_idx, "match_id"]
-        with st.spinner("Wedstrijd wordt verwijderd..."):
-            if auto_recalc_delete:
-                success = db.delete_match_with_elo_recalculation(match_id)
-                action_type = "delete_match_with_elo_recalculation"
-            else:
-                success = db.delete_match_by_id(match_id)
-                action_type = "delete_match"
-            if success:
-                from utils_beheer_log import log_admin_action
-                log_admin_action(
-                    action_type=action_type,
-                    user=st.session_state.get("user", "onbekend"),
-                    details={"match_id": match_id, "display": match_to_delete},
-                    db=db.db
-                )
+        match_row = matches_display_df[matches_display_df["display"] == match_to_delete]
+        if not match_row.empty:
+            match_id = match_row.iloc[0]["match_id"]
+            with st.spinner("Wedstrijd wordt verwijderd..."):
                 if auto_recalc_delete:
-                    st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
+                    success = db.delete_match_with_elo_recalculation(match_id)
+                    action_type = "delete_match_with_elo_recalculation"
                 else:
-                    st.success("Wedstrijd succesvol verwijderd.")
-                    st.warning("⚠️ ELO scores zijn niet herberekend.")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("Kon de wedstrijd niet verwijderen.")
+                    success = db.delete_match_by_id(match_id)
+                    action_type = "delete_match"
+                if success:
+                    from utils_beheer_log import log_admin_action
+                    log_admin_action(
+                        action_type=action_type,
+                        user=st.session_state.get("user", "onbekend"),
+                        details={"match_id": match_id, "display": match_to_delete},
+                        db=db.db
+                    )
+                    if auto_recalc_delete:
+                        st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
+                    else:
+                        st.success("Wedstrijd succesvol verwijderd.")
+                        st.warning("⚠️ ELO scores zijn niet herberekend.")
+                    time.sleep(1)
+                    st.rerun()
 
     st.write("**Meerdere wedstrijden verwijderen:**")
     matches_to_delete = st.multiselect(
@@ -114,12 +113,11 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         with st.spinner(f"Bezig met verwijderen van {len(matches_to_delete)} wedstrijden..."):
             success_count = 0
             for match_display in matches_to_delete:
-                match_idx = matches_display_df[
-                    matches_display_df["display"] == match_display
-                ].index[0]
-                match_id = matches_display_df.loc[match_idx, "match_id"]
-                if db.delete_match_by_id(match_id):
-                    success_count += 1
+                match_row = matches_display_df[matches_display_df["display"] == match_display]
+                if not match_row.empty:
+                    match_id = match_row.iloc[0]["match_id"]
+                    if db.delete_match_by_id(match_id):
+                        success_count += 1
             if auto_recalc_delete and success_count > 0:
                 with st.spinner("ELO scores worden herberekend..."):
                     db.reset_all_elos()
@@ -214,24 +212,35 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
             index=player_names.index(match_data.get("uit_2")) if match_data.get("uit_2") in player_names else 3,
         )
         score_cols = st.columns(2)
+        def safe_int(val, default=0):
+            try:
+                # Handle pandas Series, None, or direct int
+                if isinstance(val, pd.Series):
+                    val = val.iloc[0] if not val.empty else default
+                if val is None or (isinstance(val, float) and pd.isna(val)):
+                    return default
+                return int(val)
+            except Exception:
+                return default
+
         new_thuis_score = score_cols[0].number_input(
-            "Thuis Score", min_value=0, max_value=10, value=int(match_data.get("thuis_score", 0)), step=1
+            "Thuis Score", min_value=0, max_value=10, value=safe_int(match_data.get("thuis_score", 0)), step=1
         )
         new_uit_score = score_cols[1].number_input(
-            "Uit Score", min_value=0, max_value=10, value=int(match_data.get("uit_score", 0)), step=1
+            "Uit Score", min_value=0, max_value=10, value=safe_int(match_data.get("uit_score", 0)), step=1
         )
         klinker_cols = st.columns(4)
         new_klinkers_thuis_1 = klinker_cols[0].number_input(
-            "Klinkers Thuis 1", min_value=0, max_value=10, value=int(match_data.get("klinkers_thuis_1", 0)), step=1
+            "Klinkers Thuis 1", min_value=0, max_value=10, value=safe_int(match_data.get("klinkers_thuis_1", 0)), step=1
         )
         new_klinkers_thuis_2 = klinker_cols[1].number_input(
-            "Klinkers Thuis 2", min_value=0, max_value=10, value=int(match_data.get("klinkers_thuis_2", 0)), step=1
+            "Klinkers Thuis 2", min_value=0, max_value=10, value=safe_int(match_data.get("klinkers_thuis_2", 0)), step=1
         )
         new_klinkers_uit_1 = klinker_cols[2].number_input(
-            "Klinkers Uit 1", min_value=0, max_value=10, value=int(match_data.get("klinkers_uit_1", 0)), step=1
+            "Klinkers Uit 1", min_value=0, max_value=10, value=safe_int(match_data.get("klinkers_uit_1", 0)), step=1
         )
         new_klinkers_uit_2 = klinker_cols[3].number_input(
-            "Klinkers Uit 2", min_value=0, max_value=10, value=int(match_data.get("klinkers_uit_2", 0)), step=1
+            "Klinkers Uit 2", min_value=0, max_value=10, value=safe_int(match_data.get("klinkers_uit_2", 0)), step=1
         )
         if st.form_submit_button("Bewaar wijzigingen"):
             if new_thuis_score == 10 and new_uit_score == 10:
@@ -544,13 +553,9 @@ def _render_system_management(db, players_df: pd.DataFrame):
     st.header("⚙️ Systeem Beheer")
     st.subheader("ELO Rating Beheer")
     st.write("**Complete ELO Reset & Herberekening**")
-    st.info(
-        "💡 Reset alle ELO scores naar 1000 en herberekent ze op basis van alle wedstrijden."
-    )
+    st.info("💡 Reset alle ELO scores naar 1000 en herberekent ze op basis van alle wedstrijden.")
     if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
-        with st.spinner(
-            "Alle ELO scores worden gereset en herberekend... Dit kan even duren."
-        ):
+        with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
             success = db.reset_all_elos()
             from utils_beheer_log import log_admin_action
             log_admin_action(
@@ -566,6 +571,40 @@ def _render_system_management(db, players_df: pd.DataFrame):
                 st.rerun()
             else:
                 st.error("❌ Fout bij resetten van de ELO scores.")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("Herbereken ELO voor een seizoen")
+    seasons_df = db.get_seasons()
+    if seasons_df.empty:
+        st.info("Geen seizoenen gevonden. Voeg eerst wedstrijden toe.")
+    else:
+        season_options = []
+        for idx, season in seasons_df.iterrows():
+            season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
+            season_options.append((season_str, idx, season['startdatum'], season['einddatum']))
+        season_names = [o[0] for o in season_options]
+        selected = st.selectbox("Selecteer een seizoen voor ELO herberekening", options=season_names)
+        if st.button("Herbereken ELO voor dit seizoen", type="primary"):
+            # Vind de juiste start/einddatum
+            selected_season = next(o for o in season_options if o[0] == selected)
+            start_date = selected_season[2]
+            end_date = selected_season[3]
+            with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
+                success = db.recalculate_elos_for_season(start_date, end_date)
+                from utils_beheer_log import log_admin_action
+                log_admin_action(
+                    action_type="recalculate_elos_for_season",
+                    user=st.session_state.get("user", "onbekend"),
+                    details={"action": "recalculate_elos_for_season", "seizoen": selected},
+                    db=db.db
+                )
+                if success:
+                    st.success(f"✅ ELO scores succesvol herberekend voor seizoen: {selected}")
+                    st.balloons()
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.error(f"❌ Fout bij herberekenen van de ELO scores voor seizoen: {selected}")
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Speler Verwijderen")
     if players_df.empty:

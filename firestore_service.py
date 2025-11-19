@@ -1,3 +1,73 @@
+def recalculate_elos_for_season(start_date, end_date):
+    """
+    Herberekent alle ELO scores vanaf het begin van een gekozen seizoen, op basis van de gespeelde wedstrijden in dat seizoen.
+    start_date en end_date moeten datetime.date of pandas.Timestamp zijn.
+    """
+    try:
+        from utils_new_elo import calculate_new_elo
+        # Haal alle wedstrijden in het seizoen op, gesorteerd op timestamp
+        all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+        all_matches = []
+        for doc in all_matches_docs:
+            match_data = doc.to_dict()
+            match_data['match_id'] = doc.id
+            # Filter op seizoen
+            match_ts = pd.to_datetime(match_data.get('timestamp')).date()
+            if start_date <= match_ts <= end_date:
+                all_matches.append(match_data)
+        if not all_matches:
+            return True
+        # Haal alle spelers op
+        players_df = get_players()
+        if players_df.empty:
+            return True
+        # Start alle spelers met 1000 ELO
+        player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
+        batch = db.batch()
+        batch_counter = 0
+        # Verwijder bestaande ELO entries in het seizoen
+        elo_docs = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(start_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(end_date))).stream()
+        for doc in elo_docs:
+            batch.delete(doc.reference)
+            batch_counter += 1
+        if batch_counter > 0:
+            batch.commit()
+            batch = db.batch()
+            batch_counter = 0
+        # Bereken ELO's voor alle wedstrijden in het seizoen
+        for match in all_matches:
+            match_dict = {
+                "Thuis_1": match.get('thuis_1'),
+                "Thuis_2": match.get('thuis_2'),
+                "Uit_1": match.get('uit_1'),
+                "Uit_2": match.get('uit_2'),
+                "Thuis_score": int(match.get('thuis_score', 0)),
+                "Uit_score": int(match.get('uit_score', 0))
+            }
+            all_ELO_ratings = {}
+            for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
+                all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
+            for _, row in new_elo_df.iterrows():
+                player_elos[row["Speler"]] = row["ELO"]
+                new_elo_ref = elo_ref.document()
+                batch.set(new_elo_ref, {
+                    'speler_naam': row["Speler"],
+                    'rating': row["ELO"],
+                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                })
+                batch_counter += 1
+            if batch_counter >= 400:
+                batch.commit()
+                batch = db.batch()
+                batch_counter = 0
+        if batch_counter > 0:
+            batch.commit()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        print(f"Fout bij herberekenen van ELO's voor seizoen: {e}")
+        return False
 # firestore_service.py
 import streamlit as st
 import google.cloud.firestore
