@@ -1,3 +1,30 @@
+# Verwijder ELO entries voor een specifieke datum
+def delete_elo_history_for_date(target_date):
+    """
+    Verwijdert alle ELO entries uit Firestore voor een specifieke datum (YYYY-MM-DD).
+    target_date: datetime.date of string 'YYYY-MM-DD'
+    """
+    import pandas as pd
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    if isinstance(target_date, str):
+        target_date = pd.to_datetime(target_date).date()
+    batch = db.batch()
+    batch_counter = 0
+    # Zoek alle ELO entries op de opgegeven datum
+    elo_docs = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(target_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(target_date))).stream()
+    deleted_count = 0
+    for doc in elo_docs:
+        batch.delete(doc.reference)
+        batch_counter += 1
+        deleted_count += 1
+        if batch_counter >= 400:
+            batch.commit()
+            batch = db.batch()
+            batch_counter = 0
+    if batch_counter > 0:
+        batch.commit()
+    st.cache_data.clear()
+    return deleted_count
 def recalculate_elos_for_season(start_date, end_date):
     """
     Herberekent alle ELO scores vanaf het begin van een gekozen seizoen, op basis van de gespeelde wedstrijden in dat seizoen.
