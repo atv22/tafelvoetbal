@@ -1,4 +1,5 @@
 from __future__ import annotations
+import datetime
 import time
 import pandas as pd
 import streamlit as st
@@ -721,17 +722,18 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         st.subheader("📁 Historische Data Upload")
         st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
-        return
-        st.markdown("---")
-        st.subheader("ELO Geschiedenis verwijderen voor een specifieke datum")
-        target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today())
-        if st.button("Verwijder ELO geschiedenis voor deze datum"):
-            from firestore_service import delete_elo_history_for_date
-            deleted_count = delete_elo_history_for_date(target_date)
-            if deleted_count > 0:
-                st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
-            else:
-                st.info(f"Geen ELO entries gevonden voor {target_date}.")
+        # Do not return here, so the ELO history deletion UI is always shown
+
+    st.markdown("---")
+    st.subheader("ELO Geschiedenis verwijderen voor een specifieke datum")
+    target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today())
+    if st.button("Verwijder ELO geschiedenis voor deze datum"):
+        from firestore_service import delete_elo_history_for_date
+        deleted_count = delete_elo_history_for_date(target_date)
+        if deleted_count > 0:
+            st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
+        else:
+            st.info(f"Geen ELO entries gevonden voor {target_date}.")
     # Hoofd tabs
     beheer_tab1, beheer_tab2, beheer_tab3, beheer_tab4 = st.tabs(
         ["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload", "⚙️ Systeem Beheer"]
