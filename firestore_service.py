@@ -5,27 +5,53 @@ def recalculate_elos_for_season(start_date, end_date):
     """
     try:
         from utils_new_elo import calculate_new_elo
-        # Haal alle wedstrijden in het seizoen op, gesorteerd op timestamp
+        # Haal ALLE wedstrijden op, gesorteerd op timestamp
         all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
         all_matches = []
         for doc in all_matches_docs:
             match_data = doc.to_dict()
             match_data['match_id'] = doc.id
-            # Filter op seizoen
-            match_ts = pd.to_datetime(match_data.get('timestamp')).date()
-            if start_date <= match_ts <= end_date:
-                all_matches.append(match_data)
+            all_matches.append(match_data)
+
         if not all_matches:
             return True
+
         # Haal alle spelers op
         players_df = get_players()
         if players_df.empty:
             return True
-        # Start alle spelers met 1000 ELO
+
+        # Split matches: before season, in season
+        matches_before_season = []
+        matches_in_season = []
+        for match in all_matches:
+            match_ts = pd.to_datetime(match.get('timestamp')).date()
+            if match_ts < start_date:
+                matches_before_season.append(match)
+            elif start_date <= match_ts <= end_date:
+                matches_in_season.append(match)
+
+        # 1. Bereken ELO's tot aan het begin van het seizoen
         player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
+        for match in matches_before_season:
+            match_dict = {
+                "Thuis_1": match.get('thuis_1'),
+                "Thuis_2": match.get('thuis_2'),
+                "Uit_1": match.get('uit_1'),
+                "Uit_2": match.get('uit_2'),
+                "Thuis_score": int(match.get('thuis_score', 0)),
+                "Uit_score": int(match.get('uit_score', 0))
+            }
+            all_ELO_ratings = {}
+            for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
+                all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
+            for _, row in new_elo_df.iterrows():
+                player_elos[row["Speler"]] = row["ELO"]
+
+        # 2. Verwijder bestaande ELO entries in het seizoen
         batch = db.batch()
         batch_counter = 0
-        # Verwijder bestaande ELO entries in het seizoen
         elo_docs = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(start_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(end_date))).stream()
         for doc in elo_docs:
             batch.delete(doc.reference)
@@ -34,8 +60,9 @@ def recalculate_elos_for_season(start_date, end_date):
             batch.commit()
             batch = db.batch()
             batch_counter = 0
-        # Bereken ELO's voor alle wedstrijden in het seizoen
-        for match in all_matches:
+
+        # 3. Bereken ELO's voor alle wedstrijden in het seizoen, beginnend bij de juiste startwaarden
+        for match in matches_in_season:
             match_dict = {
                 "Thuis_1": match.get('thuis_1'),
                 "Thuis_2": match.get('thuis_2'),
