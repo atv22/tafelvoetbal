@@ -307,7 +307,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
         uploaded_matches = st.file_uploader(
             "📁 Upload wedstrijden CSV bestand",
             type=["csv"],
-            key="matches_upload_main",
+            key="matches_upload_main_uploads_tab",
             help="Upload een CSV bestand met historische wedstrijdgegevens",
         )
         if uploaded_matches is not None:
