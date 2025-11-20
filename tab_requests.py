@@ -10,6 +10,7 @@ import firestore_service as db
 
 def render_requests_tab():
     st.header("💬 Verzoeken")
+    st.subheader("Verzoek indienen")
     st.write("Laat hier je suggestie, bugmelding of wens achter (max 250 tekens).")
 
     with st.form("request_form"):
@@ -26,6 +27,7 @@ def render_requests_tab():
             request_text = request_text.strip()
             add_request(request_text)
 
+    st.subheader("Recente verzoeken")
     with st.expander("Toon recente verzoeken (laatste 10)"):
         try:
             df = db.get_requests()

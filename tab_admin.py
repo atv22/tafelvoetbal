@@ -714,46 +714,217 @@ def _render_system_management(db, players_df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     """Rendert de volledige beheer tab. Houdt de code in app.py minimaal."""
-    st.header("Beheer")
+    st.header("⚙️ Beheer")
     if not _ensure_authentication():
         return
 
-    st.markdown("---")
-    st.subheader("Hele ELO Geschiedenis wissen")
-    if st.button("Wis alle ELO geschiedenis"):
-        from firestore_service import delete_all_elo_history
-        deleted_count = delete_all_elo_history()
-        if deleted_count > 0:
-            st.success(f"Alle ELO entries ({deleted_count}) zijn verwijderd.")
+    # Hoofd tabs in beheer
+    tab_elo, tab_verwijderen, tab_bewerken, tab_upload, tab_inspectie = st.tabs([
+        "⚡ ELO beheer", "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload", "🔍 Inspectie"])
+
+    with tab_elo:
+        st.header("⚡ ELO Beheer")
+        st.subheader("🗑️ Hele ELO Geschiedenis wissen")
+        if st.button("Wis alle ELO geschiedenis"):
+            from firestore_service import delete_all_elo_history
+            deleted_count = delete_all_elo_history()
+            if deleted_count > 0:
+                st.success(f"Alle ELO entries ({deleted_count}) zijn verwijderd.")
+            else:
+                st.info("Er was geen ELO geschiedenis om te verwijderen.")
+
+        st.subheader("🗑️ ELO Geschiedenis verwijderen voor een specifieke datum")
+        target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today(), key="elo_date_input")
+        if st.button("Verwijder ELO geschiedenis voor deze datum", key="delete_elo_date"):
+            from firestore_service import delete_elo_history_for_date
+            deleted_count = delete_elo_history_for_date(target_date)
+            if deleted_count > 0:
+                st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
+            else:
+                st.info(f"Geen ELO entries gevonden voor {target_date}.")
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🔄 Complete ELO Reset & Herberekening")
+        st.info("💡 Reset alle ELO scores naar 1000 en herberekent ze op basis van alle wedstrijden.")
+        if st.button("🔄 Reset en herbereken alle ELO scores", key="reset_all_elos"):
+            with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
+                success = db.reset_all_elos()
+                from utils_beheer_log import log_admin_action
+                log_admin_action(
+                    action_type="reset_all_elos",
+                    user=st.session_state.get("user", "onbekend"),
+                    details={"action": "reset_all_elos"},
+                    db=db.db
+                )
+                if success:
+                    st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
+                    st.balloons()
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Fout bij resetten van de ELO scores.")
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🔄 Herbereken ELO voor een seizoen")
+        seasons_df = db.get_seasons()
+        if seasons_df.empty:
+            st.info("Geen seizoenen gevonden. Voeg eerst wedstrijden toe.")
         else:
-            st.info("Er was geen ELO geschiedenis om te verwijderen.")
+            season_options = []
+            for idx, season in seasons_df.iterrows():
+                season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
+                season_options.append((season_str, idx, season['startdatum'], season['einddatum']))
+            season_names = [o[0] for o in season_options]
+            selected = st.selectbox("Selecteer een seizoen voor ELO herberekening", options=season_names)
+            if st.button("Herbereken ELO voor dit seizoen", key="recalc_elo_season"):
+                selected_season = next(o for o in season_options if o[0] == selected)
+                start_date = selected_season[2]
+                end_date = selected_season[3]
+                with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
+                    success = db.recalculate_elos_for_season(start_date, end_date)
+                    from utils_beheer_log import log_admin_action
+                    log_admin_action(
+                        action_type="recalculate_elos_for_season",
+                        user=st.session_state.get("user", "onbekend"),
+                        details={"action": "recalculate_elos_for_season", "seizoen": selected},
+                        db=db.db
+                    )
+                    if success:
+                        st.success(f"✅ ELO scores succesvol herberekend voor seizoen: {selected}")
+                        st.balloons()
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Fout bij herberekenen van de ELO scores voor seizoen: {selected}")
 
-    st.markdown("---")
-    st.subheader("ELO Geschiedenis verwijderen voor een specifieke datum")
-    target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today())
-    if st.button("Verwijder ELO geschiedenis voor deze datum"):
-        from firestore_service import delete_elo_history_for_date
-        deleted_count = delete_elo_history_for_date(target_date)
-        if deleted_count > 0:
-            st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
-        else:
-            st.info(f"Geen ELO entries gevonden voor {target_date}.")
-
-    if matches_df.empty:
-        st.info("Geen wedstrijden om te beheren.")
-        st.subheader("📁 Historische Data Upload")
-        st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
-        _render_uploads(db, players_df)
-
-    # Hoofd tabs
-    beheer_tab1, beheer_tab2, beheer_tab3, beheer_tab4 = st.tabs(
-        ["🗑️ Verwijderen", "✏️ Bewerken", "📁 Data Upload", "⚙️ Systeem Beheer"]
-    )
-    with beheer_tab1:
+    with tab_verwijderen:
+        st.header("🗑️ Verwijderen")
+        st.subheader("🗑️ Wedstrijden verwijderen")
         _render_match_delete(db, matches_df)
-    with beheer_tab2:
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🗑️ Speler Verwijderen")
+        if players_df.empty:
+            st.info("Geen spelers om te beheren.")
+        else:
+            names = players_df["speler_naam"].tolist()
+            ids = players_df["speler_id"].tolist()
+            mapping = {n: i for n, i in zip(names, ids)}
+            player_to_delete = st.selectbox(
+                "Selecteer een speler om te verwijderen", options=sorted(names)
+            )
+            if st.button(f"Verwijder {player_to_delete} Permanent", key="delete_player_perm"):
+                pid = mapping.get(player_to_delete)
+                if pid:
+                    with st.spinner(
+                        f"Bezig met verwijderen van {player_to_delete}..."
+                    ):
+                        if db.delete_player_by_id(pid):
+                            st.success(
+                                f"{player_to_delete} en alle bijbehorende data is verwijderd."
+                            )
+                            st.rerun()
+                        else:
+                            st.error("Kon speler niet verwijderen.")
+                else:
+                    st.error("Kon de speler ID niet vinden.")
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🗑️ Seizoen Verwijderen")
+        seasons_df = db.get_seasons()
+        if seasons_df.empty:
+            st.info("Geen seizoenen om te beheren.")
+        else:
+            season_options = []
+            for _, season in seasons_df.iterrows():
+                season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
+                season_options.append((season_str, season.name))
+            if season_options:
+                season_names = [o[0] for o in season_options]
+                selected = st.selectbox(
+                    "Selecteer een seizoen om te verwijderen", options=season_names
+                )
+                if st.button(f"Verwijder seizoen: {selected}", key="delete_season"):
+                    season_index = next(o[1] for o in season_options if o[0] == selected)
+                    season_doc_id = seasons_df.iloc[season_index].name
+                    with st.spinner("Bezig met verwijderen van seizoen..."):
+                        if db.delete_season_by_id(season_doc_id):
+                            st.success(f"Seizoen {selected} is verwijderd.")
+                            st.rerun()
+                        else:
+                            st.error("Kon het seizoen niet verwijderen.")
+
+    with tab_bewerken:
+        st.header("✏️ Bewerken")
         _render_match_edit(db, matches_df, players_df)
-    with beheer_tab3:
+
+    with tab_upload:
+        st.header("📁 Upload")
+        if matches_df.empty:
+            st.info("Geen wedstrijden om te beheren.")
+            st.subheader("📁 Historische Data Upload")
+            st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
-    with beheer_tab4:
-        _render_system_management(db, players_df)
+
+    with tab_inspectie:
+        st.header("🔍 Inspectie")
+        st.subheader("🧹 Overige Database Cleanup")
+        if st.button("🗑️ Verwijder alle 'Requests'", type="secondary"):
+            with st.spinner("Alle requests worden verwijderd..."):
+                if db.clear_collection("requests"):
+                    st.success("Alle requests zijn succesvol verwijderd.")
+                    st.rerun()
+                else:
+                    st.error("Kon de requests niet verwijderen.")
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🔎 Database Inspectie & Schema")
+        st.caption("Bekijk welke collecties en velden in Firestore aanwezig zijn en vergelijk met wat de app verwacht.")
+
+        if st.button("Analyseer Firestore schema"):
+            with st.spinner("Firestore wordt geïnspecteerd..."):
+                try:
+                    expected = db.expected_schema()
+                    actual = db.inspect_collections(max_docs=250)
+
+                    for coll in ["spelers", "uitslag", "elo", "requests"]:
+                        st.markdown(f"**Collectie: `{coll}`**")
+                        exp = expected.get(coll, {})
+                        act = actual.get(coll, {"fields": [], "sample_size": 0, "examples": []})
+
+                        exp_required = exp.get("required", set())
+                        exp_optional = exp.get("optional", set())
+                        exp_derived = exp.get("derived_only_in_app", set())
+                        act_fields = set(act.get("fields", []))
+
+                        missing = sorted(list((exp_required | exp_optional) - act_fields))
+                        unexpected = sorted(list(act_fields - (exp_required | exp_optional)))
+
+                        colA, colB, colC = st.columns(3)
+                        with colA:
+                            st.write("Verwacht (required):")
+                            st.code(", ".join(sorted(list(exp_required))) or "—")
+                        with colB:
+                            st.write("Verwacht (optioneel):")
+                            st.code(", ".join(sorted(list(exp_optional))) or "—")
+                        with colC:
+                            st.write("Alleen in app (afgeleid):")
+                            st.code(", ".join(sorted(list(exp_derived))) or "—")
+
+                        st.write("Aangetroffen velden (sample):")
+                        st.code(", ".join(sorted(list(act_fields))) or "—")
+
+                        info_cols = st.columns(2)
+                        with info_cols[0]:
+                            st.write("Ontbrekend t.o.v. verwachting:")
+                            st.code(", ".join(missing) or "—")
+                        with info_cols[1]:
+                            st.write("Onverwacht (bestaat niet in app):")
+                            st.code(", ".join(unexpected) or "—")
+
+                        if act.get("examples"):
+                            st.write("Voorbeelden (max 5):")
+                            st.dataframe(pd.DataFrame(act["examples"]))
+                        st.markdown("---")
+                except Exception as e:
+                    st.error(f"Schema inspectie mislukt: {e}")

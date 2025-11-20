@@ -250,7 +250,7 @@ with tab4:
                 xaxis_title="Seizoen Jaar",
                 yaxis_title="Aantal Wedstrijden"
             )
-            st.plotly_chart(fig_timeline, config={'responsive': True}, width='stretch')
+            st.plotly_chart(fig_timeline, config={'responsive': True})
     
     # Controleer of er data beschikbaar is voor analyse
     if combined_seasons_df.empty:
@@ -439,7 +439,7 @@ with tab4:
                                         color_continuous_scale='Blues'
                                     )
                                     fig_matches.update_layout(xaxis_tickangle=45)
-                                    st.plotly_chart(fig_matches, config={'responsive': True}, width='stretch')
+                                    st.plotly_chart(fig_matches, config={'responsive': True})
                                 except Exception as e:
                                     st.error(f"Fout bij maken van wedstrijden chart: {e}")
                             
@@ -455,7 +455,7 @@ with tab4:
                                         color_continuous_scale='Greens'
                                     )
                                     fig_players.update_layout(xaxis_tickangle=45)
-                                    st.plotly_chart(fig_players, config={'responsive': True}, width='stretch')
+                                    st.plotly_chart(fig_players, config={'responsive': True})
                                 except Exception as e:
                                     st.error(f"Fout bij maken van spelers chart: {e}")
                             
@@ -469,7 +469,7 @@ with tab4:
                                     markers=True
                                 )
                                 fig_goals.update_layout(xaxis_tickangle=45)
-                                st.plotly_chart(fig_goals, config={'responsive': True}, width='stretch')
+                                st.plotly_chart(fig_goals, config={'responsive': True})
                             except Exception as e:
                                 st.error(f"Fout bij maken van goals trend: {e}")
                         
@@ -611,7 +611,7 @@ with tab4:
                                         color_continuous_scale='Reds'
                                     )
                                     fig_all_goals.update_layout(xaxis_tickangle=45)
-                                    st.plotly_chart(fig_all_goals, config={'responsive': True}, width='stretch')
+                                    st.plotly_chart(fig_all_goals, config={'responsive': True})
                                 except Exception as e:
                                     st.error(f"Error bij all-time goals chart: {e}")
                             
@@ -646,7 +646,7 @@ with tab4:
                                             color='Win Rate %',
                                             color_continuous_scale='RdYlBu_r'
                                         )
-                                        st.plotly_chart(fig_scatter, config={'responsive': True}, width='stretch')
+                                        st.plotly_chart(fig_scatter, config={'responsive': True})
                                 except Exception as e:
                                     st.error(f"Error bij scatter plot: {e}")
                             
@@ -667,7 +667,7 @@ with tab4:
                                         names='Seizoen',
                                         title='👥 Speler Distributie per Seizoen'
                                     )
-                                    st.plotly_chart(fig_pie, config={'responsive': True}, width='stretch')
+                                    st.plotly_chart(fig_pie, config={'responsive': True})
                             except Exception as e:
                                 st.error(f"Error bij pie chart: {e}")
                         else:
@@ -943,7 +943,7 @@ with tab4:
                                             color_continuous_scale='Blues'
                                         )
                                         fig_elo.update_layout(xaxis_tickangle=45)
-                                        st.plotly_chart(fig_elo, config={'responsive': True}, width='stretch')
+                                        st.plotly_chart(fig_elo, config={'responsive': True})
                                     except Exception as e:
                                         st.error(f"Fout bij ELO chart: {e}")
                                 
@@ -961,7 +961,7 @@ with tab4:
                                                 color_continuous_scale='Greens'
                                             )
                                             fig_winrate.update_layout(xaxis_tickangle=45)
-                                            st.plotly_chart(fig_winrate, config={'responsive': True}, width='stretch')
+                                            st.plotly_chart(fig_winrate, config={'responsive': True})
                                         else:
                                             st.info("Onvoldoende data voor win percentage chart")
                                     except Exception as e:
@@ -989,7 +989,7 @@ with tab4:
                                                 color_continuous_scale='Reds'
                                             )
                                             fig_goals.update_layout(xaxis_tickangle=45)
-                                            st.plotly_chart(fig_goals, config={'responsive': True}, width='stretch')
+                                            st.plotly_chart(fig_goals, config={'responsive': True})
                                         else:
                                             st.info("Geen doelpunten data beschikbaar")
                                     except Exception as e:
@@ -1014,7 +1014,7 @@ with tab4:
                                                 color_continuous_scale='Oranges'
                                             )
                                             fig_klinkers.update_layout(xaxis_tickangle=45)
-                                            st.plotly_chart(fig_klinkers, config={'responsive': True}, width='stretch')
+                                            st.plotly_chart(fig_klinkers, config={'responsive': True})
                                         else:
                                             st.info("Geen klinker data beschikbaar")
                                     except Exception as e:
@@ -1041,7 +1041,7 @@ with tab4:
                                         title='Wedstrijden vs ELO Rating (grootte = |doelsaldo|, kleur = win %)',
                                         color_continuous_scale='RdYlBu_r'
                                     )
-                                    st.plotly_chart(fig_scatter, width='stretch')
+                                    st.plotly_chart(fig_scatter)
                                 except Exception as e:
                                     st.error(f"Fout bij scatter plot: {e}")
                                     

@@ -3,10 +3,10 @@ import firestore_service as db
 from utils import get_download_filename
 
 def render_data_tab():
-    st.header("Ruwe Data uit Firestore")
+    st.header("📊 Ruwe Data uit Firestore")
 
     # --- Spelers ---
-    st.subheader("Spelers")
+    st.subheader("👤 Spelers")
     df_players = db.get_players()
     if not df_players.empty:
         st.dataframe(df_players, width='stretch')
@@ -14,7 +14,7 @@ def render_data_tab():
         st.info("Geen spelers gevonden in Firestore.")
 
     # --- Uitslagen (Matches) ---
-    st.subheader("Uitslagen (Wedstrijden)")
+    st.subheader("🏆 Uitslagen (Wedstrijden)")
     df_matches = db.get_matches()
     st.download_button(
         label="💾 Download Uitslagen",
@@ -25,7 +25,7 @@ def render_data_tab():
     st.dataframe(df_matches, width='stretch')
 
     # --- ELO Geschiedenis ---
-    st.subheader("ELO Geschiedenis")
+    st.subheader("⚡ ELO Geschiedenis")
     df_elo = db.get_elo_logs()
     st.download_button(
         label="💾 Download ELO Geschiedenis",
@@ -36,7 +36,7 @@ def render_data_tab():
     st.dataframe(df_elo, width='stretch')
 
     # --- Beheer Logging ---
-    st.subheader("Beheer Logging (Admin acties)")
+    st.subheader("📝 Beheer Logging (Admin acties)")
     df_beheer_log = db.get_beheer_log()
     if not df_beheer_log.empty:
         st.dataframe(df_beheer_log, width='stretch')
