@@ -65,3 +65,11 @@ def render_players_tab(players_df):
     st.markdown("<hr />", unsafe_allow_html=True)
     
     show_current_players(players_df)
+
+    # --- ELO ontwikkeling grafiek ---
+    import firestore_service as db
+    matches_df = db.get_matches()
+    if not players_df.empty:
+        st.subheader("Ontwikkeling ELO rating per speler")
+        from tab_home import show_elo_history_selector
+        show_elo_history_selector(players_df)

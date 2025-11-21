@@ -730,6 +730,20 @@ with tab4:
                             season_matches = pd.DataFrame()
                         
                         if not season_matches.empty:
+                            # --- ELO ontwikkeling grafiek voor geselecteerd seizoen ---
+                            try:
+                                from tab_home import show_elo_history_selector
+                                st.markdown("---")
+                                st.subheader("Ontwikkeling ELO rating per speler (dit seizoen)")
+                                # Filter spelers naar alleen spelers die in dit seizoen actief zijn
+                                season_players = set()
+                                for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                                    if col in season_matches.columns:
+                                        season_players.update(season_matches[col].dropna().astype(str).tolist())
+                                filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
+                                show_elo_history_selector(filtered_players_df, season_matches)
+                            except Exception as e:
+                                st.error(f"Fout bij tonen van ELO ontwikkeling grafiek: {e}")
                             # Basis statistieken
                             col1, col2, col3, col4 = st.columns(4)
                             
