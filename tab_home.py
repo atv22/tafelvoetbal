@@ -176,7 +176,11 @@ def show_elo_history_selector(players_df, matches_df=None):
         else:
             filtered_players_df = players_df.iloc[0:0]
         player_names = sorted(filtered_players_df['speler_naam'].tolist())
-        selected_player = st.selectbox("Selecteer een speler:", player_names)
+        # Gebruik een unieke key gebaseerd op het id van matches_df indien aanwezig
+        key = None
+        if matches_df is not None:
+            key = f"elo_select_{id(matches_df)}"
+        selected_player = st.selectbox("Selecteer een speler:", player_names, key=key)
         if selected_player:
             # Haal de ELO geschiedenis op voor de geselecteerde speler
             history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
@@ -272,20 +276,24 @@ def render_home_tab(players_df, matches_df):
                         player_matches = season_matches[pd.concat(conditions, axis=1).any(axis=1)]
                     matches_played = len(player_matches)
                     wins = 0
+                    goals = 0
                     for _, match in player_matches.iterrows():
                         player_is_home = match.get('thuis_1') == name or match.get('thuis_2') == name
                         player_is_away = match.get('uit_1') == name or match.get('uit_2') == name
                         if player_is_home:
                             if int(match.get('thuis_score', 0)) > int(match.get('uit_score', 0)):
                                 wins += 1
+                            goals += int(match.get('thuis_score', 0))
                         elif player_is_away:
                             if int(match.get('uit_score', 0)) > int(match.get('thuis_score', 0)):
                                 wins += 1
+                            goals += int(match.get('uit_score', 0))
                     win_rate = (wins / matches_played) * 100 if matches_played > 0 else 0
                     stats.append({
                         'Speler': name,
                         'Wedstrijden': matches_played,
-                        'Win Rate %': win_rate
+                        'Win Rate %': win_rate,
+                        'Goals': goals
                     })
                 df_stats = pd.DataFrame(stats)
                 if not df_stats.empty:
@@ -294,6 +302,7 @@ def render_home_tab(players_df, matches_df):
                         df_stats,
                         x='Wedstrijden',
                         y='Win Rate %',
+                        size='Goals',
                         hover_name='Speler',
                         title='Activiteit vs Win Rate (huidig seizoen)',
                         color='Win Rate %',
