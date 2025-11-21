@@ -71,11 +71,70 @@ def calculate_stats(players, matches):
 
 def show_elo_rankings(players_df, matches_df):
     """Toon de huidige ELO rankings tabel"""
-    stats_df = calculate_stats(players_df, matches_df)
-    
+    # --- Filter: alleen spelers die dit seizoen gespeeld hebben ---
+    from datetime import date
+    import pandas as pd
+    # Bepaal huidige datum
+    today = date.today()
+    # Zoek alle unieke seizoenen op basis van Prinsjesdag (zoals in app.py)
+    def get_prinsjesdag(year):
+        from datetime import date, timedelta
+        first_september = date(year, 9, 1)
+        days_until_tuesday = (1 - first_september.weekday()) % 7
+        first_tuesday = first_september + timedelta(days=days_until_tuesday)
+        prinsjesdag = first_tuesday + timedelta(days=14)
+        return prinsjesdag
+
+    # Genereer seizoenen
+    if not matches_df.empty:
+        match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+        min_year = max(2020, match_dates.min().year - 1)
+        max_year = min(today.year + 1, match_dates.max().year + 1)
+        current_season = None
+        for year in range(min_year, max_year + 1):
+            start = get_prinsjesdag(year - 1)
+            end = get_prinsjesdag(year)
+            if start <= today <= end:
+                current_season = (start, end)
+                break
+        # Filter wedstrijden van dit seizoen
+        if current_season:
+            match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+            season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
+            # Bepaal spelers die dit seizoen gespeeld hebben
+            season_players = set()
+            for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                if col in season_matches.columns:
+                    season_players.update(season_matches[col].dropna().astype(str).tolist())
+            # Filter players_df op deze namen
+            filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
+        else:
+            filtered_players_df = players_df.iloc[0:0]  # Geen huidig seizoen
+    else:
+        filtered_players_df = players_df.iloc[0:0]
+
+    stats_df = calculate_stats(filtered_players_df, matches_df)
     # Sorteer en selecteer kolommen voor weergave
-    display_df = stats_df.sort_values(by='ELO', ascending=False)
-    st.dataframe(display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']], width='stretch')
+    display_df = stats_df.sort_values(by='ELO', ascending=False).reset_index(drop=True)
+    # Top 3 kleuren
+    def highlight_top3(row):
+        idx = row.name
+        if idx == 0:
+            return ['background-color: gold'] * len(row)
+        elif idx == 1:
+            return ['background-color: silver'] * len(row)
+        elif idx == 2:
+            return ['background-color: #cd7f32'] * len(row)  # brons
+        else:
+            return [''] * len(row)
+    if not display_df.empty:
+        st.dataframe(
+            display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
+            .style.apply(highlight_top3, axis=1),
+            width='stretch'
+        )
+    else:
+        st.info("Geen spelers hebben dit seizoen een wedstrijd gespeeld.")
 
 
 def show_elo_history_selector(players_df):

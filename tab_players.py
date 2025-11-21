@@ -18,10 +18,39 @@ def show_current_players(players_df):
     """Toon de huidige spelers lijst"""
     st.header("Huidige spelerslijst")
 
+    import pandas as pd
+    import firestore_service as db
+
+    matches_df = db.get_matches()
+
     if not players_df.empty:
-        # We only need the names for this table
-        df_namen = players_df[['speler_naam']].rename(columns={'speler_naam': 'Huidige namen'}).sort_values(by='Huidige namen')
-        st.table(df_namen)
+        # Prepare stats: id, name, matches played, active since
+        stats = []
+        for _, row in players_df.iterrows():
+            name = row['speler_naam']
+            player_id = row.get('speler_id', '')
+            # Count matches played
+            matches_played = 0
+            first_match = None
+            if not matches_df.empty:
+                player_matches = pd.DataFrame()
+                conditions = []
+                for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                    if col in matches_df.columns:
+                        conditions.append(matches_df[col] == name)
+                if conditions:
+                    player_matches = matches_df[pd.concat(conditions, axis=1).any(axis=1)]
+                matches_played = len(player_matches)
+                if not player_matches.empty and 'datum' in player_matches.columns:
+                    first_match = pd.to_datetime(player_matches['datum']).min().date()
+            stats.append({
+                'ID': player_id,
+                'Naam': name,
+                'Gespeeld': matches_played,
+                'Actief sinds': first_match.strftime('%d-%m-%Y') if first_match else '-'
+            })
+        df_stats = pd.DataFrame(stats).sort_values(by='Naam')
+        st.dataframe(df_stats, width='stretch')
     else:
         st.info("Geen spelers gevonden.")
 
