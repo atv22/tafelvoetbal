@@ -37,14 +37,16 @@ def render_match_input_form(player_names, player_elos):
         with score_cols[1]:
             away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1)
 
-        # Datum keuze: standaard vandaag, mag historisch zijn
-        match_date = st.date_input("Datum van de wedstrijd", value=None, help="Laat leeg voor vandaag, of kies een historische datum")
-        if match_date is None:
-            from datetime import date as _date
-            match_date = _date.today()
+        # Datum en tijd keuze: standaard nu, mag historisch zijn
+        from datetime import datetime, date, time as dt_time
+        now = datetime.now()
+        match_date = st.date_input("Datum van de wedstrijd", value=now.date(), help="Standaard vandaag. Kies een andere dag indien gewenst.")
+        match_time = st.time_input("Tijd van de wedstrijd", value=now.time(), help="Standaard huidige tijd. Kies een andere tijd indien gewenst.")
 
         if st.form_submit_button("Verstuur Uitslag"):
-            return process_match_submission(selected_names, home_score, away_score, player_elos, match_date)
+            # Combineer datum en tijd tot volledige timestamp
+            match_datetime = datetime.combine(match_date, match_time)
+            return process_match_submission(selected_names, home_score, away_score, player_elos, match_datetime)
     
     return False
 
@@ -91,9 +93,7 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
 
 def prepare_match_data(selected_names, home_score, away_score, match_date):
     """Bereid wedstrijd data voor om op te slaan inclusief custom datum"""
-    from datetime import datetime
-    # Maak timestamp op basis van gekozen datum (middernacht) zodat ordering klopt
-    match_dt = datetime.combine(match_date, datetime.min.time())
+    # match_date is nu een datetime object
     return {
         'thuis_1': selected_names['Thuis 1']['name'],
         'thuis_2': selected_names['Thuis 2']['name'],
@@ -105,7 +105,7 @@ def prepare_match_data(selected_names, home_score, away_score, match_date):
         'klinkers_thuis_2': selected_names['Thuis 2']['klinkers'],
         'klinkers_uit_1': selected_names['Uit 1']['klinkers'],
         'klinkers_uit_2': selected_names['Uit 2']['klinkers'],
-        'timestamp': match_dt,
+        'timestamp': match_date,
     }
 
 
