@@ -44,12 +44,15 @@ def show_current_players(players_df):
                 if not player_matches.empty and 'datum' in player_matches.columns:
                     first_match = pd.to_datetime(player_matches['datum']).min().date()
             stats.append({
-                'ID': player_id,
                 'Naam': name,
+                'ID': player_id,
                 'Gespeeld': matches_played,
                 'Actief sinds': first_match.strftime('%d-%m-%Y') if first_match else '-'
             })
         df_stats = pd.DataFrame(stats).sort_values(by='Naam')
+        # Zet de kolomvolgorde: Naam eerst
+        kolommen = ['Naam', 'ID', 'Gespeeld', 'Actief sinds']
+        df_stats = df_stats[kolommen]
         st.dataframe(df_stats, width='stretch')
     else:
         st.info("Geen spelers gevonden.")

@@ -116,21 +116,21 @@ def show_elo_rankings(players_df, matches_df):
     stats_df = calculate_stats(filtered_players_df, matches_df)
     # Sorteer en selecteer kolommen voor weergave
     display_df = stats_df.sort_values(by='ELO', ascending=False).reset_index(drop=True)
-    # Top 3 kleuren
-    def highlight_top3(row):
+    # Top 3 lichtgroen kleuren
+    def highlight_top3_lightgreen(row):
         idx = row.name
         if idx == 0:
-            return ['background-color: gold'] * len(row)
+            return ['background-color: #d4edda'] * len(row)
         elif idx == 1:
-            return ['background-color: silver'] * len(row)
+            return ['background-color: #eafaf1'] * len(row)
         elif idx == 2:
-            return ['background-color: #cd7f32'] * len(row)  # brons
+            return ['background-color: #f4fbf7'] * len(row)
         else:
             return [''] * len(row)
     if not display_df.empty:
         st.dataframe(
             display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
-            .style.apply(highlight_top3, axis=1),
+            .style.apply(highlight_top3_lightgreen, axis=1),
             width='stretch'
         )
     else:
@@ -139,13 +139,46 @@ def show_elo_rankings(players_df, matches_df):
 
 def show_elo_history_selector(players_df):
     """Toon speler selectie voor ELO geschiedenis"""
-    player_names = sorted(players_df['speler_naam'].tolist())
+    # Filter alleen spelers van huidig seizoen (zoals in show_elo_rankings)
+    from datetime import date
+    import pandas as pd
+    matches_df = db.get_matches()
+    today = date.today()
+    def get_prinsjesdag(year):
+        from datetime import date, timedelta
+        first_september = date(year, 9, 1)
+        days_until_tuesday = (1 - first_september.weekday()) % 7
+        first_tuesday = first_september + timedelta(days=days_until_tuesday)
+        prinsjesdag = first_tuesday + timedelta(days=14)
+        return prinsjesdag
+    if not matches_df.empty:
+        match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+        min_year = max(2020, match_dates.min().year - 1)
+        max_year = min(today.year + 1, match_dates.max().year + 1)
+        current_season = None
+        for year in range(min_year, max_year + 1):
+            start = get_prinsjesdag(year - 1)
+            end = get_prinsjesdag(year)
+            if start <= today <= end:
+                current_season = (start, end)
+                break
+        if current_season:
+            match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+            season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
+            season_players = set()
+            for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                if col in season_matches.columns:
+                    season_players.update(season_matches[col].dropna().astype(str).tolist())
+            filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
+        else:
+            filtered_players_df = players_df.iloc[0:0]
+    else:
+        filtered_players_df = players_df.iloc[0:0]
+    player_names = sorted(filtered_players_df['speler_naam'].tolist())
     selected_player = st.selectbox("Selecteer een speler:", player_names)
-    
     if selected_player:
         # Haal de ELO geschiedenis op voor de geselecteerde speler
         history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
-        
         if not history_df.empty:
             history_df['match_num'] = range(1, len(history_df) + 1)
             st.line_chart(history_df, x='match_num', y='rating')
