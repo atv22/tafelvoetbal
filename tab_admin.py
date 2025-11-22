@@ -536,61 +536,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
                         st.rerun()
             except Exception as e:
                 st.error(f"❌ Fout bij verwerken CSV: {e}")
-    # Seizoenen
-    with upload_subtab3:
-        st.subheader("Seizoengegevens Uploaden")
-        uploaded_seasons = st.file_uploader(
-            "📁 Upload seizoenen CSV bestand",
-            type=["csv"],
-            key="seasons_upload_main",
-            help="Upload seizoensdata",
-        )
-        if uploaded_seasons is not None:
-            try:
-                seasons_upload_df = pd.read_csv(uploaded_seasons)
-                st.dataframe(seasons_upload_df.head(10), width='stretch')
-                required = ["startdatum", "einddatum"]
-                missing = [c for c in required if c not in seasons_upload_df.columns]
-                if missing:
-                    st.error(f"❌ Ontbrekende verplichte kolommen: {', '.join(missing)}")
-                    return
-                errors = []
-                for idx in range(len(seasons_upload_df)):
-                    row = seasons_upload_df.iloc[idx]
-                    try:
-                        start = pd.to_datetime(row["startdatum"])
-                        end = pd.to_datetime(row["einddatum"])
-                        if end <= start:
-                            errors.append(
-                                f"Rij {idx+1}: Einddatum moet na startdatum liggen"
-                            )
-                    except Exception:
-                        errors.append(
-                            f"Rij {idx+1}: Ongeldig datum formaat"
-                        )
-                if errors:
-                    st.error("❌ Validatie fouten:")
-                    for err in errors[:5]:
-                        st.error(f"• {err}")
-                    return
-                st.success("✅ Alle seizoengegevens zijn geldig!")
-                st.info(
-                    f"📊 Upload samenvatting: {len(seasons_upload_df)} seizoenen klaar voor import"
-                )
-                if st.button("🚀 Import Seizoenen", type="primary"):
-                    with st.spinner(
-                        f"Bezig met importeren van {len(seasons_upload_df)} seizoenen..."
-                    ):
-                        added, duplicates = db.import_seasons(
-                            seasons_upload_df.to_dict("records")
-                        )
-                        st.success(
-                            f"🎉 Import voltooid! {added} toegevoegd, {duplicates} duplicaten genegeerd."
-                        )
-                        time.sleep(1.5)
-                        st.rerun()
-            except Exception as e:
-                st.error(f"❌ Fout bij verwerken CSV: {e}")
+    # Seizoenen upload-tab verwijderd: seizoenen worden automatisch bepaald uit wedstrijddata
 
 # ---------------------------------------------------------------------------
 # Systeem beheer
