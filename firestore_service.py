@@ -394,12 +394,12 @@ def get_seasons():
         start = season_bounds[i]
         end = season_bounds[i + 1] - timedelta(seconds=1)
         seizoen_naam = f"Seizoen {start.year}/{end.year}"
+        print(f"[SEIZOEN] {seizoen_naam}: start={start} eind={end}")
         mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
         seizoen_df = df[mask]
         n_matches = int(mask.sum())
         first_ts = seizoen_df['timestamp'].min() if not seizoen_df.empty else None
         last_ts = seizoen_df['timestamp'].max() if not seizoen_df.empty else None
-        # ...existing code...
         seizoenen.append({
             'startdatum': start,
             'einddatum': end,

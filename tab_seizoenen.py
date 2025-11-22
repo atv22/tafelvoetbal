@@ -44,7 +44,20 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                 # Zoek ELO's van deze spelers op dat moment
                 from firestore_service import get_elo_logs
                 elo_df = get_elo_logs()
-                elo_df = elo_df[elo_df['timestamp'] <= laatste_dag]
+                # Forceer beide naar tz-naive
+                elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
+                # Forceer altijd tz-naive (UTC) voor alle timestamps
+                try:
+                    elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+                except Exception:
+                    elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)
+                laatste_dag_naive = pd.to_datetime(laatste_dag)
+                if hasattr(laatste_dag_naive, 'tzinfo') and laatste_dag_naive.tzinfo is not None:
+                    try:
+                        laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)
+                    except Exception:
+                        laatste_dag_naive = laatste_dag_naive.tz_localize(None)
+                elo_df = elo_df[elo_df['timestamp'] <= laatste_dag_naive]
                 laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
                 laatste_elo = laatste_elo[laatste_elo['speler_naam'].isin(spelers)]
                 if not laatste_elo.empty:
@@ -62,7 +75,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
         # Format start/einddatum netjes
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
             if col in seasons_display.columns:
-                seasons_display[col] = pd.to_datetime(seasons_display[col]).dt.strftime('%d-%m-%Y')
+                seasons_display[col] = pd.to_datetime(seasons_display[col]).dt.strftime('%d-%m-%Y %H:%M')
         # Vertaal kolomnamen
         col_map = {
             'startdatum': 'Startdatum',
