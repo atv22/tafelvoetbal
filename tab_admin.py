@@ -850,6 +850,23 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         _render_match_delete(db, matches_df)
 
         st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader("🗑️ Alle uitslagen verwijderen")
+        st.warning("⚠️ Dit verwijdert **alle** uitslagen uit de Firestore database. Zorg dat je eerst een backup/download maakt!")
+        if st.button("Verwijder alle uitslagen", key="delete_all_matches"):
+            st.info("Bevestig dat je een backup hebt gemaakt voordat je verder gaat.")
+            confirm = st.checkbox("Ik heb een backup van de uitslagen gemaakt en wil alles verwijderen.", key="confirm_delete_all_matches")
+            if confirm:
+                with st.spinner("Alle uitslagen worden verwijderd..."):
+                    from firestore_service import matches_ref
+                    docs = list(matches_ref.stream())
+                    deleted = 0
+                    for doc in docs:
+                        doc.reference.delete()
+                        deleted += 1
+                    st.success(f"Alle uitslagen ({deleted}) zijn verwijderd uit Firestore.")
+                    st.rerun()
+
+        st.markdown("<hr>", unsafe_allow_html=True)
         st.subheader("🗑️ Speler Verwijderen")
         if players_df.empty:
             st.info("Geen spelers om te beheren.")
