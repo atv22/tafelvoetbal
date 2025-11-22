@@ -10,15 +10,32 @@ import firestore_service as db
 def calculate_stats(players, matches):
     """Bereken statistieken voor alle spelers"""
     stats_list = []
+    # Detect column names for home/away players
+    if not matches.empty:
+        match_row = matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+            klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
+            klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+            klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
+            klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
+        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
+        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
+
     for index, player in players.iterrows():
         player_name = str(player['speler_naam']) if player['speler_naam'] is not None else ""
-        
         # Veilige filtering om KeyError te voorkomen
         conditions = []
-        for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+        for col in home_cols + away_cols:
             if col in matches.columns:
                 conditions.append(matches[col] == player_name)
-        
         if not conditions:
             player_matches = pd.DataFrame()
         else:
@@ -31,24 +48,21 @@ def calculate_stats(players, matches):
             goals_against = 0
             klinkers = 0
             for _, match in player_matches.iterrows():
-                thuis_spelers = [match.get('thuis_1'), match.get('thuis_2')]
-                uit_spelers = [match.get('uit_1'), match.get('uit_2')]
-                
+                thuis_spelers = [match.get(col) for col in home_cols]
+                uit_spelers = [match.get(col) for col in away_cols]
                 if player_name in thuis_spelers:
                     goals_for += int(match.get('thuis_score', 0) or 0)
                     goals_against += int(match.get('uit_score', 0) or 0)
-                    if player_name == match.get('thuis_1'):
-                        klinkers += int(match.get('klinkers_thuis_1', 0) or 0)
-                    else:
-                        klinkers += int(match.get('klinkers_thuis_2', 0) or 0)
+                    # Klinkers
+                    for i, col in enumerate(home_cols):
+                        if player_name == match.get(col):
+                            klinkers += int(match.get(klinkers_home[i], 0) or 0)
                 elif player_name in uit_spelers:
                     goals_for += int(match.get('uit_score', 0) or 0)
                     goals_against += int(match.get('thuis_score', 0) or 0)
-                    if player_name == match.get('uit_1'):
-                        klinkers += int(match.get('klinkers_uit_1', 0) or 0)
-                    else:
-                        klinkers += int(match.get('klinkers_uit_2', 0) or 0)
-            
+                    for i, col in enumerate(away_cols):
+                        if player_name == match.get(col):
+                            klinkers += int(match.get(klinkers_away[i], 0) or 0)
             stats = {
                 'Gespeeld': len(player_matches),
                 'Voor': int(goals_for),
@@ -57,7 +71,6 @@ def calculate_stats(players, matches):
                 'Klinkers': int(klinkers),
                 'Speler': ""  # Placeholder voor string type
             }
-        
         stats['Speler'] = player_name
         # Veilige conversie van rating met fallback naar 1000 als default
         rating_value = player.get('rating', 1000)
@@ -65,7 +78,6 @@ def calculate_stats(players, matches):
             rating_value = 1000
         stats['ELO'] = int(rating_value)
         stats_list.append(stats)
-        
     return pd.DataFrame(stats_list)
 
 
@@ -87,7 +99,8 @@ def show_elo_rankings(players_df, matches_df):
 
     # Genereer seizoenen
     if not matches_df.empty:
-        match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+        # Gebruik 'timestamp' als datumkolom
+        match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
         min_year = max(2020, match_dates.min().year - 1)
         max_year = min(today.year + 1, match_dates.max().year + 1)
         current_season = None
@@ -99,7 +112,7 @@ def show_elo_rankings(players_df, matches_df):
                 break
         # Filter wedstrijden van dit seizoen
         if current_season:
-            match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+            match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None).dt.date
             season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
             # Bepaal spelers die dit seizoen gespeeld hebben
             season_players = set()
@@ -153,7 +166,7 @@ def show_elo_history_selector(players_df, matches_df=None):
             prinsjesdag = first_tuesday + timedelta(days=14)
             return prinsjesdag
         if not matches_df.empty:
-            match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+            match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
             min_year = max(2020, match_dates.min().year - 1)
             max_year = min(today.year + 1, match_dates.max().year + 1)
             current_season = None
@@ -164,7 +177,7 @@ def show_elo_history_selector(players_df, matches_df=None):
                     current_season = (start, end)
                     break
             if current_season:
-                match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+                match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None).dt.date
                 season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
                 season_players = set()
                 for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
@@ -244,7 +257,7 @@ def render_home_tab(players_df, matches_df):
             prinsjesdag = first_tuesday + timedelta(days=14)
             return prinsjesdag
         if not matches_df.empty:
-            match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
+            match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
             min_year = max(2020, match_dates.min().year - 1)
             max_year = min(today.year + 1, match_dates.max().year + 1)
             current_season = None
@@ -255,7 +268,7 @@ def render_home_tab(players_df, matches_df):
                     current_season = (start, end)
                     break
             if current_season:
-                match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None).dt.date
+                match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None).dt.date
                 season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
                 # Bepaal spelers die dit seizoen gespeeld hebben
                 season_players = set()

@@ -73,6 +73,7 @@ def validate_match_input(selected_names, home_score, away_score):
 def calculate_new_elos(selected_names, home_score, away_score, player_elos):
     """Bereken nieuwe ELO ratings voor alle spelers"""
     # Prepare match dict for new ELO calculation
+    # Detect home/away columns for ELO calculation (support both schemas)
     match = {
         "Thuis_1": selected_names['Thuis 1']['name'],
         "Thuis_2": selected_names['Thuis 2']['name'],
@@ -81,12 +82,11 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
         "Thuis_score": home_score,
         "Uit_score": away_score
     }
-    # Build ELO history dict (only latest rating for now)
     all_ELO_ratings = {}
     for player in [match["Thuis_1"], match["Thuis_2"], match["Uit_1"], match["Uit_2"]]:
-        all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+        if player is not None:
+            all_ELO_ratings[player] = [player_elos.get(player, 1000)]
     new_elo_df = calculate_new_elo(match, all_ELO_ratings)
-    # Convert DataFrame to dict
     new_elos = dict(zip(new_elo_df["Speler"], new_elo_df["ELO"].astype(float)))
     return new_elos
 
@@ -94,11 +94,16 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
 def prepare_match_data(selected_names, home_score, away_score, match_date):
     """Bereid wedstrijd data voor om op te slaan inclusief custom datum"""
     # match_date is nu een datetime object
+    # Store both old and new schema keys for compatibility
     return {
         'thuis_1': selected_names['Thuis 1']['name'],
         'thuis_2': selected_names['Thuis 2']['name'],
         'uit_1': selected_names['Uit 1']['name'],
         'uit_2': selected_names['Uit 2']['name'],
+        'thuis_speler_1': selected_names['Thuis 1']['name'],
+        'thuis_speler_2': selected_names['Thuis 2']['name'],
+        'uit_speler_1': selected_names['Uit 1']['name'],
+        'uit_speler_2': selected_names['Uit 2']['name'],
         'thuis_score': home_score,
         'uit_score': away_score,
         'klinkers_thuis_1': selected_names['Thuis 1']['klinkers'],

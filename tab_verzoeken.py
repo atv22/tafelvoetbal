@@ -8,7 +8,7 @@ from utils import add_request
 import firestore_service as db
 
 
-def render_requests_tab():
+def render_verzoeken_tab(matches_df=None):
     st.header("💬 Verzoeken")
     st.subheader("Verzoek indienen")
     st.write("Laat hier je suggestie, bugmelding of wens achter (max 250 tekens).")

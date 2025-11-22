@@ -108,8 +108,15 @@ def generate_prinsjesdag_seasons(matches_df):
                             match['uit_speler_1'], match['uit_speler_2']
                         ])
                     
+                    # Detect season name column
+                    if 'seizoen_naam' in season:
+                        season_name = season['seizoen_naam']
+                    elif 'seizoen' in season:
+                        season_name = season['seizoen']
+                    else:
+                        season_name = f"Seizoen {season.get('seizoen_jaar', '?')}"
                     seasons_with_stats.append({
-                        'seizoen_naam': season['seizoen_naam'],
+                        'seizoen_naam': season_name,
                         'start_datum': season['start_datum'],
                         'eind_datum': season['eind_datum'],
                         'prinsjesdag': season['prinsjesdag'],
@@ -171,30 +178,41 @@ def calculate_season_stats(season_matches):
         player_goals = {}
         player_wins = {}
         
+        # Detect home/away columns
+        if not season_matches.empty:
+            match_row = season_matches.iloc[0]
+            if 'thuis_speler_1' in match_row:
+                home_cols = ['thuis_speler_1', 'thuis_speler_2']
+                away_cols = ['uit_speler_1', 'uit_speler_2']
+            else:
+                home_cols = ['thuis_1', 'thuis_2']
+                away_cols = ['uit_1', 'uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
         for _, match in season_matches.iterrows():
-            home_players = [match['thuis_speler_1'], match['thuis_speler_2']]
-            away_players = [match['uit_speler_1'], match['uit_speler_2']]
-            
+            home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+            away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
             # Track alle spelers
-            all_players.update(home_players + away_players)
-            
+            all_players.update([p for p in home_players + away_players if p is not None])
             # Track matches per speler
             for player in home_players + away_players:
-                player_matches[player] = player_matches.get(player, 0) + 1
-                player_goals[player] = player_goals.get(player, 0)
-            
+                if player is not None:
+                    player_matches[player] = player_matches.get(player, 0) + 1
+                    player_goals[player] = player_goals.get(player, 0)
             # Track goals per speler
             for player in home_players:
-                player_goals[player] += match['thuis_score']
-                player_wins[player] = player_wins.get(player, 0)
-                if match['thuis_score'] > match['uit_score']:
-                    player_wins[player] += 1
-            
+                if player is not None:
+                    player_goals[player] += match['thuis_score']
+                    player_wins[player] = player_wins.get(player, 0)
+                    if match['thuis_score'] > match['uit_score']:
+                        player_wins[player] += 1
             for player in away_players:
-                player_goals[player] += match['uit_score'] 
-                player_wins[player] = player_wins.get(player, 0)
-                if match['uit_score'] > match['thuis_score']:
-                    player_wins[player] += 1
+                if player is not None:
+                    player_goals[player] += match['uit_score']
+                    player_wins[player] = player_wins.get(player, 0)
+                    if match['uit_score'] > match['thuis_score']:
+                        player_wins[player] += 1
         
         stats['unique_players'] = len(all_players)
         stats['most_active_player'] = max(player_matches.items(), key=lambda x: x[1]) if player_matches else ("N/A", 0)

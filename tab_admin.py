@@ -52,9 +52,21 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         )
 
     matches_display_df = matches_df.copy()
+    # Detect home/away columns
+    if not matches_display_df.empty:
+        match_row = matches_display_df.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     matches_display_df["display"] = matches_display_df.apply(
         lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
-        f"{row.get('thuis_1', 'N/A')}/{row.get('thuis_2', 'N/A')} vs {row.get('uit_1', 'N/A')}/{row.get('uit_2', 'N/A')}: "
+        f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
         f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
         axis=1,
     )
@@ -152,9 +164,21 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
 
     player_names = sorted(players_df["speler_naam"].tolist())
     matches_display_df = matches_df.copy()
+    # Detect home/away columns
+    if not matches_display_df.empty:
+        match_row = matches_display_df.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     matches_display_df["display"] = matches_display_df.apply(
         lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
-        f"{row.get('thuis_1', 'N/A')}/{row.get('thuis_2', 'N/A')} vs {row.get('uit_1', 'N/A')}/{row.get('uit_2', 'N/A')}: "
+        f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
         f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
         axis=1,
     )
@@ -354,17 +378,13 @@ def _render_uploads(db, players_df: pd.DataFrame):
                     st.error("❌ Geen 'timestamp' of 'date'+'tijd' kolommen gevonden. Een datum/tijd is verplicht.")
                     return
                 st.dataframe(matches_upload_df.head(10), width='stretch')
-                required_columns = [
-                    "thuis_1",
-                    "thuis_2",
-                    "uit_1",
-                    "uit_2",
-                    "thuis_score",
-                    "uit_score",
+                # Accept both old and new column names
+                required_sets = [
+                    ["thuis_1", "thuis_2", "uit_1", "uit_2", "thuis_score", "uit_score"],
+                    ["thuis_speler_1", "thuis_speler_2", "uit_speler_1", "uit_speler_2", "thuis_score", "uit_score"]
                 ]
-                missing = [c for c in required_columns if c not in matches_upload_df.columns]
-                if missing:
-                    st.error(f"❌ Ontbrekende verplichte kolommen: {', '.join(missing)}")
+                if not any(all(c in matches_upload_df.columns for c in req) for req in required_sets):
+                    st.error("❌ Ontbrekende verplichte kolommen: upload moet ofwel (thuis_1, thuis_2, uit_1, uit_2) of (thuis_speler_1, thuis_speler_2, uit_speler_1, uit_speler_2) bevatten.")
                     return
                 for opt in [
                     "klinkers_thuis_1",

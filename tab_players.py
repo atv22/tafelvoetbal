@@ -24,6 +24,18 @@ def show_current_players(players_df):
     matches_df = db.get_matches()
 
     if not players_df.empty:
+        # Detect column names for home/away players
+        if not matches_df.empty:
+            match_row = matches_df.iloc[0]
+            if 'thuis_speler_1' in match_row:
+                home_cols = ['thuis_speler_1', 'thuis_speler_2']
+                away_cols = ['uit_speler_1', 'uit_speler_2']
+            else:
+                home_cols = ['thuis_1', 'thuis_2']
+                away_cols = ['uit_1', 'uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
         # Prepare stats: id, name, matches played, active since
         stats = []
         for _, row in players_df.iterrows():
@@ -35,14 +47,14 @@ def show_current_players(players_df):
             if not matches_df.empty:
                 player_matches = pd.DataFrame()
                 conditions = []
-                for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                for col in home_cols + away_cols:
                     if col in matches_df.columns:
                         conditions.append(matches_df[col] == name)
                 if conditions:
                     player_matches = matches_df[pd.concat(conditions, axis=1).any(axis=1)]
                 matches_played = len(player_matches)
-                if not player_matches.empty and 'datum' in player_matches.columns:
-                    first_match = pd.to_datetime(player_matches['datum']).min().date()
+                if not player_matches.empty and 'timestamp' in player_matches.columns:
+                    first_match = pd.to_datetime(player_matches['timestamp']).min().date()
             stats.append({
                 'Naam': name,
                 'ID': player_id,

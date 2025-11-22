@@ -11,7 +11,7 @@ from collections import defaultdict
 def show_timeline_chart(matches_df):
     """Toon een timeline chart van wedstrijden"""
     if not matches_df.empty:
-        matches_per_day = matches_df.groupby(matches_df['datum'].dt.date).size()
+        matches_per_day = matches_df.groupby(matches_df['timestamp'].dt.date).size()
         fig_timeline = px.bar(
             x=matches_per_day.index,
             y=matches_per_day.values,
@@ -30,13 +30,24 @@ def show_timeline_chart(matches_df):
 def show_matches_bar_chart(season_matches):
     """Toon een bar chart van wedstrijden per speler in een seizoen"""
     all_players_matches = []
+    # Detect home/away columns
+    if not season_matches.empty:
+        match_row = season_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in season_matches.iterrows():
         all_players_matches.extend([
-            match['thuis_speler_1'], match['thuis_speler_2'],
-            match['uit_speler_1'], match['uit_speler_2']
+            match.get(home_cols[0], None), match.get(home_cols[1], None),
+            match.get(away_cols[0], None), match.get(away_cols[1], None)
         ])
-    
-    matches_count = pd.Series(all_players_matches).value_counts()
+    matches_count = pd.Series([p for p in all_players_matches if p is not None]).value_counts()
     
     fig_matches = px.bar(
         x=matches_count.index,
@@ -52,14 +63,25 @@ def show_matches_bar_chart(season_matches):
 def show_unique_players_bar_chart(season_matches):
     """Toon een bar chart van unieke spelers per dag"""
     daily_players = defaultdict(set)
+    # Detect home/away columns
+    if not season_matches.empty:
+        match_row = season_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in season_matches.iterrows():
-        day = match['datum'].date()
+        day = match['timestamp'].date()
         daily_players[day].update([
-            match['thuis_speler_1'], match['thuis_speler_2'],
-            match['uit_speler_1'], match['uit_speler_2']
+            match.get(home_cols[0], None), match.get(home_cols[1], None),
+            match.get(away_cols[0], None), match.get(away_cols[1], None)
         ])
-    
-    daily_unique = {day: len(players) for day, players in daily_players.items()}
+    daily_unique = {day: len([p for p in players if p is not None]) for day, players in daily_players.items()}
     daily_df = pd.DataFrame(list(daily_unique.items()), columns=['Datum', 'Unieke spelers'])
     
     fig_players = px.bar(
@@ -75,11 +97,11 @@ def show_unique_players_bar_chart(season_matches):
 
 def show_goals_line_chart(season_matches):
     """Toon een lijn chart van gemiddelde goals per wedstrijd over tijd"""
-    daily_goals = season_matches.groupby(season_matches['datum'].dt.date).agg({
+    daily_goals = season_matches.groupby(season_matches['timestamp'].dt.date).agg({
         'thuis_score': 'sum',
         'uit_score': 'sum',
-        'datum': 'count'  # aantal wedstrijden
-    }).rename(columns={'datum': 'matches_count'})
+        'timestamp': 'count'  # aantal wedstrijden
+    }).rename(columns={'timestamp': 'matches_count'})
     
     daily_goals['total_goals'] = daily_goals['thuis_score'] + daily_goals['uit_score']
     daily_goals['avg_goals_per_match'] = daily_goals['total_goals'] / daily_goals['matches_count']
@@ -101,14 +123,29 @@ def show_all_time_goals_chart(all_matches):
     """Toon all-time goals chart voor alle seizoenen"""
     all_goals = defaultdict(int)
     
+    # Detect home/away columns
+    if not all_matches.empty:
+        match_row = all_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in all_matches.iterrows():
         # Thuis team goals
-        all_goals[match['thuis_speler_1']] += match['thuis_score']
-        all_goals[match['thuis_speler_2']] += match['thuis_score']
-        
+        for col in home_cols:
+            player = match.get(col, None)
+            if player is not None:
+                all_goals[player] += match['thuis_score']
         # Uit team goals
-        all_goals[match['uit_speler_1']] += match['uit_score']
-        all_goals[match['uit_speler_2']] += match['uit_score']
+        for col in away_cols:
+            player = match.get(col, None)
+            if player is not None:
+                all_goals[player] += match['uit_score']
     
     goals_df = pd.DataFrame(list(all_goals.items()), columns=['Speler', 'Goals']).sort_values('Goals', ascending=False)
     
@@ -129,19 +166,31 @@ def show_activity_vs_winrate_scatter(all_matches):
     """Toon scatter plot van activiteit vs winpercentage"""
     player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
     
+    # Detect home/away columns
+    if not all_matches.empty:
+        match_row = all_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in all_matches.iterrows():
-        home_players = [match['thuis_speler_1'], match['thuis_speler_2']]
-        away_players = [match['uit_speler_1'], match['uit_speler_2']]
-        
+        home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+        away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
         for player in home_players:
-            player_stats[player]['matches'] += 1
-            if match['thuis_score'] > match['uit_score']:
-                player_stats[player]['wins'] += 1
-        
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['thuis_score'] > match['uit_score']:
+                    player_stats[player]['wins'] += 1
         for player in away_players:
-            player_stats[player]['matches'] += 1
-            if match['uit_score'] > match['thuis_score']:
-                player_stats[player]['wins'] += 1
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['uit_score'] > match['thuis_score']:
+                    player_stats[player]['wins'] += 1
     
     scatter_data = []
     for player, stats in player_stats.items():
@@ -171,10 +220,17 @@ def show_activity_vs_winrate_scatter(all_matches):
 def show_season_distribution_pie(seasons_df):
     """Toon pie chart van seizoen distributie"""
     if not seasons_df.empty and 'aantal_wedstrijden' in seasons_df.columns:
+        # Detect season name column
+        if 'seizoen_naam' in seasons_df.columns:
+            name_col = 'seizoen_naam'
+        elif 'seizoen' in seasons_df.columns:
+            name_col = 'seizoen'
+        else:
+            name_col = seasons_df.columns[0]
         fig_pie = px.pie(
             seasons_df,
             values='aantal_wedstrijden',
-            names='seizoen_naam',
+            names=name_col,
             title="Distributie wedstrijden per seizoen"
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
@@ -200,19 +256,31 @@ def show_winrate_bar_chart(season_matches, min_matches=5):
     """Toon winpercentage bar chart voor een specifiek seizoen"""
     player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
     
+    # Detect home/away columns
+    if not season_matches.empty:
+        match_row = season_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in season_matches.iterrows():
-        home_players = [match['thuis_speler_1'], match['thuis_speler_2']]
-        away_players = [match['uit_speler_1'], match['uit_speler_2']]
-        
+        home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+        away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
         for player in home_players:
-            player_stats[player]['matches'] += 1
-            if match['thuis_score'] > match['uit_score']:
-                player_stats[player]['wins'] += 1
-        
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['thuis_score'] > match['uit_score']:
+                    player_stats[player]['wins'] += 1
         for player in away_players:
-            player_stats[player]['matches'] += 1
-            if match['uit_score'] > match['thuis_score']:
-                player_stats[player]['wins'] += 1
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['uit_score'] > match['thuis_score']:
+                    player_stats[player]['wins'] += 1
     
     winrate_data = []
     for player, stats in player_stats.items():
@@ -242,14 +310,29 @@ def show_goals_bar_chart_season(season_matches):
     """Toon goals bar chart voor een specifiek seizoen"""
     goals_stats = defaultdict(int)
     
+    # Detect home/away columns
+    if not season_matches.empty:
+        match_row = season_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in season_matches.iterrows():
         # Thuis team goals
-        goals_stats[match['thuis_speler_1']] += match['thuis_score']
-        goals_stats[match['thuis_speler_2']] += match['thuis_score']
-        
-        # Uit team goals  
-        goals_stats[match['uit_speler_1']] += match['uit_score']
-        goals_stats[match['uit_speler_2']] += match['uit_score']
+        for col in home_cols:
+            player = match.get(col, None)
+            if player is not None:
+                goals_stats[player] += match['thuis_score']
+        # Uit team goals
+        for col in away_cols:
+            player = match.get(col, None)
+            if player is not None:
+                goals_stats[player] += match['uit_score']
     
     goals_data = [{'Speler': player, 'Goals': goals} for player, goals in goals_stats.items()]
     if goals_data:
@@ -277,33 +360,43 @@ def create_all_time_leaderboards(all_matches):
         'max_elo': 1000  # Start ELO
     })
     
+    # Detect home/away columns
+    if not all_matches.empty:
+        match_row = all_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     for _, match in all_matches.iterrows():
-        home_players = [match['thuis_speler_1'], match['thuis_speler_2']]
-        away_players = [match['uit_speler_1'], match['uit_speler_2']]
-        
+        home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+        away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
         # Home team stats
         for player in home_players:
-            player_stats[player]['matches'] += 1
-            player_stats[player]['goals'] += match['thuis_score']
-            if match['thuis_score'] > match['uit_score']:
-                player_stats[player]['wins'] += 1
-            
-            # ELO tracking (zou uit ELO historie moeten komen, maar we schatten)
-            if 'klinkers_thuis_1' in match and match['klinkers_thuis_1'] and player == match['thuis_speler_1']:
-                estimated_elo = 1000 + (player_stats[player]['wins'] * 20)
-                player_stats[player]['max_elo'] = max(player_stats[player]['max_elo'], estimated_elo)
-        
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                player_stats[player]['goals'] += match['thuis_score']
+                if match['thuis_score'] > match['uit_score']:
+                    player_stats[player]['wins'] += 1
+                # ELO tracking (zou uit ELO historie moeten komen, maar we schatten)
+                if 'klinkers_thuis_1' in match and match['klinkers_thuis_1'] and player == match.get(home_cols[0], None):
+                    estimated_elo = 1000 + (player_stats[player]['wins'] * 20)
+                    player_stats[player]['max_elo'] = max(player_stats[player]['max_elo'], estimated_elo)
         # Away team stats
         for player in away_players:
-            player_stats[player]['matches'] += 1
-            player_stats[player]['goals'] += match['uit_score']
-            if match['uit_score'] > match['thuis_score']:
-                player_stats[player]['wins'] += 1
-            
-            # ELO tracking
-            if 'klinkers_uit_1' in match and match['klinkers_uit_1'] and player == match['uit_speler_1']:
-                estimated_elo = 1000 + (player_stats[player]['wins'] * 20)
-                player_stats[player]['max_elo'] = max(player_stats[player]['max_elo'], estimated_elo)
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                player_stats[player]['goals'] += match['uit_score']
+                if match['uit_score'] > match['thuis_score']:
+                    player_stats[player]['wins'] += 1
+                # ELO tracking
+                if 'klinkers_uit_1' in match and match['klinkers_uit_1'] and player == match.get(away_cols[0], None):
+                    estimated_elo = 1000 + (player_stats[player]['wins'] * 20)
+                    player_stats[player]['max_elo'] = max(player_stats[player]['max_elo'], estimated_elo)
     
     return player_stats
 
@@ -340,50 +433,73 @@ def show_all_time_leaderboards(player_stats):
 
 def show_cross_season_charts(all_matches, seasons_df):
     """Toon cross-seizoen analyse charts"""
-    
+    import streamlit as st
+    import pandas as pd
+    from collections import defaultdict
+
     if all_matches.empty:
         return
-        
     st.subheader("📊 Cross-Seizoen Analyses")
-    
     # ELO ontwikkeling over seizoenen (geschatte versie)
     player_season_elo = defaultdict(lambda: defaultdict(int))
     player_season_matches = defaultdict(lambda: defaultdict(int))
-    
+
+    # Detect column names for start/end date and season name
+    if not seasons_df.empty:
+        season_row = seasons_df.iloc[0]
+        start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
+        end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
+        if 'seizoen_naam' in season_row:
+            name_col = 'seizoen_naam'
+        elif 'seizoen' in season_row:
+            name_col = 'seizoen'
+        else:
+            name_col = seasons_df.columns[0]  # fallback to first column
+    else:
+        start_col = 'start_datum'
+        end_col = 'eind_datum'
+        name_col = 'seizoen_naam'
+
+    # Detect player column names
+    if not all_matches.empty:
+        match_row = all_matches.iloc[0]
+        if 'thuis_speler_1' in match_row:
+            home_cols = ['thuis_speler_1', 'thuis_speler_2']
+            away_cols = ['uit_speler_1', 'uit_speler_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_speler_1', 'thuis_speler_2']
+        away_cols = ['uit_speler_1', 'uit_speler_2']
+
     for _, match in all_matches.iterrows():
-        match_date = pd.to_datetime(match['datum']).tz_localize(None)
-        
+        match_date = pd.to_datetime(match['timestamp']).tz_localize(None)
         # Vind seizoen voor deze wedstrijd
         current_season = "Onbekend"
         for _, season in seasons_df.iterrows():
-            season_start = pd.to_datetime(season['start_datum']).tz_localize(None)
-            season_end = pd.to_datetime(season['eind_datum']).tz_localize(None)
+            season_start = pd.to_datetime(season[start_col]).tz_localize(None)
+            season_end = pd.to_datetime(season[end_col]).tz_localize(None)
             if season_start <= match_date <= season_end:
-                current_season = season['seizoen_naam']
+                current_season = season[name_col]
                 break
-        
         # Track matches per seizoen
-        home_players = [match['thuis_speler_1'], match['thuis_speler_2']]
-        away_players = [match['uit_speler_1'], match['uit_speler_2']]
-        
+        home_players = [match[col] for col in home_cols]
+        away_players = [match[col] for col in away_cols]
         for player in home_players + away_players:
             player_season_matches[player][current_season] += 1
-    
     # Seizoen vergelijking chart
     if len(seasons_df) > 1:
         season_comparison = []
         for _, season in seasons_df.iterrows():
             season_comparison.append({
-                'Seizoen': season['seizoen_naam'],
+                'Seizoen': season[name_col],
                 'Wedstrijden': season.get('aantal_wedstrijden', 0),
                 'Gem. Goals': season.get('gemiddelde_goals', 0)
             })
-        
         if season_comparison:
             comparison_df = pd.DataFrame(season_comparison)
-            
             col1, col2 = st.columns(2)
-            
             with col1:
                 fig_season_matches = px.bar(
                     comparison_df,
@@ -394,7 +510,6 @@ def show_cross_season_charts(all_matches, seasons_df):
                     color_continuous_scale='Blues'
                 )
                 st.plotly_chart(fig_season_matches, config={'responsive': True})
-            
             with col2:
                 if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
                     fig_season_goals = px.line(
@@ -416,7 +531,7 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
         return
     
     # Seizoen header
-    seizoen_naam = season_info.get('seizoen_naam', 'Onbekend Seizoen')
+    seizoen_naam = season_info.get('seizoen_naam') or season_info.get('seizoen') or 'Onbekend Seizoen'
     st.subheader(f"📈 {seizoen_naam}")
     
     # Prinsjesdag info
@@ -442,12 +557,24 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     with col4:
         # Unieke spelers
         unique_players = set()
+        # Detect home/away columns
+        if not season_matches.empty:
+            match_row = season_matches.iloc[0]
+            if 'thuis_speler_1' in match_row:
+                home_cols = ['thuis_speler_1', 'thuis_speler_2']
+                away_cols = ['uit_speler_1', 'uit_speler_2']
+            else:
+                home_cols = ['thuis_1', 'thuis_2']
+                away_cols = ['uit_1', 'uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
         for _, match in season_matches.iterrows():
             unique_players.update([
-                match['thuis_speler_1'], match['thuis_speler_2'],
-                match['uit_speler_1'], match['uit_speler_2']
+                match.get(home_cols[0], None), match.get(home_cols[1], None),
+                match.get(away_cols[0], None), match.get(away_cols[1], None)
             ])
-        st.metric("Actieve Spelers", len(unique_players))
+        st.metric("Actieve Spelers", len([p for p in unique_players if p is not None]))
     
     # Visualisaties in columns
     st.subheader("📊 Seizoen Visualisaties")

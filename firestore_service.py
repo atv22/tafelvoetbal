@@ -160,7 +160,6 @@ def recalculate_elos_for_season(start_date, end_date):
         if batch_counter > 0:
             batch.commit()
         st.cache_data.clear()
-        get_players.clear()
         get_matches.clear()
         return True
     except Exception as e:
@@ -287,17 +286,24 @@ def get_matches():
         # Normaliseer timestamp naar pandas datetime
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['datum'] = df['timestamp']
+
+        # Verwijder overbodige kolommen indien aanwezig
+        cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
+        for col in cols_to_remove:
+            if col in df.columns:
+                df = df.drop(columns=col)
 
         # Herorder kolommen in logische volgorde
         desired_columns = [
             'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
             'thuis_score', 'uit_score',
             'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
-            'datum', 'timestamp', 'match_id'
+            'timestamp', 'match_id'
         ]
         available_columns = [col for col in desired_columns if col in df.columns]
-        df = df[available_columns]
+        # Voeg overige kolommen toe die niet in desired_columns staan
+        other_columns = [col for col in df.columns if col not in available_columns]
+        df = df[available_columns + other_columns]
 
     return df
 
@@ -340,10 +346,12 @@ def get_seasons():
         jaar_df = df[df['jaar'] == jaar]
         startdatum = jaar_df['timestamp'].min()
         einddatum = jaar_df['timestamp'].max()
+        seizoen_naam = f"Seizoen {jaar-1}/{jaar}"
         seizoenen.append({
             'startdatum': startdatum,
             'einddatum': einddatum,
             'jaar': jaar,
+            'seizoen_naam': seizoen_naam,
             'aantal_wedstrijden': len(jaar_df)
         })
     return pd.DataFrame(seizoenen)
@@ -381,7 +389,7 @@ def expected_schema():
             'optional': {
                 'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2'
             },
-            'derived_only_in_app': {'match_id', 'datum'}
+            'derived_only_in_app': {'match_id'}
         },
         'requests': {
             'required': {'Verzoek', 'Timestamp'},
