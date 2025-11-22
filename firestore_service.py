@@ -357,9 +357,8 @@ def get_seasons():
         first_tuesday = september + timedelta(days=(1 - weekday) % 7)
         # Derde dinsdag
         prinsjesdag = first_tuesday + timedelta(days=14)
-        # Seizoen start om 24:00 (dus eigenlijk de dag erna)
-        dt = datetime.combine(prinsjesdag, datetime.max.time())
-        # Maak ook deze datetime naive
+        # Seizoen start om 00:00:00 (inclusief hele dag Prinsjesdag)
+        dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
 
     # Zoek het eerste en laatste jaar in de data
@@ -374,9 +373,9 @@ def get_seasons():
     seizoenen = []
     for i in range(len(season_bounds) - 1):
         start = season_bounds[i]
-        end = season_bounds[i + 1]
+        # Einde is de dag vóór de volgende Prinsjesdag om 23:59:59
+        end = season_bounds[i + 1] - timedelta(seconds=1)
         seizoen_naam = f"Seizoen {start.year}/{end.year}"
-        # Fix: neem wedstrijden op de startdatum mee (>= start)
         seizoen_df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
         seizoenen.append({
             'startdatum': start,
@@ -394,8 +393,8 @@ def get_seasons():
     # Vind huidige seizoen
     for i in range(len(season_bounds) - 1):
         start = season_bounds[i]
-        end = season_bounds[i + 1]
-        if start < datetime.combine(today, datetime.max.time()) <= end:
+        end = season_bounds[i + 1] - timedelta(seconds=1)
+        if start <= datetime.combine(today, datetime.min.time()) <= end:
             seizoen_naam = f"Seizoen {start.year}/{end.year}"
             if not any(s['seizoen_naam'] == seizoen_naam for s in seizoenen):
                 seizoenen.append({
