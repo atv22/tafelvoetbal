@@ -18,6 +18,19 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
             if col in seasons_display.columns:
                 seasons_display[col] = pd.to_datetime(seasons_display[col]).dt.strftime('%d-%m-%Y')
+        # Vertaal kolomnamen
+        col_map = {
+            'startdatum': 'Startdatum',
+            'einddatum': 'Einddatum',
+            'start_datum': 'Startdatum',
+            'eind_datum': 'Einddatum',
+            'seizoen_naam': 'Seizoen',
+            'seizoen': 'Seizoen',
+            'jaar': 'Jaar',
+            'aantal_wedstrijden': 'Aantal wedstrijden',
+            'gemiddelde_goals': 'Gemiddelde goals',
+        }
+        seasons_display = seasons_display.rename(columns=col_map)
         st.dataframe(seasons_display, use_container_width=True)
 
     # Seizoenselectie: alle of specifiek seizoen
@@ -45,26 +58,21 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
     else:
         selected = season_options[0]
 
-    # Extra analyses bovenaan: timeline, all-time goals, activiteit vs winrate, seizoen distributie
-    from analytics import show_timeline_chart, show_all_time_goals_chart, show_activity_vs_winrate_scatter, show_season_distribution_pie
+    # All-time ranglijsten direct onder seizoenen tabel en selectie
+    player_stats = create_all_time_leaderboards(matches_df)
+    show_all_time_leaderboards(player_stats)
 
-    st.subheader("📈 Wedstrijden per dag (timeline)")
+    # Extra analyses: timeline, activiteit vs winpercentage
+    from analytics import show_timeline_chart, show_activity_vs_winrate_scatter
+
+    st.subheader("📈 Wedstrijden per dag (tijdlijn)")
     show_timeline_chart(matches_df)
 
-    st.subheader("🥅 All-time Topscorers")
-    show_all_time_goals_chart(matches_df)
-
     st.subheader("📊 Activiteit vs Winpercentage")
-    show_activity_vs_winrate_scatter(matches_df)
-
-    st.subheader("🥧 Distributie wedstrijden per seizoen")
-    show_season_distribution_pie(seasons_df)
+    show_activity_vs_winrate_scatter(matches_df, key_suffix="seizoenen")
 
     # Toon cross-seizoen analyses altijd
     show_cross_season_charts(matches_df, seasons_df)
-    # Toon all-time leaderboards altijd
-    player_stats = create_all_time_leaderboards(matches_df)
-    show_all_time_leaderboards(player_stats)
 
     # Toon analyses voor geselecteerd seizoen of alle seizoenen
     if selected == "Alle seizoenen":
@@ -84,5 +92,15 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
             season_start = pd.to_datetime(season_row[start_col])
             season_end = pd.to_datetime(season_row[end_col])
+            # Maak grenzen timezone-naive
+            if hasattr(season_start, 'tzinfo') and season_start.tzinfo is not None:
+                season_start = season_start.tz_convert('UTC').tz_localize(None)
+            if hasattr(season_end, 'tzinfo') and season_end.tzinfo is not None:
+                season_end = season_end.tz_convert('UTC').tz_localize(None)
+            # Zorg dat de timestamps in matches_df ook naive zijn
+            ts = matches_df['timestamp']
+            if hasattr(ts.dt, 'tz') and ts.dt.tz is not None:
+                matches_df = matches_df.copy()
+                matches_df['timestamp'] = ts.dt.tz_convert('UTC').dt.tz_localize(None)
             season_matches = matches_df[(matches_df['timestamp'] >= season_start) & (matches_df['timestamp'] <= season_end)]
             show_individual_season_analysis(season_row, season_matches)
