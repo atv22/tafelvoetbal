@@ -334,7 +334,7 @@ def get_elo_history(_ttl, speler_naam):
 @st.cache_data
 def get_seasons():
     """Bepaalt seizoenen automatisch op basis van kalenderjaar uit de wedstrijddata."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).limit(500).stream()
+    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
     matches = [doc.to_dict() for doc in matches_docs]
     if not matches:
         return pd.DataFrame()
@@ -343,11 +343,18 @@ def get_seasons():
         return pd.DataFrame()
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
-    print("[DEBUG] Eerste 5 wedstrijden in get_seasons():")
-    print(df.head())
-    # Maak alle timestamps naive (zonder timezone)
+    # ...existing code...
+    # Forceer alle timestamps naar tz-naive (UTC)
     if df['timestamp'].dt.tz is not None:
         df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+    else:
+        # Soms zijn ze tz-aware zonder .dt.tz, dus probeer altijd te localizen
+        try:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
+        except Exception:
+            pass
+
+    # ...existing code...
 
     # Bepaal alle Prinsjesdagen
     from datetime import date, timedelta, datetime
@@ -362,6 +369,17 @@ def get_seasons():
         # Seizoen start om 00:00:00 (inclusief hele dag Prinsjesdag)
         dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
+
+    # DEBUG: Toon alle wedstrijden die in het huidige seizoen vallen
+    # Bepaal Prinsjesdag van huidig jaar
+    vandaag = date.today()
+    huidig_prinsjesdag = get_prinsjesdag(vandaag.year)
+    if vandaag < huidig_prinsjesdag.date():
+        huidig_prinsjesdag = get_prinsjesdag(vandaag.year - 1)
+    volgende_prinsjesdag = get_prinsjesdag(huidig_prinsjesdag.year + 1)
+    huidig_seizoen_mask = (df['timestamp'] >= huidig_prinsjesdag) & (df['timestamp'] < volgende_prinsjesdag)
+    huidig_seizoen_df = df[huidig_seizoen_mask]
+    # ...existing code...
 
     # Zoek het eerste en laatste jaar in de data
     min_year = df['timestamp'].dt.year.min()
@@ -381,8 +399,7 @@ def get_seasons():
         n_matches = int(mask.sum())
         first_ts = seizoen_df['timestamp'].min() if not seizoen_df.empty else None
         last_ts = seizoen_df['timestamp'].max() if not seizoen_df.empty else None
-        print(f"[DEBUG] {seizoen_naam}: {n_matches} wedstrijden, grenzen: {start} t/m {end}")
-        print(f"        Eerste: {first_ts}, Laatste: {last_ts}")
+        # ...existing code...
         seizoenen.append({
             'startdatum': start,
             'einddatum': end,
