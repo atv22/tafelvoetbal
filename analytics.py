@@ -27,34 +27,6 @@ def show_timeline_chart(matches_df):
         st.plotly_chart(fig_timeline, config={'responsive': True}, key="timeline_chart")
 
 
-def show_matches_bar_chart(season_matches):
-    """Toon een bar chart van wedstrijden per speler in een seizoen"""
-    all_players_matches = []
-    # Detect home/away columns
-    if not season_matches.empty:
-        match_row = season_matches.iloc[0]
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-    else:
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-    for _, match in season_matches.iterrows():
-        all_players_matches.extend([
-            match.get(home_cols[0], None), match.get(home_cols[1], None),
-            match.get(away_cols[0], None), match.get(away_cols[1], None)
-        ])
-    matches_count = pd.Series([p for p in all_players_matches if p is not None]).value_counts()
-    
-    fig_matches = px.bar(
-        x=matches_count.index,
-        y=matches_count.values,
-        labels={'x': 'Speler', 'y': 'Aantal wedstrijden'},
-        title="Wedstrijden per speler",
-        color_discrete_sequence=['#2ca02c']
-    )
-    fig_matches.update_layout(xaxis_title="Speler", yaxis_title="Aantal wedstrijden")
-    st.plotly_chart(fig_matches, config={'responsive': True}, key="matches_bar_chart")
-
 
 def show_unique_players_bar_chart(season_matches):
     """Toon een bar chart van unieke spelers per dag"""
@@ -87,28 +59,6 @@ def show_unique_players_bar_chart(season_matches):
     st.plotly_chart(fig_players, config={'responsive': True}, key="unique_players_bar_chart")
 
 
-def show_goals_line_chart(season_matches):
-    """Toon een lijn chart van gemiddelde goals per wedstrijd over tijd"""
-    daily_goals = season_matches.groupby(season_matches['timestamp'].dt.date).agg({
-        'thuis_score': 'sum',
-        'uit_score': 'sum',
-        'timestamp': 'count'  # aantal wedstrijden
-    }).rename(columns={'timestamp': 'matches_count'})
-    
-    daily_goals['total_goals'] = daily_goals['thuis_score'] + daily_goals['uit_score']
-    daily_goals['avg_goals_per_match'] = daily_goals['total_goals'] / daily_goals['matches_count']
-    
-    fig_goals = px.line(
-        x=daily_goals.index,
-        y=daily_goals['avg_goals_per_match'],
-        title="Gemiddelde goals per wedstrijd over tijd",
-        color_discrete_sequence=['#d62728']
-    )
-    fig_goals.update_layout(
-        xaxis_title="Datum", 
-        yaxis_title="Gemiddelde goals per wedstrijd"
-    )
-    st.plotly_chart(fig_goals, config={'responsive': True}, key="goals_line_chart")
 
 
 def show_all_time_goals_chart(all_matches):
@@ -151,12 +101,9 @@ def show_all_time_goals_chart(all_matches):
 
 
 def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
-    """Toon scatter plot van activiteit vs winpercentage"""
-    player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
-    
-    # Detect home/away columns
+    """Toon scatter plot van activiteit vs winpercentage, omvang bol = aantal goals, kleur = aantal wins"""
+    player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0, 'goals': 0})
     if not all_matches.empty:
-        match_row = all_matches.iloc[0]
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
     else:
@@ -168,33 +115,38 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
         for player in home_players:
             if player is not None:
                 player_stats[player]['matches'] += 1
+                player_stats[player]['goals'] += match['thuis_score']
                 if match['thuis_score'] > match['uit_score']:
                     player_stats[player]['wins'] += 1
         for player in away_players:
             if player is not None:
                 player_stats[player]['matches'] += 1
+                player_stats[player]['goals'] += match['uit_score']
                 if match['uit_score'] > match['thuis_score']:
                     player_stats[player]['wins'] += 1
-    
     scatter_data = []
     for player, stats in player_stats.items():
-        if stats['matches'] >= 5:  # Minimaal 5 wedstrijden voor betrouwbaarheid
+        if stats['matches'] >= 5:
             win_rate = (stats['wins'] / stats['matches']) * 100
             scatter_data.append({
                 'Speler': player,
                 'Wedstrijden': stats['matches'],
-                'Winpercentage': win_rate
+                'Winpercentage': win_rate,
+                'Goals': stats['goals'],
+                'Wins': stats['wins']
             })
-    
     if scatter_data:
         scatter_df = pd.DataFrame(scatter_data)
         fig_scatter = px.scatter(
             scatter_df,
             x='Wedstrijden',
             y='Winpercentage',
+            size='Goals',
+            color='Wins',
+            color_continuous_scale='Blues',
             text='Speler',
             title="Activiteit vs Winpercentage (min. 5 wedstrijden)",
-            hover_data=['Speler', 'Wedstrijden', 'Winpercentage']
+            hover_data=['Speler', 'Wedstrijden', 'Winpercentage', 'Goals', 'Wins']
         )
         fig_scatter.update_traces(textposition="top center")
         fig_scatter.update_layout(xaxis_title="Aantal Wedstrijden", yaxis_title="Winpercentage (%)")
@@ -381,8 +333,7 @@ def create_all_time_leaderboards(all_matches):
 
 
 def show_all_time_leaderboards(player_stats):
-    """Toon alle all-time leaderboards"""
-    
+    """Toon alle all-time leaderboards, inclusief winpercentage en goal difference"""
     st.subheader("🏆 All-time Ranglijsten")
 
     # Data voorbereiden
@@ -406,21 +357,49 @@ def show_all_time_leaderboards(player_stats):
         {"#": i, "Speler": player, "Hoogste ELO": stats['max_elo'], "Klinkers totaal": stats['klinkers']} for i, (player, stats) in enumerate(klinker_masters, 1)
     ])
 
-    # Toon drie tabellen naast elkaar
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    # Nieuw: hoogste winpercentage (min 20 wedstrijden)
+    win_pct_list = []
+    for player, stats in player_stats.items():
+        if stats['matches'] >= 20:
+            win_pct = (stats['wins'] / stats['matches']) * 100 if stats['matches'] > 0 else 0
+            win_pct_list.append((player, win_pct, stats['matches']))
+    top_win_pct = sorted(win_pct_list, key=lambda x: x[1], reverse=True)[:5]
+    df_win_pct = pd.DataFrame([
+        {"#": i, "Speler": player, "Win%": f"{win_pct:.1f}", "Wedstrijden": matches} for i, (player, win_pct, matches) in enumerate(top_win_pct, 1)
+    ])
+
+    # Nieuw: beste goals per match (min 20 wedstrijden)
+    goals_per_match_list = []
+    for player, stats in player_stats.items():
+        if stats['matches'] >= 20:
+            gpm = stats['goals'] / stats['matches'] if stats['matches'] > 0 else 0
+            goals_per_match_list.append((player, gpm, stats['matches']))
+    top_gpm = sorted(goals_per_match_list, key=lambda x: x[1], reverse=True)[:5]
+    df_gpm = pd.DataFrame([
+        {"#": i, "Speler": player, "Goals/Wedstrijd": f"{gpm:.2f}", "Wedstrijden": matches} for i, (player, gpm, matches) in enumerate(top_gpm, 1)
+    ])
+
+    # Toon zes tabellen in 2 rijen van 3 kolommen
+    row1 = st.columns(3)
+    row2 = st.columns(3)
+    with row1[0]:
         st.write("**🥅 Top 5 All-time Topscorers:**")
         st.dataframe(df_scorers, hide_index=True, use_container_width=True)
-    with col2:
+    with row1[1]:
         st.write("**⚽ Top 5 Meest Actief:**")
         st.dataframe(df_active, hide_index=True, use_container_width=True)
-    with col3:
+    with row1[2]:
         st.write("**🏅 Top 5 Meeste Overwinningen:**")
         st.dataframe(df_wins, hide_index=True, use_container_width=True)
-
-    # Klinker Masters apart onderaan
-    st.write("**🎯 Top 5 Klinker Masters (hoogste ELO):**")
-    st.dataframe(df_klinkers, hide_index=True, use_container_width=True)
+    with row2[0]:
+        st.write("**🎯 Top 5 Klinker Masters (hoogste ELO):**")
+        st.dataframe(df_klinkers, hide_index=True, use_container_width=True)
+    with row2[1]:
+        st.write("**📈 Top 5 Hoogste Winpercentage (min. 20 wedstrijden):**")
+        st.dataframe(df_win_pct, hide_index=True, use_container_width=True)
+    with row2[2]:
+        st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20 wedstrijden):**")
+        st.dataframe(df_gpm, hide_index=True, use_container_width=True)
 
 
 def show_cross_season_charts(all_matches, seasons_df):
@@ -482,32 +461,19 @@ def show_cross_season_charts(all_matches, seasons_df):
         for _, season in seasons_df.iterrows():
             season_comparison.append({
                 'Seizoen': season[name_col],
-                'Wedstrijden': season.get('aantal_wedstrijden', 0),
                 'Gem. Goals': season.get('gemiddelde_goals', 0)
             })
         if season_comparison:
             comparison_df = pd.DataFrame(season_comparison)
-            col1, col2 = st.columns(2)
-            with col1:
-                fig_season_matches = px.bar(
+            if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
+                fig_season_goals = px.line(
                     comparison_df,
                     x='Seizoen',
-                    y='Wedstrijden',
-                    title="Wedstrijden per Seizoen",
-                    color='Wedstrijden',
-                    color_continuous_scale='Blues'
+                    y='Gem. Goals',
+                    title="Gemiddelde Goals per Seizoen",
+                    markers=True
                 )
-                st.plotly_chart(fig_season_matches, config={'responsive': True}, key="cross_season_matches_chart")
-            with col2:
-                if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
-                    fig_season_goals = px.line(
-                        comparison_df,
-                        x='Seizoen',
-                        y='Gem. Goals',
-                        title="Gemiddelde Goals per Seizoen",
-                        markers=True
-                    )
-                    st.plotly_chart(fig_season_goals, config={'responsive': True}, key="cross_season_goals_chart")
+                st.plotly_chart(fig_season_goals, config={'responsive': True}, key="cross_season_goals_chart")
 
 
 def show_individual_season_analysis(season_info, season_matches, season_elo=None):
@@ -559,19 +525,45 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     st.subheader("📊 Seizoen Visualisaties")
     
     col1, col2 = st.columns(2)
-    
     with col1:
-        show_matches_bar_chart(season_matches)
         show_goals_bar_chart_season(season_matches)
-    
     with col2:
         show_unique_players_bar_chart(season_matches)
         show_winrate_bar_chart(season_matches)
+
+    import pandas as pd
+    # Vierde grafiek: Meeste klinkers per speler in dit seizoen
+    klinker_stats = defaultdict(int)
+    home_cols = ['thuis_1', 'thuis_2']
+    away_cols = ['uit_1', 'uit_2']
+    for _, match in season_matches.iterrows():
+        for idx, col in enumerate(home_cols):
+            speler = match.get(col, None)
+            if speler is not None:
+                klinker_col = f'klinkers_thuis_{idx+1}'
+                klinker_stats[speler] += match.get(klinker_col, 0) or 0
+        for idx, col in enumerate(away_cols):
+            speler = match.get(col, None)
+            if speler is not None:
+                klinker_col = f'klinkers_uit_{idx+1}'
+                klinker_stats[speler] += match.get(klinker_col, 0) or 0
+    klinker_df = pd.DataFrame(list(klinker_stats.items()), columns=['Speler', 'Klinkers']).sort_values('Klinkers', ascending=False)
+    if not klinker_df.empty and klinker_df['Klinkers'].sum() > 0:
+        st.subheader("🔔 Meeste klinkers dit seizoen")
+        fig_klinkers = px.bar(
+            klinker_df.head(10),
+            x='Speler',
+            y='Klinkers',
+            title="Top 10 Klinkers dit seizoen",
+            color='Klinkers',
+            color_continuous_scale='OrRd'
+        )
+        fig_klinkers.update_layout(xaxis_title="Speler", yaxis_title="Klinkers")
+        st.plotly_chart(fig_klinkers, config={'responsive': True}, key="klinkers_bar_chart_season")
     
     # ELO ratings als beschikbaar
     if season_elo is not None and not season_elo.empty:
         st.subheader("🏆 ELO Rankings")
         show_elo_bar_chart(season_elo)
     
-    # Goals trend over tijd
-    show_goals_line_chart(season_matches)
+    # (verwijderd: goals trend over tijd)
