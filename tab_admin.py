@@ -777,6 +777,17 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     tab_elo, tab_verwijderen, tab_bewerken, tab_upload, tab_inspectie = st.tabs([
         "⚡ ELO beheer", "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload", "🔍 Inspectie"])
 
+    # Cache wissen knop (bovenaan beheer-tab)
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("🧹 Streamlit Cache wissen")
+    st.info("Gebruik deze knop als je problemen ervaart met verouderde data, seizoensindeling of na een grote wijziging. De app wordt direct herladen.")
+    if st.button("Cache wissen en herladen", key="clear_cache"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.success("Streamlit cache is gewist. De app wordt herladen...")
+        time.sleep(1)
+        st.rerun()
+
     with tab_elo:
         st.header("⚡ ELO Beheer")
         st.subheader("🗑️ Hele ELO Geschiedenis wissen")
