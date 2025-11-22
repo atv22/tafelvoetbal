@@ -6,3 +6,4 @@ google-auth
 plotly
 pytest
 selenium
+chardet
