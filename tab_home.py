@@ -248,14 +248,29 @@ def render_home_tab(players_df, matches_df):
         st.info("Nog geen spelers geregistreerd. Ga naar 'Spelers' om spelers toe te voegen.")
         return
 
-    # --- Huidige ELO rating tonen ---
-    st.subheader("Huidige ELO rating van alle spelers")
-    show_elo_rankings(players_df, matches_df)
-
-    # Activiteit vs Winpercentage (zelfde als analytics.py)
-    from analytics import show_activity_vs_winrate_scatter
-    st.subheader("Activiteit vs Winpercentage")
-    if matches_df is None or matches_df.empty:
-        st.info("Er zijn nog geen wedstrijden om te analyseren.")
+    # --- Huidig seizoen bepalen ---
+    from firestore_service import get_seasons
+    import datetime
+    seasons_df = get_seasons()
+    today = datetime.date.today()
+    huidig_seizoen = None
+    if not seasons_df.empty:
+        for _, row in seasons_df.iterrows():
+            start = pd.to_datetime(row['startdatum']).date()
+            end = pd.to_datetime(row['einddatum']).date()
+            if start <= today <= end:
+                huidig_seizoen = row
+                break
+    if huidig_seizoen is not None:
+        st.markdown(f"**Huidig seizoen:** {huidig_seizoen['seizoen_naam']}  ")
+        st.markdown(f"Periode: {pd.to_datetime(huidig_seizoen['startdatum']).strftime('%d-%m-%Y %H:%M')} t/m {pd.to_datetime(huidig_seizoen['einddatum']).strftime('%d-%m-%Y %H:%M')}")
+        # Filter wedstrijden op huidig seizoen
+        start = pd.to_datetime(huidig_seizoen['startdatum'])
+        end = pd.to_datetime(huidig_seizoen['einddatum'])
+        matches_df = matches_df[(matches_df['timestamp'] >= start) & (matches_df['timestamp'] <= end)]
     else:
-        show_activity_vs_winrate_scatter(matches_df, key_suffix="home")
+        st.markdown("**Geen huidig seizoen gevonden.**")
+
+    # --- Huidige ELO rating tonen (alleen huidig seizoen) ---
+    st.subheader("Huidige ELO rating van alle spelers (huidig seizoen)")
+    show_elo_rankings(players_df, matches_df)
