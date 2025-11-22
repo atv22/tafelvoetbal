@@ -14,6 +14,51 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
     if not seasons_df.empty:
         st.subheader("Seizoenen overzicht")
         seasons_display = seasons_df.copy()
+        # Extra metrics per seizoen
+        extra_metrics = []
+        for _, row in seasons_display.iterrows():
+            # Filter wedstrijden voor dit seizoen
+            start = pd.to_datetime(row['startdatum'])
+            end = pd.to_datetime(row['einddatum'])
+            seizoen_matches = matches_df[(matches_df['timestamp'] >= start) & (matches_df['timestamp'] <= end)]
+            totaal_goals = int(seizoen_matches['thuis_score'].sum() + seizoen_matches['uit_score'].sum())
+            unieke_spelers = set()
+            for _, m in seizoen_matches.iterrows():
+                unieke_spelers.update([
+                    m.get('thuis_1', None), m.get('thuis_2', None),
+                    m.get('uit_1', None), m.get('uit_2', None)
+                ])
+            unieke_spelers = len([p for p in unieke_spelers if p])
+            # Winnaar bepalen: speler met hoogste ELO aan het einde van het seizoen
+            winnaar = None
+            if not seizoen_matches.empty:
+                laatste_dag = seizoen_matches['timestamp'].max()
+                laatste_matches = seizoen_matches[seizoen_matches['timestamp'] == laatste_dag]
+                # Verzamel alle spelers uit de laatste matches
+                spelers = set()
+                for _, m in laatste_matches.iterrows():
+                    spelers.update([
+                        m.get('thuis_1', None), m.get('thuis_2', None),
+                        m.get('uit_1', None), m.get('uit_2', None)
+                    ])
+                # Zoek ELO's van deze spelers op dat moment
+                from firestore_service import get_elo_logs
+                elo_df = get_elo_logs()
+                elo_df = elo_df[elo_df['timestamp'] <= laatste_dag]
+                laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
+                laatste_elo = laatste_elo[laatste_elo['speler_naam'].isin(spelers)]
+                if not laatste_elo.empty:
+                    winnaar_row = laatste_elo.sort_values('rating', ascending=False).iloc[0]
+                    winnaar = winnaar_row['speler_naam']
+            extra_metrics.append({
+                'totaal_goals': totaal_goals,
+                'unieke_spelers': unieke_spelers,
+                'winnaar': winnaar or "-"
+            })
+        # Voeg toe aan DataFrame
+        seasons_display['Totaal goals'] = [m['totaal_goals'] for m in extra_metrics]
+        seasons_display['Unieke spelers'] = [m['unieke_spelers'] for m in extra_metrics]
+        seasons_display['Winnaar'] = [m['winnaar'] for m in extra_metrics]
         # Format start/einddatum netjes
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
             if col in seasons_display.columns:
@@ -26,12 +71,16 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
             'eind_datum': 'Einddatum',
             'seizoen_naam': 'Seizoen',
             'seizoen': 'Seizoen',
-            'jaar': 'Jaar',
             'aantal_wedstrijden': 'Aantal wedstrijden',
-            'gemiddelde_goals': 'Gemiddelde goals',
+            'Totaal goals': 'Totaal goals',
+            'Unieke spelers': 'Unieke spelers',
+            'Winnaar': 'Winnaar',
         }
         seasons_display = seasons_display.rename(columns=col_map)
-        st.dataframe(seasons_display, use_container_width=True)
+        # Kolomvolgorde: Seizoen, Startdatum, Einddatum, Aantal wedstrijden, Totaal goals, Unieke spelers, Winnaar
+        kolommen = ['Seizoen', 'Startdatum', 'Einddatum', 'Aantal wedstrijden', 'Totaal goals', 'Unieke spelers', 'Winnaar']
+        seasons_display = seasons_display[[k for k in kolommen if k in seasons_display.columns]]
+        st.dataframe(seasons_display, width='stretch')
 
     # Seizoenselectie: alle of specifiek seizoen
     season_options = ["Alle seizoenen"]
