@@ -33,12 +33,8 @@ def show_matches_bar_chart(season_matches):
     # Detect home/away columns
     if not season_matches.empty:
         match_row = season_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -66,12 +62,8 @@ def show_unique_players_bar_chart(season_matches):
     # Detect home/away columns
     if not season_matches.empty:
         match_row = season_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -126,12 +118,8 @@ def show_all_time_goals_chart(all_matches):
     # Detect home/away columns
     if not all_matches.empty:
         match_row = all_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -169,12 +157,8 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
     # Detect home/away columns
     if not all_matches.empty:
         match_row = all_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -260,12 +244,8 @@ def show_winrate_bar_chart(season_matches, min_matches=5):
     # Detect home/away columns
     if not season_matches.empty:
         match_row = season_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -314,12 +294,8 @@ def show_goals_bar_chart_season(season_matches):
     # Detect home/away columns
     if not season_matches.empty:
         match_row = season_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -365,12 +341,8 @@ def create_all_time_leaderboards(all_matches):
     # Detect home/away columns
     if not all_matches.empty:
         match_row = all_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -483,15 +455,11 @@ def show_cross_season_charts(all_matches, seasons_df):
     # Detect player column names
     if not all_matches.empty:
         match_row = all_matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
-        home_cols = ['thuis_speler_1', 'thuis_speler_2']
-        away_cols = ['uit_speler_1', 'uit_speler_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
 
     for _, match in all_matches.iterrows():
         match_date = pd.to_datetime(match['timestamp']).tz_localize(None)
@@ -578,17 +546,8 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
         # Unieke spelers
         unique_players = set()
         # Detect home/away columns
-        if not season_matches.empty:
-            match_row = season_matches.iloc[0]
-            if 'thuis_speler_1' in match_row:
-                home_cols = ['thuis_speler_1', 'thuis_speler_2']
-                away_cols = ['uit_speler_1', 'uit_speler_2']
-            else:
-                home_cols = ['thuis_1', 'thuis_2']
-                away_cols = ['uit_1', 'uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
         for _, match in season_matches.iterrows():
             unique_players.update([
                 match.get(home_cols[0], None), match.get(home_cols[1], None),

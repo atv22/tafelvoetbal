@@ -29,40 +29,62 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                     m.get('uit_1', None), m.get('uit_2', None)
                 ])
             unieke_spelers = len([p for p in unieke_spelers if p])
-            # Winnaar bepalen: speler met hoogste ELO aan het einde van het seizoen
+            # Winnaar bepalen: speler met hoogste ELO in het seizoen (debug info toegevoegd)
             winnaar = None
+            debug_info = ""
             if not seizoen_matches.empty:
-                laatste_dag = seizoen_matches['timestamp'].max()
-                laatste_matches = seizoen_matches[seizoen_matches['timestamp'] == laatste_dag]
-                # Verzamel alle spelers uit de laatste matches
-                spelers = set()
-                for _, m in laatste_matches.iterrows():
-                    spelers.update([
+                # Verzamel ALLE spelers die in het seizoen hebben gespeeld
+                alle_spelers = set()
+                for _, m in seizoen_matches.iterrows():
+                    alle_spelers.update([
                         m.get('thuis_1', None), m.get('thuis_2', None),
                         m.get('uit_1', None), m.get('uit_2', None)
                     ])
-                # Zoek ELO's van deze spelers op dat moment
+                alle_spelers = {p for p in alle_spelers if p}
+                # Zoek ELO's van deze spelers op of vóór de laatste dag van het seizoen, gebruik match_id voor robuustheid
                 from firestore_service import get_elo_logs
                 elo_df = get_elo_logs()
-                # Forceer beide naar tz-naive
-                elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
-                # Forceer altijd tz-naive (UTC) voor alle timestamps
-                try:
-                    elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-                except Exception:
-                    elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)
-                laatste_dag_naive = pd.to_datetime(laatste_dag)
-                if hasattr(laatste_dag_naive, 'tzinfo') and laatste_dag_naive.tzinfo is not None:
+                if not elo_df.empty and 'timestamp' in elo_df.columns:
+                    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
                     try:
-                        laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)
+                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
                     except Exception:
-                        laatste_dag_naive = laatste_dag_naive.tz_localize(None)
-                elo_df = elo_df[elo_df['timestamp'] <= laatste_dag_naive]
-                laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
-                laatste_elo = laatste_elo[laatste_elo['speler_naam'].isin(spelers)]
-                if not laatste_elo.empty:
-                    winnaar_row = laatste_elo.sort_values('rating', ascending=False).iloc[0]
-                    winnaar = winnaar_row['speler_naam']
+                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)
+                    # Filter alleen ELO's tot en met de laatste wedstrijd van het seizoen
+                    laatste_dag = seizoen_matches['timestamp'].max()
+                    laatste_dag_naive = pd.to_datetime(laatste_dag)
+                    if hasattr(laatste_dag_naive, 'tzinfo') and laatste_dag_naive.tzinfo is not None:
+                        try:
+                            laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)
+                        except Exception:
+                            laatste_dag_naive = laatste_dag_naive.tz_localize(None)
+                    # Pak alle match_ids van dit seizoen tot en met de laatste dag
+                    match_ids_in_season = set(seizoen_matches[seizoen_matches['timestamp'] <= laatste_dag_naive]['match_id'])
+                    elo_df = elo_df[(elo_df['match_id'].isin(match_ids_in_season)) & (elo_df['speler_naam'].isin(alle_spelers))]
+                    # Voor elke speler: pak de ELO met de hoogste timestamp (laatste ELO in seizoen)
+                    laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
+                    debug_info += f"<details><summary>Debug: ELO's op laatste dag voor alle spelers in seizoen</summary>"
+                    debug_info += f"<br>Laatste dag: {laatste_dag_naive}"
+                    debug_info += f"<br>Spelers in seizoen: {sorted(list(alle_spelers))}"
+                    debug_info += f"<br>ELO-log entries gevonden: {len(laatste_elo)}"
+                    if not laatste_elo.empty:
+                        debug_info += "<br><table><tr><th>Speler</th><th>ELO</th><th>Tijdstip</th></tr>"
+                        for _, row_elo in laatste_elo.iterrows():
+                            debug_info += f"<tr><td>{row_elo['speler_naam']}</td><td>{row_elo['rating']}</td><td>{row_elo['timestamp']}</td></tr>"
+                        debug_info += "</table>"
+                        winnaar_row = laatste_elo.sort_values('rating', ascending=False).iloc[0]
+                        winnaar = winnaar_row['speler_naam']
+                    else:
+                        debug_info += "<br><b>Geen ELO-log entries gevonden voor deze spelers tot en met laatste dag van het seizoen.</b>"
+                    debug_info += "</details>"
+                else:
+                    debug_info += f"<details><summary>Debug: ELO-log leeg of geen 'timestamp' kolom</summary>"
+                    debug_info += f"<br>Spelers in seizoen: {sorted(list(alle_spelers))}"
+                    debug_info += f"<br>ELO-log is leeg of bevat geen 'timestamp' kolom."
+                    debug_info += "</details>"
+            # Toon debug info in Streamlit
+            if debug_info:
+                st.markdown(debug_info, unsafe_allow_html=True)
             extra_metrics.append({
                 'totaal_goals': totaal_goals,
                 'unieke_spelers': unieke_spelers,

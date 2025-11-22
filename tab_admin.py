@@ -55,12 +55,8 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
     # Detect home/away columns
     if not matches_display_df.empty:
         match_row = matches_display_df.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -167,12 +163,8 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
     # Detect home/away columns
     if not matches_display_df.empty:
         match_row = matches_display_df.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
@@ -381,10 +373,10 @@ def _render_uploads(db, players_df: pd.DataFrame):
                 # Accept both old and new column names
                 required_sets = [
                     ["thuis_1", "thuis_2", "uit_1", "uit_2", "thuis_score", "uit_score"],
-                    ["thuis_speler_1", "thuis_speler_2", "uit_speler_1", "uit_speler_2", "thuis_score", "uit_score"]
+                    ["thuis_1", "thuis_2", "uit_1", "uit_2", "thuis_score", "uit_score"]
                 ]
                 if not any(all(c in matches_upload_df.columns for c in req) for req in required_sets):
-                    st.error("❌ Ontbrekende verplichte kolommen: upload moet ofwel (thuis_1, thuis_2, uit_1, uit_2) of (thuis_speler_1, thuis_speler_2, uit_speler_1, uit_speler_2) bevatten.")
+                    st.error("❌ Ontbrekende verplichte kolommen: upload moet (thuis_1, thuis_2, uit_1, uit_2) bevatten.")
                     return
                 for opt in [
                     "klinkers_thuis_1",

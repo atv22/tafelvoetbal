@@ -104,8 +104,8 @@ def generate_prinsjesdag_seasons(matches_df):
                     unique_players = set()
                     for _, match in season_matches.iterrows():
                         unique_players.update([
-                            match['thuis_speler_1'], match['thuis_speler_2'],
-                            match['uit_speler_1'], match['uit_speler_2']
+                            match['thuis_1'], match['thuis_2'],
+                            match['uit_1'], match['uit_2']
                         ])
                     
                     # Detect season name column
@@ -179,17 +179,8 @@ def calculate_season_stats(season_matches):
         player_wins = {}
         
         # Detect home/away columns
-        if not season_matches.empty:
-            match_row = season_matches.iloc[0]
-            if 'thuis_speler_1' in match_row:
-                home_cols = ['thuis_speler_1', 'thuis_speler_2']
-                away_cols = ['uit_speler_1', 'uit_speler_2']
-            else:
-                home_cols = ['thuis_1', 'thuis_2']
-                away_cols = ['uit_1', 'uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
         for _, match in season_matches.iterrows():
             home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
             away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
@@ -327,8 +318,8 @@ def process_all_seasons_metrics(seasons_df, matches_df):
             unique_players = set()
             for _, match in season_matches.iterrows():
                 unique_players.update([
-                    match['thuis_speler_1'], match['thuis_speler_2'],
-                    match['uit_speler_1'], match['uit_speler_2']
+                    match['thuis_1'], match['thuis_2'],
+                    match['uit_1'], match['uit_2']
                 ])
             
             season_metrics.append({

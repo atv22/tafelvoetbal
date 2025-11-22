@@ -94,16 +94,12 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
 def prepare_match_data(selected_names, home_score, away_score, match_date):
     """Bereid wedstrijd data voor om op te slaan inclusief custom datum"""
     # match_date is nu een datetime object
-    # Store both old and new schema keys for compatibility
+    # Alleen nieuwe kolomnamen opslaan
     return {
         'thuis_1': selected_names['Thuis 1']['name'],
         'thuis_2': selected_names['Thuis 2']['name'],
         'uit_1': selected_names['Uit 1']['name'],
         'uit_2': selected_names['Uit 2']['name'],
-        'thuis_speler_1': selected_names['Thuis 1']['name'],
-        'thuis_speler_2': selected_names['Thuis 2']['name'],
-        'uit_speler_1': selected_names['Uit 1']['name'],
-        'uit_speler_2': selected_names['Uit 2']['name'],
         'thuis_score': home_score,
         'uit_score': away_score,
         'klinkers_thuis_1': selected_names['Thuis 1']['klinkers'],

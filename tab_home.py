@@ -13,16 +13,10 @@ def calculate_stats(players, matches):
     # Detect column names for home/away players
     if not matches.empty:
         match_row = matches.iloc[0]
-        if 'thuis_speler_1' in match_row:
-            home_cols = ['thuis_speler_1', 'thuis_speler_2']
-            away_cols = ['uit_speler_1', 'uit_speler_2']
-            klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-            klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
-            klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-            klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
+        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
+        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']

@@ -24,18 +24,9 @@ def show_current_players(players_df):
     matches_df = db.get_matches()
 
     if not players_df.empty:
-        # Detect column names for home/away players
-        if not matches_df.empty:
-            match_row = matches_df.iloc[0]
-            if 'thuis_speler_1' in match_row:
-                home_cols = ['thuis_speler_1', 'thuis_speler_2']
-                away_cols = ['uit_speler_1', 'uit_speler_2']
-            else:
-                home_cols = ['thuis_1', 'thuis_2']
-                away_cols = ['uit_1', 'uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
+        # Detect column names for home/away players (alleen nieuwe structuur)
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
         # Prepare stats: id, name, matches played, active since
         stats = []
         for _, row in players_df.iterrows():

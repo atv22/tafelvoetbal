@@ -61,17 +61,11 @@ def get_download_filename(filename: str, extension: str) -> str:
 # ---------- ELO helpers ----------
 def get_klinkers_for_player(player: str, row: pd.Series) -> int:
     """Helper to get klinkers for a player from a match row."""
-    # Detect home/away columns
-    if 'thuis_speler_1' in row:
-        home_cols = ['thuis_speler_1', 'thuis_speler_2']
-        away_cols = ['uit_speler_1', 'uit_speler_2']
-        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
-    else:
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
+    # Detect home/away columns (alleen nieuwe structuur)
+    home_cols = ['thuis_1', 'thuis_2']
+    away_cols = ['uit_1', 'uit_2']
+    klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
+    klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
     for i, col in enumerate(home_cols):
         if player == row.get(col):
             return int(row.get(klinkers_home[i], 0))

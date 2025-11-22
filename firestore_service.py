@@ -149,7 +149,8 @@ def recalculate_elos_for_season(start_date, end_date):
                 batch.set(new_elo_ref, {
                     'speler_naam': row["Speler"],
                     'rating': row["ELO"],
-                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
+                    'match_id': match.get('match_id')
                 })
                 batch_counter += 1
             print(f"[DEBUG] ELO's na deze wedstrijd: {player_elos}")
@@ -289,7 +290,7 @@ def get_matches():
             if df['timestamp'].dt.tz is not None:
                 df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
 
-        # Verwijder overbodige kolommen indien aanwezig
+        # Verwijder overbodige kolommen indien aanwezig (oude kolommen worden alleen verwijderd, niet meer gebruikt)
         cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
         for col in cols_to_remove:
             if col in df.columns:
@@ -312,7 +313,7 @@ def get_matches():
 @st.cache_data
 def get_elo_logs():
     """Haalt de volledige ELO geschiedenis op."""
-    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(500).stream()
+    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
     elos = [doc.to_dict() for doc in elo_docs]
     return pd.DataFrame(elos)
 
@@ -739,7 +740,8 @@ def recalculate_elo_from_match(match_timestamp):
                 batch.set(new_elo_ref, {
                     'speler_naam': row["Speler"],
                     'rating': row["ELO"],
-                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
+                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
+                    'match_id': match.get('match_id')
                 })
                 batch_counter += 1
             if batch_counter >= 400:
@@ -788,74 +790,90 @@ def reset_all_elos():
         if players_df.empty:
             return True
 
-        # Bepaal seizoenen op basis van kalenderjaar
+        # Bepaal seizoenen op basis van Prinsjesdag (zoals in get_seasons)
         matches_df = pd.DataFrame(all_matches)
         matches_df['timestamp'] = pd.to_datetime(matches_df['timestamp'], errors='coerce')
         matches_df = matches_df.dropna(subset=['timestamp'])
-        matches_df['jaar'] = matches_df['timestamp'].dt.year
-        seizoenen = []
-        for jaar in sorted(matches_df['jaar'].unique()):
-            jaar_df = matches_df[matches_df['jaar'] == jaar].sort_values('timestamp')
-            startdatum = jaar_df['timestamp'].min()
-            einddatum = jaar_df['timestamp'].max()
-            seizoenen.append({
-                'startdatum': startdatum,
-                'einddatum': einddatum,
-                'jaar': jaar,
-                'wedstrijden': jaar_df.to_dict('records')
-            })
+        # Forceer alle timestamps naar tz-naive (UTC)
+        try:
+            matches_df['timestamp'] = matches_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+        except Exception:
+            matches_df['timestamp'] = matches_df['timestamp'].dt.tz_localize(None)
+        if matches_df.empty:
+            return True
+        from datetime import date, timedelta, datetime
+        def get_prinsjesdag(year):
+            september = date(year, 9, 1)
+            weekday = september.weekday()
+            first_tuesday = september + timedelta(days=(1 - weekday) % 7)
+            prinsjesdag = first_tuesday + timedelta(days=14)
+            dt_prinsjesdag = datetime.combine(prinsjesdag, datetime.min.time())
+            return dt_prinsjesdag.replace(tzinfo=None)
 
-        # Voor elke seizoen: reset alle spelers naar 1000 bij de eerste wedstrijd, reken door tot eind
+        min_year = matches_df['timestamp'].dt.year.min()
+        max_year = matches_df['timestamp'].dt.year.max()
+        season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
+        season_bounds = sorted([pd.Timestamp(s).to_pydatetime().replace(tzinfo=None) for s in season_bounds])
+
+        # Doorloop alle wedstrijden chronologisch, reset ELO bij seizoensstart
         player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
         batch = db.batch()
         batch_counter = 0
-
-        for seizoen in seizoenen:
-            # Reset alle spelers naar 1000 bij de eerste wedstrijd van het seizoen
-            eerste_wedstrijd = seizoen['wedstrijden'][0] if seizoen['wedstrijden'] else None
-            if eerste_wedstrijd:
-                ts = eerste_wedstrijd.get('timestamp', pd.Timestamp.now())
+        last_season_start = None
+        season_idx = 0
+        for _, match in matches_df.sort_values('timestamp').iterrows():
+            ts = match['timestamp']
+            # Forceer ook deze timestamp naar tz-naive
+            if pd.notnull(ts) and hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                ts = ts.tz_convert('UTC').tz_localize(None)
+            # Check of we aan een nieuw seizoen beginnen
+            while season_idx < len(season_bounds) - 1 and ts >= season_bounds[season_idx + 1]:
+                season_idx += 1
+            season_start = season_bounds[season_idx]
+            if last_season_start is None or season_start != last_season_start:
+                # Reset alle spelers naar 1000 bij start van nieuw seizoen
                 for speler in player_elos.keys():
                     player_elos[speler] = 1000
                     new_elo_ref = elo_ref.document()
                     batch.set(new_elo_ref, {
                         'speler_naam': speler,
                         'rating': 1000,
-                        'timestamp': ts
+                        'timestamp': ts,
+                        'match_id': match.get('match_id') if 'match_id' in match else None
                     })
                     batch_counter += 1
+                last_season_start = season_start
                 if batch_counter >= 400:
                     batch.commit()
                     batch = db.batch()
                     batch_counter = 0
-
-            # Doorrekenen alle wedstrijden in het seizoen
-            for match in seizoen['wedstrijden']:
-                match_dict = {
-                    "Thuis_1": match.get('thuis_1'),
-                    "Thuis_2": match.get('thuis_2'),
-                    "Uit_1": match.get('uit_1'),
-                    "Uit_2": match.get('uit_2'),
-                    "Thuis_score": int(match.get('thuis_score', 0)),
-                    "Uit_score": int(match.get('uit_score', 0))
-                }
-                all_ELO_ratings = {}
-                for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
-                    all_ELO_ratings[player] = [player_elos.get(player, 1000)]
-                new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
-                for _, row in new_elo_df.iterrows():
-                    player_elos[row["Speler"]] = row["ELO"]
-                    new_elo_ref = elo_ref.document()
-                    batch.set(new_elo_ref, {
-                        'speler_naam': row["Speler"],
-                        'rating': row["ELO"],
-                        'timestamp': match.get('timestamp', SERVER_TIMESTAMP)
-                    })
-                    batch_counter += 1
-                if batch_counter >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    batch_counter = 0
+            # Doorrekenen deze wedstrijd
+            match_dict = {
+                "Thuis_1": match.get('thuis_1'),
+                "Thuis_2": match.get('thuis_2'),
+                "Uit_1": match.get('uit_1'),
+                "Uit_2": match.get('uit_2'),
+                "Thuis_score": int(match.get('thuis_score', 0)),
+                "Uit_score": int(match.get('uit_score', 0))
+            }
+            all_ELO_ratings = {}
+            for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
+                all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
+            for _, row in new_elo_df.iterrows():
+                player_elos[row["Speler"]] = row["ELO"]
+                new_elo_ref = elo_ref.document()
+                batch.set(new_elo_ref, {
+                    'speler_naam': row["Speler"],
+                    'rating': row["ELO"],
+                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
+                    'match_id': match.get('match_id')
+                })
+                batch_counter += 1
+            if batch_counter >= 400:
+                batch.commit()
+                batch = db.batch()
+                batch_counter = 0
 
         # Commit resterende updates
         if batch_counter > 0:
