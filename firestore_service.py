@@ -160,7 +160,6 @@ def recalculate_elos_for_season(start_date, end_date):
         if batch_counter > 0:
             batch.commit()
         st.cache_data.clear()
-        get_matches.clear()
         return True
     except Exception as e:
         print(f"Fout bij herberekenen van ELO's voor seizoen: {e}")
@@ -388,11 +387,14 @@ def get_seasons():
     season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
     season_bounds = sorted(season_bounds)
 
-    # Maak een seizoenslijst zonder overlap/gaten
+    # Maak een seizoenslijst: start = dag na vorige Prinsjesdag 00:00, eind = deze Prinsjesdag 23:59:59
     seizoenen = []
     for i in range(len(season_bounds) - 1):
-        start = season_bounds[i]
-        end = season_bounds[i + 1] - timedelta(seconds=1)
+        vorige_prinsjesdag = season_bounds[i]
+        deze_prinsjesdag = season_bounds[i + 1]
+        start = vorige_prinsjesdag + timedelta(days=1)  # dag na vorige Prinsjesdag 00:00
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = deze_prinsjesdag.replace(hour=23, minute=59, second=59, microsecond=0)  # deze Prinsjesdag 23:59:59
         seizoen_naam = f"Seizoen {start.year}/{end.year}"
         print(f"[SEIZOEN] {seizoen_naam}: start={start} eind={end}")
         mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
