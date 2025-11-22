@@ -394,22 +394,22 @@ def _render_uploads(db, players_df: pd.DataFrame):
                 ]:
                     if opt not in matches_upload_df.columns:
                         matches_upload_df[opt] = 0
-                # Parse timestamps
-                for idx in range(len(matches_upload_df)):
-                    val = matches_upload_df.iloc[idx]["timestamp"]
-                    if pd.isna(val) or val == "":
-                        matches_upload_df.loc[idx, "timestamp"] = pd.Timestamp.now()
-                    else:
-                        try:
-                            ts = str(val).strip()
-                            if len(ts) == 10 and ts.count("-") == 2:
-                                parsed = pd.to_datetime(ts + " 12:00:00")
-                            else:
-                                parsed = pd.to_datetime(ts)
-                            matches_upload_df.loc[idx, "timestamp"] = parsed
-                        except Exception:
-                            matches_upload_df.loc[idx, "timestamp"] = pd.Timestamp.now()
+                import re
                 validation_errors = []
+                timestamp_format = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+                allowed_ascii = set(range(32, 127))  # Printable ASCII
+                for idx in range(len(matches_upload_df)):
+                    row = matches_upload_df.iloc[idx]
+                    # Check timestamp format
+                    ts = str(row["timestamp"]).strip()
+                    if not timestamp_format.match(ts):
+                        validation_errors.append(f"Rij {idx+1}: Ongeldig timestamp formaat '{ts}'. Verwacht: JJJJ-MM-DD UU:MM:SS")
+                    # Check for strange characters in all string columns
+                    for col in matches_upload_df.columns:
+                        val = str(row[col])
+                        if any(ord(c) not in allowed_ascii for c in val):
+                            validation_errors.append(f"Rij {idx+1}, kolom '{col}': Vreemd teken aangetroffen")
+                # Stop direct bij fouten
                 # Add missing players automatically
                 current_players = players_df["speler_naam"].tolist() if not players_df.empty else []
                 new_players = set()
