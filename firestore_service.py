@@ -127,6 +127,19 @@ def recalculate_elos_for_season(start_date, end_date):
 
         # 3. Bereken ELO's voor alle wedstrijden in het seizoen, beginnend bij de juiste startwaarden
         for i, match in enumerate(matches_in_season):
+            match_id = match.get('match_id')
+            # Opschonen: verwijder bestaande ELO-logs voor deze match_id
+            try:
+                existing_elo_logs = list(elo_ref.where(filter=FieldFilter('match_id', '==', match_id)).stream())
+                if len(existing_elo_logs) != 4:
+                    for doc in existing_elo_logs:
+                        batch.delete(doc.reference)
+                    batch.commit()
+                    batch = db.batch()
+                    batch_counter = 0
+            except Exception as e:
+                print(f"[ELO CLEANUP] Fout bij opschonen ELO logs voor match {match_id}: {e}")
+
             match_dict = {
                 "Thuis_1": match.get('thuis_1'),
                 "Thuis_2": match.get('thuis_2'),
@@ -150,7 +163,7 @@ def recalculate_elos_for_season(start_date, end_date):
                     'speler_naam': row["Speler"],
                     'rating': row["ELO"],
                     'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
-                    'match_id': match.get('match_id')
+                    'match_id': match_id
                 })
                 batch_counter += 1
             print(f"[DEBUG] ELO's na deze wedstrijd: {player_elos}")
@@ -343,66 +356,40 @@ def get_seasons():
         return pd.DataFrame()
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
-    # ...existing code...
     # Forceer alle timestamps naar tz-naive (UTC)
     if df['timestamp'].dt.tz is not None:
         df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
     else:
-        # Soms zijn ze tz-aware zonder .dt.tz, dus probeer altijd te localizen
         try:
             df['timestamp'] = df['timestamp'].dt.tz_localize(None)
         except Exception:
             pass
 
-    # ...existing code...
-
-    # Bepaal alle Prinsjesdagen
     from datetime import date, timedelta, datetime
     def get_prinsjesdag(year):
-        # Prinsjesdag = derde dinsdag van september
         september = date(year, 9, 1)
         weekday = september.weekday()
-        # Eerste dinsdag
         first_tuesday = september + timedelta(days=(1 - weekday) % 7)
-        # Derde dinsdag
         prinsjesdag = first_tuesday + timedelta(days=14)
-        # Seizoen start om 00:00:00 (inclusief hele dag Prinsjesdag)
         dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
 
-    # DEBUG: Toon alle wedstrijden die in het huidige seizoen vallen
-    # Bepaal Prinsjesdag van huidig jaar
-    vandaag = date.today()
-    huidig_prinsjesdag = get_prinsjesdag(vandaag.year)
-    if vandaag < huidig_prinsjesdag.date():
-        huidig_prinsjesdag = get_prinsjesdag(vandaag.year - 1)
-    volgende_prinsjesdag = get_prinsjesdag(huidig_prinsjesdag.year + 1)
-    huidig_seizoen_mask = (df['timestamp'] >= huidig_prinsjesdag) & (df['timestamp'] < volgende_prinsjesdag)
-    huidig_seizoen_df = df[huidig_seizoen_mask]
-    # ...existing code...
-
-    # Zoek het eerste en laatste jaar in de data
     min_year = df['timestamp'].dt.year.min()
     max_year = df['timestamp'].dt.year.max()
-    # Bouw alle seizoensgrenzen (Prinsjesdagen)
     season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
     season_bounds = sorted(season_bounds)
 
-    # Maak een seizoenslijst: start = dag na vorige Prinsjesdag 00:00, eind = deze Prinsjesdag 23:59:59
     seizoenen = []
     for i in range(len(season_bounds) - 1):
         vorige_prinsjesdag = season_bounds[i]
         deze_prinsjesdag = season_bounds[i + 1]
-        start = vorige_prinsjesdag + timedelta(days=1)  # dag na vorige Prinsjesdag 00:00
+        start = vorige_prinsjesdag + timedelta(days=1)
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = deze_prinsjesdag.replace(hour=23, minute=59, second=59, microsecond=0)  # deze Prinsjesdag 23:59:59
+        end = deze_prinsjesdag.replace(hour=23, minute=59, second=59, microsecond=0)
         seizoen_naam = f"Seizoen {start.year}/{end.year}"
-        print(f"[SEIZOEN] {seizoen_naam}: start={start} eind={end}")
         mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
         seizoen_df = df[mask]
         n_matches = int(mask.sum())
-        first_ts = seizoen_df['timestamp'].min() if not seizoen_df.empty else None
-        last_ts = seizoen_df['timestamp'].max() if not seizoen_df.empty else None
         seizoenen.append({
             'startdatum': start,
             'einddatum': end,
@@ -410,8 +397,6 @@ def get_seasons():
             'seizoen_naam': seizoen_naam,
             'aantal_wedstrijden': n_matches
         })
-
-    # Verwijder seizoenen zonder wedstrijden aan het begin/eind
     seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['startdatum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['einddatum'])]
     df_seizoenen = pd.DataFrame(seizoenen)
     if not df_seizoenen.empty:
