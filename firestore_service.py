@@ -286,6 +286,9 @@ def get_matches():
         # Normaliseer timestamp naar pandas datetime
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            # Maak alle timestamps tz-naive
+            if df['timestamp'].dt.tz is not None:
+                df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
 
         # Verwijder overbodige kolommen indien aanwezig
         cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
@@ -340,20 +343,69 @@ def get_seasons():
         return pd.DataFrame()
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
-    df['jaar'] = df['timestamp'].dt.year
+    # Maak alle timestamps naive (zonder timezone)
+    if df['timestamp'].dt.tz is not None:
+        df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+
+    # Bepaal alle Prinsjesdagen
+    from datetime import date, timedelta, datetime
+    def get_prinsjesdag(year):
+        # Prinsjesdag = derde dinsdag van september
+        september = date(year, 9, 1)
+        weekday = september.weekday()
+        # Eerste dinsdag
+        first_tuesday = september + timedelta(days=(1 - weekday) % 7)
+        # Derde dinsdag
+        prinsjesdag = first_tuesday + timedelta(days=14)
+        # Seizoen start om 24:00 (dus eigenlijk de dag erna)
+        dt = datetime.combine(prinsjesdag, datetime.max.time())
+        # Maak ook deze datetime naive
+        return dt.replace(tzinfo=None)
+
+    # Zoek het eerste en laatste jaar in de data
+    min_year = df['timestamp'].dt.year.min()
+    max_year = df['timestamp'].dt.year.max()
+    # Bouw alle seizoensgrenzen
+    season_bounds = []
+    for y in range(min_year - 1, max_year + 2):
+        season_bounds.append(get_prinsjesdag(y))
+    season_bounds = sorted(season_bounds)
+
     seizoenen = []
-    for jaar in sorted(df['jaar'].unique()):
-        jaar_df = df[df['jaar'] == jaar]
-        startdatum = jaar_df['timestamp'].min()
-        einddatum = jaar_df['timestamp'].max()
-        seizoen_naam = f"Seizoen {jaar-1}/{jaar}"
+    for i in range(len(season_bounds) - 1):
+        start = season_bounds[i]
+        end = season_bounds[i + 1]
+        seizoen_naam = f"Seizoen {start.year}/{end.year}"
+        # Fix: neem wedstrijden op de startdatum mee (>= start)
+        seizoen_df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
         seizoenen.append({
-            'startdatum': startdatum,
-            'einddatum': einddatum,
-            'jaar': jaar,
+            'startdatum': start,
+            'einddatum': end,
+            'jaar': end.year,
             'seizoen_naam': seizoen_naam,
-            'aantal_wedstrijden': len(jaar_df)
+            'aantal_wedstrijden': len(seizoen_df)
         })
+
+    # Voeg expliciet het huidige seizoen toe als die nog niet in de lijst staat
+    from datetime import date
+    today = date.today()
+    # Bepaal huidige Prinsjesdag en volgende
+    # Gebruik de eerder gedefinieerde get_prinsjesdag functie
+    # Vind huidige seizoen
+    for i in range(len(season_bounds) - 1):
+        start = season_bounds[i]
+        end = season_bounds[i + 1]
+        if start < datetime.combine(today, datetime.max.time()) <= end:
+            seizoen_naam = f"Seizoen {start.year}/{end.year}"
+            if not any(s['seizoen_naam'] == seizoen_naam for s in seizoenen):
+                seizoenen.append({
+                    'startdatum': start,
+                    'einddatum': end,
+                    'jaar': end.year,
+                    'seizoen_naam': seizoen_naam,
+                    'aantal_wedstrijden': 0
+                })
+            break
     return pd.DataFrame(seizoenen)
 
 @st.cache_data
