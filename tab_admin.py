@@ -397,17 +397,25 @@ def _render_uploads(db, players_df: pd.DataFrame):
                 import re
                 validation_errors = []
                 timestamp_format = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
-                allowed_ascii = set(range(32, 127))  # Printable ASCII
+                import unicodedata
+                def is_allowed_char(c):
+                    # Toegestaan: standaard printable ASCII, plus alle letters met diakritische tekens (é, ö, ü, etc.)
+                    if 32 <= ord(c) <= 126:
+                        return True
+                    cat = unicodedata.category(c)
+                    # Letter (L*) of Mark (M*) (voor accenten)
+                    return cat.startswith('L') or cat.startswith('M') or c in " -'"
+
                 for idx in range(len(matches_upload_df)):
                     row = matches_upload_df.iloc[idx]
                     # Check timestamp format
                     ts = str(row["timestamp"]).strip()
                     if not timestamp_format.match(ts):
                         validation_errors.append(f"Rij {idx+1}: Ongeldig timestamp formaat '{ts}'. Verwacht: JJJJ-MM-DD UU:MM:SS")
-                    # Check for strange characters in all string columns
+                    # Check for strange characters in all string columns, allow diacritics
                     for col in matches_upload_df.columns:
                         val = str(row[col])
-                        if any(ord(c) not in allowed_ascii for c in val):
+                        if any(not is_allowed_char(c) for c in val):
                             validation_errors.append(f"Rij {idx+1}, kolom '{col}': Vreemd teken aangetroffen")
                 # Stop direct bij fouten
                 # Add missing players automatically
