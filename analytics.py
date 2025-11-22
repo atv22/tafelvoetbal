@@ -524,15 +524,17 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     # Visualisaties in columns
     st.subheader("📊 Seizoen Visualisaties")
     
-    col1, col2 = st.columns(2)
-    with col1:
+    # 2x2 layout voor seizoenspecifieke grafieken
+    row1 = st.columns(2)
+    row2 = st.columns(2)
+    with row1[0]:
         show_goals_bar_chart_season(season_matches)
-    with col2:
+    with row1[1]:
         show_unique_players_bar_chart(season_matches)
+    with row2[0]:
         show_winrate_bar_chart(season_matches)
-
-    import pandas as pd
     # Vierde grafiek: Meeste klinkers per speler in dit seizoen
+    import pandas as pd
     klinker_stats = defaultdict(int)
     home_cols = ['thuis_1', 'thuis_2']
     away_cols = ['uit_1', 'uit_2']
@@ -548,18 +550,19 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
                 klinker_col = f'klinkers_uit_{idx+1}'
                 klinker_stats[speler] += match.get(klinker_col, 0) or 0
     klinker_df = pd.DataFrame(list(klinker_stats.items()), columns=['Speler', 'Klinkers']).sort_values('Klinkers', ascending=False)
-    if not klinker_df.empty and klinker_df['Klinkers'].sum() > 0:
-        st.subheader("🔔 Meeste klinkers dit seizoen")
-        fig_klinkers = px.bar(
-            klinker_df.head(10),
-            x='Speler',
-            y='Klinkers',
-            title="Top 10 Klinkers dit seizoen",
-            color='Klinkers',
-            color_continuous_scale='OrRd'
-        )
-        fig_klinkers.update_layout(xaxis_title="Speler", yaxis_title="Klinkers")
-        st.plotly_chart(fig_klinkers, config={'responsive': True}, key="klinkers_bar_chart_season")
+    with row2[1]:
+        if not klinker_df.empty and klinker_df['Klinkers'].sum() > 0:
+            st.subheader("🔔 Meeste klinkers dit seizoen")
+            fig_klinkers = px.bar(
+                klinker_df.head(10),
+                x='Speler',
+                y='Klinkers',
+                title="Top 10 Klinkers dit seizoen",
+                color='Klinkers',
+                color_continuous_scale='OrRd'
+            )
+            fig_klinkers.update_layout(xaxis_title="Speler", yaxis_title="Klinkers")
+            st.plotly_chart(fig_klinkers, config={'responsive': True}, key="klinkers_bar_chart_season")
     
     # ELO ratings als beschikbaar
     if season_elo is not None and not season_elo.empty:

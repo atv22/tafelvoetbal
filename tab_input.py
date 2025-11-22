@@ -19,11 +19,25 @@ def render_match_input_form(player_names, player_elos):
         'Uit 2':   {'name': None, 'klinkers': 0},
     }
 
+    # Default testspelers als ze bestaan
+    test_defaults = ["TestThuisA", "TestThuisB", "TestUitA", "TestUitB"]
+    default_indices = []
+    for test_name in test_defaults:
+        if test_name in player_names:
+            default_indices.append(player_names.index(test_name))
+        else:
+            default_indices.append(0)
+
     with st.form("formulier"):
         cols = st.columns(4)
         for i, title in enumerate(selected_names):
             with cols[i]:
-                selected_names[title]['name'] = st.selectbox(title, player_names, key=f"sel_{title}", index=i % len(player_names))
+                selected_names[title]['name'] = st.selectbox(
+                    title,
+                    player_names,
+                    key=f"sel_{title}",
+                    index=default_indices[i] if len(default_indices) == 4 else i % len(player_names)
+                )
 
         if klink == "Ja":
             klinker_cols = st.columns(4)
