@@ -552,7 +552,6 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     klinker_df = pd.DataFrame(list(klinker_stats.items()), columns=['Speler', 'Klinkers']).sort_values('Klinkers', ascending=False)
     with row2[1]:
         if not klinker_df.empty and klinker_df['Klinkers'].sum() > 0:
-            st.subheader("🔔 Meeste klinkers dit seizoen")
             fig_klinkers = px.bar(
                 klinker_df.head(10),
                 x='Speler',
