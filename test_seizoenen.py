@@ -50,7 +50,7 @@ def main():
         print(f"{row['seizoen_naam']}: {len(seizoen_elo)} elo logs")
 
     # Controle: elke match heeft 4 ELO logs?
-    print('\nMATCHES ZONDER 4 ELO LOGS:")
+    print('\nMATCHES ZONDER 4 ELO LOGS:')
     elo_counts = elo_df.groupby('match_id').size()
     for match_id, count in elo_counts.items():
         if count != 4:
