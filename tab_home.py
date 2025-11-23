@@ -36,17 +36,20 @@ def calculate_stats(players, matches):
             player_matches = matches[pd.concat(conditions, axis=1).any(axis=1)]
 
         if player_matches.empty:
-            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Speler': ""}
+            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Speler': ""}
         else:
             goals_for = 0
             goals_against = 0
             klinkers = 0
+            wins = 0
             for _, match in player_matches.iterrows():
                 thuis_spelers = [match.get(col) for col in home_cols]
                 uit_spelers = [match.get(col) for col in away_cols]
                 if player_name in thuis_spelers:
                     goals_for += int(match.get('thuis_score', 0) or 0)
                     goals_against += int(match.get('uit_score', 0) or 0)
+                    if match.get('thuis_score', 0) > match.get('uit_score', 0):
+                        wins += 1
                     # Klinkers
                     for i, col in enumerate(home_cols):
                         if player_name == match.get(col):
@@ -54,15 +57,20 @@ def calculate_stats(players, matches):
                 elif player_name in uit_spelers:
                     goals_for += int(match.get('uit_score', 0) or 0)
                     goals_against += int(match.get('thuis_score', 0) or 0)
+                    if match.get('uit_score', 0) > match.get('thuis_score', 0):
+                        wins += 1
                     for i, col in enumerate(away_cols):
                         if player_name == match.get(col):
                             klinkers += int(match.get(klinkers_away[i], 0) or 0)
+            gespeeld = len(player_matches)
+            win_pct = (wins / gespeeld * 100) if gespeeld > 0 else 0.0
             stats = {
-                'Gespeeld': len(player_matches),
+                'Gespeeld': gespeeld,
                 'Voor': int(goals_for),
                 'Tegen': int(goals_against),
                 'Doelsaldo': int(goals_for - goals_against),
                 'Klinkers': int(klinkers),
+                'Win%': round(win_pct, 1),
                 'Speler': ""  # Placeholder voor string type
             }
         stats['Speler'] = player_name
@@ -140,7 +148,7 @@ def show_elo_rankings(players_df, matches_df):
             return [''] * len(row)
     # Toon de tabel met voldoende hoogte zodat alle rijen zichtbaar zijn (of met verticale scroll)
     st.dataframe(
-        display_df[['Speler', 'ELO', 'Gespeeld', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
+        display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
         .style.apply(highlight_top3_lightgreen, axis=1),
         width='stretch',
         height=max(600, 40 * len(display_df))  # 40px per rij, minimaal 600px
