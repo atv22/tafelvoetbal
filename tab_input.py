@@ -69,11 +69,17 @@ def render_match_input_form(player_names, player_elos):
 
 def validate_match_input(selected_names, home_score, away_score):
     """Valideer de wedstrijd invoer"""
-    # Score validatie
-    if home_score == 10 and away_score == 10:
+    # Score validatie (accepteer ook float 10.0)
+    def is_tien(val):
+        try:
+            return abs(float(val) - 10) < 1e-6
+        except Exception:
+            return False
+
+    if is_tien(home_score) and is_tien(away_score):
         st.error('Beide scores kunnen niet 10 zijn.')
         return False
-    if home_score != 10 and away_score != 10:
+    if not is_tien(home_score) and not is_tien(away_score):
         st.error('Eén van de scores moet 10 zijn.')
         return False
     
