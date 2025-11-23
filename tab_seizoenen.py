@@ -167,3 +167,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                 matches_df['timestamp'] = ts.dt.tz_convert('UTC').dt.tz_localize(None)
             season_matches = matches_df[(matches_df['timestamp'] >= season_start) & (matches_df['timestamp'] <= season_end)]
             show_individual_season_analysis(season_row, season_matches)
+            # Toevoegen: activiteit vs winpercentage voor geselecteerd seizoen
+            st.subheader("📊 Activiteit vs Winpercentage (geselecteerd seizoen)")
+            from analytics import show_activity_vs_winrate_scatter
+            show_activity_vs_winrate_scatter(season_matches, key_suffix=f"seizoen_{selected}")
