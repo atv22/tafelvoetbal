@@ -410,7 +410,7 @@ def show_cross_season_charts(all_matches, seasons_df):
 
     if all_matches.empty:
         return
-    st.subheader("📊 Cross-Seizoen Analyses")
+    st.subheader("📊 Individueel Seizoen Analyses")
     # ELO ontwikkeling over seizoenen (geschatte versie)
     player_season_elo = defaultdict(lambda: defaultdict(int))
     player_season_matches = defaultdict(lambda: defaultdict(int))
