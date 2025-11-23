@@ -1,3 +1,9 @@
+from datetime import datetime
+import zoneinfo
+
+def get_nl_now():
+    """Geeft de huidige datum en tijd in de Europe/Amsterdam tijdzone."""
+    return datetime.now(zoneinfo.ZoneInfo("Europe/Amsterdam"))
 import time
 import math
 import datetime as dt
