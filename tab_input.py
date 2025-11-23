@@ -28,6 +28,8 @@ def render_match_input_form(player_names, player_elos):
         else:
             default_indices.append(0)
 
+    import uuid
+    session_key = str(uuid.uuid4())
     with st.form("formulier"):
         cols = st.columns(4)
         for i, title in enumerate(selected_names):
@@ -35,7 +37,7 @@ def render_match_input_form(player_names, player_elos):
                 selected_names[title]['name'] = st.selectbox(
                     title,
                     player_names,
-                    key=f"sel_{title}",
+                    key=f"sel_{title}_{session_key}",
                     index=default_indices[i] if len(default_indices) == 4 else i % len(player_names)
                 )
 
@@ -43,25 +45,22 @@ def render_match_input_form(player_names, player_elos):
             klinker_cols = st.columns(4)
             for i, title in enumerate(selected_names):
                 with klinker_cols[i]:
-                    selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}")
+                    selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}_{session_key}")
 
         score_cols = st.columns(2)
         with score_cols[0]:
-            home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1)
+            home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1, key=f"score_thuis_{session_key}")
         with score_cols[1]:
-            away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1)
+            away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1, key=f"score_uit_{session_key}")
 
-        # Datum en tijd keuze: standaard nu, mag historisch zijn
-        from datetime import datetime, date, time as dt_time
+        from datetime import datetime
         now = datetime.now()
-        match_date = st.date_input("Datum van de wedstrijd", value=now.date(), help="Standaard vandaag. Kies een andere dag indien gewenst.")
-        match_time = st.time_input("Tijd van de wedstrijd", value=now.time(), help="Standaard huidige tijd. Kies een andere tijd indien gewenst.")
+        match_date = st.date_input("Datum van de wedstrijd", value=now.date(), key=f"date_{session_key}", help="Standaard vandaag. Kies een andere dag indien gewenst.")
+        match_time = st.time_input("Tijd van de wedstrijd", value=now.time().replace(microsecond=0), key=f"time_{session_key}", help="Standaard huidige tijd. Kies een andere tijd indien gewenst.")
 
         if st.form_submit_button("Verstuur Uitslag"):
-            # Combineer datum en tijd tot volledige timestamp
             match_datetime = datetime.combine(match_date, match_time)
             return process_match_submission(selected_names, home_score, away_score, player_elos, match_datetime)
-    
     return False
 
 
