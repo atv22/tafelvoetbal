@@ -64,39 +64,8 @@ def add_request(request: str):
 def get_download_filename(filename: str, extension: str) -> str:
     return f"{filename}_{dt.datetime.now().strftime('%d-%m-%Y_%H%M%S')}.{extension}"
 
-# ---------- ELO helpers ----------
-def get_klinkers_for_player(player: str, row: pd.Series) -> int:
-    """Helper to get klinkers for a player from a match row."""
-    # Detect home/away columns (alleen nieuwe structuur)
-    home_cols = ['thuis_1', 'thuis_2']
-    away_cols = ['uit_1', 'uit_2']
-    klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-    klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
-    for i, col in enumerate(home_cols):
-        if player == row.get(col):
-            return int(row.get(klinkers_home[i], 0))
-    for i, col in enumerate(away_cols):
-        if player == row.get(col):
-            return int(row.get(klinkers_away[i], 0))
-    return 0
 
-def elo_calculation(player_elo: float, opponent_elo: float, score: int, score_opp: int) -> float:
-    """Calculates the new ELO rating for a player after a match."""
-    # This is a simplified ELO calculation, you might want to adjust it.
-    # It considers the score difference.
-    expected_outcome = 1 / (1 + 10 ** ((opponent_elo - player_elo) / 400))
-    
-    # The actual outcome is scaled based on the score difference.
-    # A 10-0 win is a stronger win than a 10-9 win.
-    if score > score_opp:
-        actual_outcome = 0.5 + (score - score_opp) * 0.05 # Win
-    elif score < score_opp:
-        actual_outcome = 0.5 - (score_opp - score) * 0.05 # Loss
-    else:
-        actual_outcome = 0.5 # Draw
-
-    # Ensure actual_outcome is within [0, 1]
-    actual_outcome = max(0, min(1, actual_outcome))
-
-    elo_change = K_FACTOR * (actual_outcome - expected_outcome)
-    return round(player_elo + elo_change, 0)
+"""
+Algemene utility-functies voor de tafelvoetbal-app.
+Bevat validatie, tijdzone, naam/request helpers, bestandsnaam, enz.
+"""
