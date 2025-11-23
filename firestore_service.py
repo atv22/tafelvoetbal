@@ -287,7 +287,7 @@ def get_players():
 @st.cache_data
 def get_matches():
     """Haalt alle wedstrijden op en normaliseert timestamps."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(500).stream()
+    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
     matches = []
     for doc in matches_docs:
         match_data = doc.to_dict()
