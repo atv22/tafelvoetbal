@@ -30,8 +30,8 @@ def render_match_input_form(player_names, player_elos):
         else:
             default_indices.append(0)
 
-    import uuid
-    session_key = str(uuid.uuid4())
+    # Gebruik een stabiele session_key zodat Streamlit de state behoudt
+    session_key = "wedstrijd_invoer"
     with st.form("formulier"):
         cols = st.columns(4)
         for i, title in enumerate(selected_names):
