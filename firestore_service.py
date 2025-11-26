@@ -914,10 +914,28 @@ def update_match_with_elo_recalculation(match_id, updated_match_data):
         
         # Update de wedstrijd
         matches_ref.document(match_id).update(updated_match_data)
-        
+
+
+        # Opschonen: verwijder alle ELO-logs vanaf deze timestamp (alleen als timestamp geldig is)
+        if original_timestamp is not None:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            import pandas as pd
+            batch = db.batch()
+            batch_counter = 0
+            elo_docs = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(original_timestamp))).stream()
+            for doc in elo_docs:
+                batch.delete(doc.reference)
+                batch_counter += 1
+                if batch_counter >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_counter = 0
+            if batch_counter > 0:
+                batch.commit()
+
         # Herberekenen ELO's vanaf deze wedstrijd
         success = recalculate_elo_from_match(original_timestamp)
-        
+
         st.cache_data.clear()
         return success
         
