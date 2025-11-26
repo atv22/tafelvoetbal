@@ -32,11 +32,11 @@ def check_elo_per_season():
                 # Check of er een ELO entry is binnen de seizoensgrenzen
                 elo_hist['timestamp'] = pd.to_datetime(elo_hist['timestamp'], errors='coerce')
                 # Forceer alle timestamps naar tz-naive (UTC)
-                if elo_hist['timestamp'].dt.tz is not None:
-                    elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+                if elo_hist['timestamp'].dt.tz is not None:  # type: ignore
+                    elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
                 else:
                     try:
-                        elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)
+                        elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)  # type: ignore
                     except Exception:
                         pass
                 in_season = elo_hist[(elo_hist['timestamp'] >= start) & (elo_hist['timestamp'] <= end)]
@@ -64,11 +64,11 @@ def elo_overview_per_season():
         if elo_hist.empty:
             continue
         elo_hist['timestamp'] = pd.to_datetime(elo_hist['timestamp'], errors='coerce')
-        if elo_hist['timestamp'].dt.tz is not None:
-            elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+        if elo_hist['timestamp'].dt.tz is not None:  # type: ignore
+            elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
         else:
             try:
-                elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)
+                elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)  # type: ignore
             except Exception:
                 pass
         for _, season in seasons_df.iterrows():
@@ -166,6 +166,26 @@ def run_elo_test():
         assert player_map_after["TestSpelerBravo"]['rating'] == 984
         assert player_map_after["TestSpelerDelta"]['rating'] == 984
         print(" -> SUCCES: ELO-scores zijn correct bijgewerkt en opgehaald.")
+
+        # Controle op dubbele ELO-entries per speler per wedstrijd
+        print("\nControleren op dubbele ELO-entries per speler per wedstrijd...")
+        elo_histories = []
+        for name in test_players.keys():
+            elo_hist = db.get_elo_history(_ttl=60, speler_naam=name)
+            if not elo_hist.empty and 'match_id' in elo_hist.columns:
+                elo_histories.append(elo_hist[['speler_naam', 'match_id']])
+        if elo_histories:
+            all_elo = pd.concat(elo_histories, ignore_index=True)
+            dups = all_elo.duplicated(subset=['speler_naam', 'match_id'], keep=False)
+            if dups.any():
+                dup_rows = all_elo[dups]
+                print("\n!!! FOUT: Dubbele ELO-entries gevonden per speler per wedstrijd:")
+                print(dup_rows)
+                raise AssertionError("Dubbele ELO-entries per speler per wedstrijd gevonden!")
+            else:
+                print(" -> SUCCES: Geen dubbele ELO-entries per speler per wedstrijd gevonden.")
+        else:
+            print(" -> Geen ELO-geschiedenis gevonden voor testspelers.")
     except AssertionError as e:
         print(f"\n!!! TEST MISLUKT: {e}!!!")
     finally:
