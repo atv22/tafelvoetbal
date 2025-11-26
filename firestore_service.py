@@ -299,9 +299,15 @@ def get_matches():
         # Normaliseer timestamp naar pandas datetime
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            # Maak alle timestamps tz-naive
-            if df['timestamp'].dt.tz is not None:
-                df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+            # Maak alle timestamps tz-naive, alleen als dtype klopt
+            if pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+                try:
+                    if hasattr(df['timestamp'].dt, 'tz') and df['timestamp'].dt.tz is not None:  # type: ignore
+                        df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
+                    else:
+                        df['timestamp'] = df['timestamp'].dt.tz_localize(None)  # type: ignore
+                except Exception:
+                    pass
 
         # Verwijder overbodige kolommen indien aanwezig (oude kolommen worden alleen verwijderd, niet meer gebruikt)
         cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
@@ -356,12 +362,13 @@ def get_seasons():
         return pd.DataFrame()
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
-    # Forceer alle timestamps naar tz-naive (UTC)
-    if df['timestamp'].dt.tz is not None:
-        df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-    else:
+    # Forceer alle timestamps naar tz-naive (UTC) als dtype klopt
+    if pd.api.types.is_datetime64_any_dtype(df['timestamp']):
         try:
-            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
+            if hasattr(df['timestamp'].dt, 'tz') and df['timestamp'].dt.tz is not None:  # type: ignore
+                df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
+            else:
+                df['timestamp'] = df['timestamp'].dt.tz_localize(None)  # type: ignore
         except Exception:
             pass
 
@@ -374,10 +381,19 @@ def get_seasons():
         dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
 
-    min_year = df['timestamp'].dt.year.min()
-    max_year = df['timestamp'].dt.year.max()
-    season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
-    season_bounds = sorted(season_bounds)
+    if pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+        try:
+            min_year = int(df['timestamp'].dt.year.min())  # type: ignore
+            max_year = int(df['timestamp'].dt.year.max())  # type: ignore
+        except Exception:
+            min_year = max_year = None
+    else:
+        min_year = max_year = None
+    if min_year is not None and max_year is not None:
+        season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
+        season_bounds = sorted(season_bounds)
+    else:
+        season_bounds = []
 
     seizoenen = []
     for i in range(len(season_bounds) - 1):
@@ -779,11 +795,15 @@ def reset_all_elos():
         matches_df = pd.DataFrame(all_matches)
         matches_df['timestamp'] = pd.to_datetime(matches_df['timestamp'], errors='coerce')
         matches_df = matches_df.dropna(subset=['timestamp'])
-        # Forceer alle timestamps naar tz-naive (UTC)
-        try:
-            matches_df['timestamp'] = matches_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-        except Exception:
-            matches_df['timestamp'] = matches_df['timestamp'].dt.tz_localize(None)
+        # Forceer alle timestamps naar tz-naive (UTC) als dtype klopt
+        if pd.api.types.is_datetime64_any_dtype(matches_df['timestamp']):
+            try:
+                if hasattr(matches_df['timestamp'].dt, 'tz') and matches_df['timestamp'].dt.tz is not None:  # type: ignore
+                    matches_df['timestamp'] = matches_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
+                else:
+                    matches_df['timestamp'] = matches_df['timestamp'].dt.tz_localize(None)  # type: ignore
+            except Exception:
+                pass
         if matches_df.empty:
             return True
         from datetime import date, timedelta, datetime
@@ -795,8 +815,8 @@ def reset_all_elos():
             dt_prinsjesdag = datetime.combine(prinsjesdag, datetime.min.time())
             return dt_prinsjesdag.replace(tzinfo=None)
 
-        min_year = matches_df['timestamp'].dt.year.min()
-        max_year = matches_df['timestamp'].dt.year.max()
+        min_year = matches_df['timestamp'].dt.year.min()  # type: ignore
+        max_year = matches_df['timestamp'].dt.year.max()  # type: ignore
         season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
         season_bounds = sorted([pd.Timestamp(s).to_pydatetime().replace(tzinfo=None) for s in season_bounds])
 
@@ -810,7 +830,13 @@ def reset_all_elos():
             ts = match['timestamp']
             # Forceer ook deze timestamp naar tz-naive
             if pd.notnull(ts) and hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                ts = ts.tz_convert('UTC').tz_localize(None)
+                try:
+                    ts = ts.tz_convert('UTC').tz_localize(None)  # type: ignore
+                except Exception:
+                    try:
+                        ts = ts.tz_localize(None)  # type: ignore
+                    except Exception:
+                        pass
             # Check of we aan een nieuw seizoen beginnen
             while season_idx < len(season_bounds) - 1 and ts >= season_bounds[season_idx + 1]:
                 season_idx += 1

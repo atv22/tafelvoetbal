@@ -10,7 +10,7 @@ from firestore_service import get_matches, get_seasons
 
 def test_matches_per_year(year):
     matches_df = get_matches()
-    matches_year = matches_df[matches_df['timestamp'].dt.year == year]
+    matches_year = matches_df[matches_df['timestamp'].dt.year == year]  # type: ignore
     print(f"Aantal wedstrijden in {year}: {len(matches_year)}")
     if not matches_year.empty:
         print(matches_year[['match_id','timestamp','thuis_1','thuis_2','uit_1','uit_2']].head(5))

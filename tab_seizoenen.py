@@ -39,16 +39,16 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                 if not elo_df.empty and 'timestamp' in elo_df.columns:
                     elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
                     try:
-                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
                     except Exception:
-                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)
+                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)  # type: ignore
                     laatste_dag = seizoen_matches['timestamp'].max()
                     laatste_dag_naive = pd.to_datetime(laatste_dag)
                     if hasattr(laatste_dag_naive, 'tzinfo') and laatste_dag_naive.tzinfo is not None:
                         try:
-                            laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)
+                            laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)  # type: ignore
                         except Exception:
-                            laatste_dag_naive = laatste_dag_naive.tz_localize(None)
+                            laatste_dag_naive = laatste_dag_naive.tz_localize(None)  # type: ignore
                     match_ids_in_season = set(seizoen_matches[seizoen_matches['timestamp'] <= laatste_dag_naive]['match_id'])
                     alle_spelers = set()
                     for _, m in seizoen_matches.iterrows():
