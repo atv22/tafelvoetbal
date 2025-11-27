@@ -821,12 +821,15 @@ def reset_all_elos():
         season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
         season_bounds = sorted([pd.Timestamp(s).to_pydatetime().replace(tzinfo=None) for s in season_bounds])
 
+
         # Doorloop alle wedstrijden chronologisch, reset ELO bij seizoensstart
         player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
         batch = db.batch()
         batch_counter = 0
         last_season_start = None
         season_idx = 0
+        # Houd bij welke spelers in het huidige seizoen actief zijn
+        seizoen_spelers = set()
         for _, match in matches_df.sort_values('timestamp').iterrows():
             ts = match['timestamp']
             # Forceer ook deze timestamp naar tz-naive
@@ -841,24 +844,28 @@ def reset_all_elos():
             # Check of we aan een nieuw seizoen beginnen
             while season_idx < len(season_bounds) - 1 and ts >= season_bounds[season_idx + 1]:
                 season_idx += 1
-            season_start = season_bounds[season_idx]
-            if last_season_start is None or season_start != last_season_start:
-                # Reset alle spelers naar 1000 bij start van nieuw seizoen
-                for speler in player_elos.keys():
-                    player_elos[speler] = 1000
-                    new_elo_ref = elo_ref.document()
-                    batch.set(new_elo_ref, {
-                        'speler_naam': speler,
-                        'rating': 1000,
-                        'timestamp': ts,
-                        'match_id': match.get('match_id') if 'match_id' in match else None
-                    })
-                    batch_counter += 1
-                last_season_start = season_start
-                if batch_counter >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    batch_counter = 0
+                # Bij seizoenswissel: reset alleen voor spelers die in het vorige seizoen actief waren
+                if last_season_start is not None and seizoen_spelers:
+                    for speler in seizoen_spelers:
+                        player_elos[speler] = 1000
+                        new_elo_ref = elo_ref.document()
+                        batch.set(new_elo_ref, {
+                            'speler_naam': speler,
+                            'rating': 1000,
+                            'timestamp': ts,
+                            'match_id': match.get('match_id') if 'match_id' in match else None
+                        })
+                        batch_counter += 1
+                    if batch_counter >= 400:
+                        batch.commit()
+                        batch = db.batch()
+                        batch_counter = 0
+                seizoen_spelers = set()
+                last_season_start = season_bounds[season_idx]
+            # Verzamel spelers van deze wedstrijd
+            for speler in [match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]:
+                if speler:
+                    seizoen_spelers.add(speler)
             # Doorrekenen deze wedstrijd
             match_dict = {
                 "Thuis_1": match.get('thuis_1'),
@@ -883,6 +890,31 @@ def reset_all_elos():
                 })
                 batch_counter += 1
             if batch_counter >= 400:
+                batch.commit()
+                batch = db.batch()
+                batch_counter = 0
+        # Na de laatste wedstrijd: reset voor spelers die in het laatste seizoen actief waren
+        if seizoen_spelers:
+            # Bepaal een geldige timestamp voor de reset (gebruik laatste wedstrijd of nu)
+            if not matches_df.empty:
+                laatste_wedstrijd = matches_df.sort_values('timestamp').iloc[-1]
+                ts_reset = laatste_wedstrijd['timestamp']
+                match_id_reset = laatste_wedstrijd.get('match_id')
+            else:
+                from datetime import datetime
+                ts_reset = datetime.utcnow()
+                match_id_reset = None
+            for speler in seizoen_spelers:
+                player_elos[speler] = 1000
+                new_elo_ref = elo_ref.document()
+                batch.set(new_elo_ref, {
+                    'speler_naam': speler,
+                    'rating': 1000,
+                    'timestamp': ts_reset,
+                    'match_id': match_id_reset
+                })
+                batch_counter += 1
+            if batch_counter > 0:
                 batch.commit()
                 batch = db.batch()
                 batch_counter = 0
