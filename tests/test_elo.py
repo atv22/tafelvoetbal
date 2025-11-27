@@ -8,6 +8,7 @@ Combineert ELO-checks, functionele tests en seizoensoverzichten voor de tafelvoe
 """
 import pandas as pd
 import firestore_service as db
+from firestore_service import normalize_timestamp_series
 import time
 
 def check_elo_per_season():
@@ -35,14 +36,7 @@ def check_elo_per_season():
             else:
                 # Check of er een ELO entry is binnen de seizoensgrenzen
                 elo_hist['timestamp'] = pd.to_datetime(elo_hist['timestamp'], errors='coerce')
-                # Forceer alle timestamps naar tz-naive (UTC)
-                if elo_hist['timestamp'].dt.tz is not None:  # type: ignore
-                    elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
-                else:
-                    try:
-                        elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)  # type: ignore
-                    except Exception:
-                        pass
+                elo_hist['timestamp'] = normalize_timestamp_series(elo_hist['timestamp'])
                 in_season = elo_hist[(elo_hist['timestamp'] >= start) & (elo_hist['timestamp'] <= end)]
                 if in_season.empty:
                     missing_elo.append((speler, season['seizoen_naam']))
@@ -68,13 +62,7 @@ def elo_overview_per_season():
         if elo_hist.empty:
             continue
         elo_hist['timestamp'] = pd.to_datetime(elo_hist['timestamp'], errors='coerce')
-        if elo_hist['timestamp'].dt.tz is not None:  # type: ignore
-            elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
-        else:
-            try:
-                elo_hist['timestamp'] = elo_hist['timestamp'].dt.tz_localize(None)  # type: ignore
-            except Exception:
-                pass
+        elo_hist['timestamp'] = normalize_timestamp_series(elo_hist['timestamp'])
         for _, season in seasons_df.iterrows():
             start = pd.to_datetime(season['startdatum'])
             end = pd.to_datetime(season['einddatum'])

@@ -1,5 +1,5 @@
 import pandas as pd
-from firestore_service import get_seasons, get_matches, get_elo_logs
+from firestore_service import get_seasons, get_matches, get_elo_logs, normalize_timestamp_series
 from datetime import datetime
 import pytest
 
@@ -9,26 +9,17 @@ def test_seizoenen_validaties():
     matches_df = get_matches()
     elo_df = get_elo_logs()
 
-    # Forceer alle timestamps naar tz-naive
+    # Forceer alle timestamps naar tz-naive via hulpfunctie
     for df in [matches_df, elo_df, seasons_df]:
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            try:
-                df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-            except Exception:
-                df['timestamp'] = df['timestamp'].dt.tz_localize(None)
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
         if 'startdatum' in df.columns:
             df['startdatum'] = pd.to_datetime(df['startdatum'], errors='coerce')
-            try:
-                df['startdatum'] = df['startdatum'].dt.tz_convert('UTC').dt.tz_localize(None)
-            except Exception:
-                df['startdatum'] = df['startdatum'].dt.tz_localize(None)
+            df['startdatum'] = normalize_timestamp_series(df['startdatum'])
         if 'einddatum' in df.columns:
             df['einddatum'] = pd.to_datetime(df['einddatum'], errors='coerce')
-            try:
-                df['einddatum'] = df['einddatum'].dt.tz_convert('UTC').dt.tz_localize(None)
-            except Exception:
-                df['einddatum'] = df['einddatum'].dt.tz_localize(None)
+            df['einddatum'] = normalize_timestamp_series(df['einddatum'])
 
     # Controle: aantal wedstrijden per seizoen
     for _, row in seasons_df.iterrows():

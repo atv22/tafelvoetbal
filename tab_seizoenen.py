@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from firestore_service import normalize_timestamp_series
 from analytics import (
     show_cross_season_charts,
     show_individual_season_analysis,
@@ -38,17 +39,11 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                 elo_df = get_elo_logs()
                 if not elo_df.empty and 'timestamp' in elo_df.columns:
                     elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
-                    try:
-                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
-                    except Exception:
-                        elo_df['timestamp'] = elo_df['timestamp'].dt.tz_localize(None)  # type: ignore
+                    elo_df['timestamp'] = normalize_timestamp_series(elo_df['timestamp'])
                     laatste_dag = seizoen_matches['timestamp'].max()
                     laatste_dag_naive = pd.to_datetime(laatste_dag)
-                    if hasattr(laatste_dag_naive, 'tzinfo') and laatste_dag_naive.tzinfo is not None:
-                        try:
-                            laatste_dag_naive = laatste_dag_naive.tz_convert('UTC').tz_localize(None)  # type: ignore
-                        except Exception:
-                            laatste_dag_naive = laatste_dag_naive.tz_localize(None)  # type: ignore
+                    # Normaliseer losse timestamp
+                    laatste_dag_naive = normalize_timestamp_series(pd.Series([laatste_dag_naive])).iloc[0]
                     match_ids_in_season = set(seizoen_matches[seizoen_matches['timestamp'] <= laatste_dag_naive]['match_id'])
                     alle_spelers = set()
                     for _, m in seizoen_matches.iterrows():
@@ -158,14 +153,13 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
             season_start = pd.to_datetime(season_row[start_col])
             season_end = pd.to_datetime(season_row[end_col])
-            if hasattr(season_start, 'tzinfo') and season_start.tzinfo is not None:
-                season_start = season_start.tz_convert('UTC').tz_localize(None)
-            if hasattr(season_end, 'tzinfo') and season_end.tzinfo is not None:
-                season_end = season_end.tz_convert('UTC').tz_localize(None)
+            # Normaliseer seizoensgrenzen
+            season_start = normalize_timestamp_series(pd.Series([season_start])).iloc[0]
+            season_end = normalize_timestamp_series(pd.Series([season_end])).iloc[0]
             ts = matches_df['timestamp']
             if hasattr(ts.dt, 'tz') and ts.dt.tz is not None:
                 matches_df = matches_df.copy()
-                matches_df['timestamp'] = ts.dt.tz_convert('UTC').dt.tz_localize(None)
+                matches_df['timestamp'] = normalize_timestamp_series(ts)
             season_matches = matches_df[(matches_df['timestamp'] >= season_start) & (matches_df['timestamp'] <= season_end)]
             show_individual_season_analysis(season_row, season_matches)
             # Toevoegen: activiteit vs winpercentage voor geselecteerd seizoen
