@@ -229,16 +229,21 @@ def run_elo_test():
 
 
 # === PYTEST TEST: invoeren van een nieuwe uitslag en ELO-controle ===
+
 import pytest
 
-@pytest.mark.integration
-def test_invoeren_nieuwe_uitslag_en_elo():
+
+# --- Pytest fixture voor testspelers setup en cleanup ---
+@pytest.fixture
+def testspelers_fixture():
     """
-    Test het invoeren van een nieuwe uitslag en controleer of de ELO en andere zaken correct worden aangepast.
+    Fixture die testspelers toevoegt vóór de test en altijd opruimt na afloop, ook bij failures.
+    Geeft een dict met spelernaam -> speler_id terug.
     """
     cleanup_test_players()
     import time
     time.sleep(2)
+    speler_ids = {}
     # Voeg testspelers toe
     for name, elo in test_players.items():
         result = db.add_player(name, elo)
@@ -250,8 +255,20 @@ def test_invoeren_nieuwe_uitslag_en_elo():
     for name, elo in test_players.items():
         assert name in player_map, f"Testspeler {name} niet gevonden in database."
         assert player_map[name]['rating'] == elo, f"ELO voor {name} is incorrect."
-        player_ids_to_cleanup.append(player_map[name]['speler_id'])
+        speler_ids[name] = player_map[name]['speler_id']
+    yield speler_ids
+    # Cleanup na test, altijd uitvoeren
+    for player_id in speler_ids.values():
+        db.delete_player_by_id(player_id)
+    player_ids_to_cleanup.clear()
 
+
+@pytest.mark.integration
+def test_invoeren_nieuwe_uitslag_en_elo(testspelers_fixture):
+    """
+    Test het invoeren van een nieuwe uitslag en controleer of de ELO en andere zaken correct worden aangepast.
+    """
+    speler_ids = testspelers_fixture
 
     # Voeg een wedstrijd toe en controleer ELO-update
     match_data = {
@@ -276,6 +293,7 @@ def test_invoeren_nieuwe_uitslag_en_elo():
     elo_updates = [(row['Speler'], round(row['ELO'], 0)) for _, row in calculated.iterrows()]
     success = db.add_match_and_update_elo(match_data, elo_updates)
     assert success, "Toevoegen van wedstrijd en loggen van ELO is mislukt."
+    import time
     time.sleep(2)
     df_players_after = db.get_players()
     player_map_after = {row['speler_naam']: row for index, row in df_players_after.iterrows()}
@@ -296,8 +314,3 @@ def test_invoeren_nieuwe_uitslag_en_elo():
         if dups.any():
             dup_rows = all_elo[dups]
             raise AssertionError(f"Dubbele ELO-entries per speler per wedstrijd gevonden! {dup_rows}")
-
-    # Opruimen
-    for player_id in player_ids_to_cleanup:
-        db.delete_player_by_id(player_id)
-    player_ids_to_cleanup.clear()
