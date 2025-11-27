@@ -559,7 +559,8 @@ def add_match_and_update_elo(match_data, elo_updates):
 
         # 2. Voeg de nieuwe wedstrijd toe
         new_match_ref = matches_ref.document()
-        match_data_with_timestamp = {**match_data, 'timestamp': match_timestamp}
+        match_id = new_match_ref.id
+        match_data_with_timestamp = {**match_data, 'timestamp': match_timestamp, 'match_id': match_id}
         batch.set(new_match_ref, match_data_with_timestamp)
 
         # 3. Log ELO updates (altijd met SERVER_TIMESTAMP voor log volgorde nu)
