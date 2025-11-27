@@ -563,13 +563,13 @@ def add_match_and_update_elo(match_data, elo_updates):
         match_data_with_timestamp = {**match_data, 'timestamp': match_timestamp, 'match_id': match_id}
         batch.set(new_match_ref, match_data_with_timestamp)
 
-        # 3. Log ELO updates (altijd met SERVER_TIMESTAMP voor log volgorde nu)
+        # 3. Log ELO updates met de timestamp van de wedstrijd (voor correcte historie)
         for speler_naam, new_elo in elo_updates:
             new_elo_ref = elo_ref.document()
             batch.set(new_elo_ref, {
                 'speler_naam': speler_naam,
                 'rating': new_elo,
-                'timestamp': SERVER_TIMESTAMP
+                'timestamp': match_timestamp
             })
 
         batch.commit()
