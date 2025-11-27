@@ -810,20 +810,23 @@ def recalculate_elo_from_match(match_timestamp):
                 "Thuis_score": int(match.get('thuis_score', 0)),
                 "Uit_score": int(match.get('uit_score', 0))
             }
-            all_ELO_ratings = {}
-            for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
-                all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            # Only log unique, non-None players for this match
+            players_in_match = [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]
+            unique_players = set(p for p in players_in_match if p)
+            all_ELO_ratings = {player: [player_elos.get(player, 1000)] for player in unique_players}
             new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
             for _, row in new_elo_df.iterrows():
-                player_elos[row["Speler"]] = row["ELO"]
-                new_elo_ref = elo_ref.document()
-                batch.set(new_elo_ref, {
-                    'speler_naam': row["Speler"],
-                    'rating': row["ELO"],
-                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
-                    'match_id': match.get('match_id')
-                })
-                batch_counter += 1
+                speler = row["Speler"]
+                if speler in unique_players:
+                    player_elos[speler] = row["ELO"]
+                    new_elo_ref = elo_ref.document()
+                    batch.set(new_elo_ref, {
+                        'speler_naam': speler,
+                        'rating': row["ELO"],
+                        'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
+                        'match_id': match.get('match_id')
+                    })
+                    batch_counter += 1
             if batch_counter >= 400:
                 batch.commit()
                 batch = db.batch()
@@ -952,20 +955,23 @@ def reset_all_elos():
                 "Thuis_score": int(match.get('thuis_score', 0)),
                 "Uit_score": int(match.get('uit_score', 0))
             }
-            all_ELO_ratings = {}
-            for player in [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]:
-                all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            # Only log unique, non-None players for this match
+            players_in_match = [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]
+            unique_players = set(p for p in players_in_match if p)
+            all_ELO_ratings = {player: [player_elos.get(player, 1000)] for player in unique_players}
             new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
             for _, row in new_elo_df.iterrows():
-                player_elos[row["Speler"]] = row["ELO"]
-                new_elo_ref = elo_ref.document()
-                batch.set(new_elo_ref, {
-                    'speler_naam': row["Speler"],
-                    'rating': row["ELO"],
-                    'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
-                    'match_id': match.get('match_id')
-                })
-                batch_counter += 1
+                speler = row["Speler"]
+                if speler in unique_players:
+                    player_elos[speler] = row["ELO"]
+                    new_elo_ref = elo_ref.document()
+                    batch.set(new_elo_ref, {
+                        'speler_naam': speler,
+                        'rating': row["ELO"],
+                        'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
+                        'match_id': match.get('match_id')
+                    })
+                    batch_counter += 1
             if batch_counter >= 400:
                 batch.commit()
                 batch = db.batch()
@@ -981,7 +987,8 @@ def reset_all_elos():
                 from datetime import datetime
                 ts_reset = datetime.utcnow()
                 match_id_reset = None
-            for speler in seizoen_spelers:
+            unique_seizoen_spelers = set(seizoen_spelers)
+            for speler in unique_seizoen_spelers:
                 player_elos[speler] = 1000
                 new_elo_ref = elo_ref.document()
                 batch.set(new_elo_ref, {
