@@ -160,7 +160,7 @@ def run_elo_test():
 
         # Controleer of de ELO-berekening in de database overeenkomt met de berekening in de code
         print("\nControleren of ELO-berekening overeenkomt met de code...")
-        from utils_new_elo import calculate_new_elo
+        from utils.utils_new_elo import calculate_new_elo
         # Bouw all_ELO_ratings dict op basis van initiële ratings
         all_ELO_ratings = {name: [elo] for name, elo in test_players.items()}
         # Simuleer de testwedstrijd
@@ -267,7 +267,7 @@ def test_invoeren_nieuwe_uitslag_en_elo(testspelers_fixture):
         'klinkers_uit_1': 0, 'klinkers_uit_2': 2,
     }
     # Bepaal verwachte ELO's met de actuele logica
-    from utils_new_elo import calculate_new_elo
+    from utils.utils_new_elo import calculate_new_elo
     all_ELO_ratings = {name: [elo] for name, elo in test_players.items()}
     test_match = {
         "Thuis_1": "TestSpelerAlpha",

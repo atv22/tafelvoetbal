@@ -6,7 +6,6 @@ Bevat zowel de nieuwe als eenvoudige ELO-logica.
 import streamlit as st
 import pandas as pd
 
-
 # ELO-hulpfuncties
 K_FACTOR = 32
 

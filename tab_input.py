@@ -6,7 +6,7 @@ Bevat wedstrijd invoer formulier, validatie en ELO berekeningen
 import streamlit as st
 import time
 import firestore_service as db
-from utils_new_elo import calculate_new_elo
+from utils.utils_new_elo import calculate_new_elo
 from datetime import datetime
 
 
@@ -55,7 +55,7 @@ def render_match_input_form(player_names, player_elos):
         with score_cols[1]:
             away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1, key=f"score_uit_{session_key}")
 
-        from utils import get_nl_now
+        from utils.utils import get_nl_now
         # Huidige datum en tijd in Nederlandse tijdzone ophalen
         now = get_nl_now()
         match_date = st.date_input("Datum van de wedstrijd", value=now.date(), key=f"date_{session_key}", help="Standaard vandaag. Kies een andere dag indien gewenst.")

@@ -1,3 +1,8 @@
+"""
+Algemene hulpfuncties voor de tafelvoetbal-app.
+Bevat validatie, tijdzone, naam/request helpers, bestandsnaam, enz.
+"""
+
 from datetime import datetime
 import zoneinfo
 

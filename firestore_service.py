@@ -100,7 +100,7 @@ def recalculate_elos_for_season(start_date, end_date):
     start_date en end_date moeten datetime.date of pandas.Timestamp zijn.
     """
     try:
-        from utils_new_elo import calculate_new_elo
+        from utils.utils_new_elo import calculate_new_elo
         # Haal ALLE wedstrijden op, gesorteerd op timestamp
         all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
         all_matches = []
@@ -723,7 +723,7 @@ def recalculate_elo_from_match(match_timestamp):
     Gebruikt voor het corrigeren van ELO's na het bewerken/verwijderen van wedstrijden.
     """
     try:
-        from utils_new_elo import calculate_new_elo
+        from utils.utils_new_elo import calculate_new_elo
         
         # Haal alle wedstrijden op, gesorteerd op timestamp
         all_matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
@@ -850,7 +850,7 @@ def reset_all_elos():
     """
     try:
         import pandas as pd
-        from utils_new_elo import calculate_new_elo
+        from utils.utils_new_elo import calculate_new_elo
         # Verwijder alle bestaande ELO entries
         existing_elo_docs = elo_ref.stream()
         batch = db.batch()

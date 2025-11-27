@@ -3,7 +3,7 @@ TAB 3: Players module voor tafelvoetbal app
 Bevat speler toevoegen functionaliteit en speler lijst
 """
 import streamlit as st
-from utils import add_name
+from utils.utils import add_name
 
 
 def render_add_player_form():

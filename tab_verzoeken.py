@@ -4,7 +4,7 @@ Eenvoudig formulier om een verzoek/feedback in te dienen en optioneel recente ve
 """
 import streamlit as st
 import pandas as pd
-from utils import add_request
+from utils.utils import add_request
 import firestore_service as db
 
 

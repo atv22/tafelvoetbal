@@ -91,7 +91,7 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
                         st.code(str(e.details) if hasattr(e, 'details') else str(e))
                     return
                 if success:
-                    from utils_beheer_log import log_admin_action
+                    from utils.utils_beheer_log import log_admin_action
                     log_admin_action(
                         action_type=action_type,
                         user=st.session_state.get("user", "onbekend"),
@@ -285,7 +285,7 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
                 else:
                     success = db.update_match(match_data["match_id"], updated)
                     action_type = "update_match"
-                from utils_beheer_log import log_admin_action
+                from utils.utils_beheer_log import log_admin_action
                 log_admin_action(
                     action_type=action_type,
                     user=st.session_state.get("user", "onbekend"),
@@ -547,7 +547,7 @@ def _render_system_management(db, players_df: pd.DataFrame):
     if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
         with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
             success = db.reset_all_elos()
-            from utils_beheer_log import log_admin_action
+            from utils.utils_beheer_log import log_admin_action
             log_admin_action(
                 action_type="reset_all_elos",
                 user=st.session_state.get("user", "onbekend"),
@@ -581,7 +581,7 @@ def _render_system_management(db, players_df: pd.DataFrame):
             end_date = selected_season[3]
             with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
                 success = db.recalculate_elos_for_season(start_date, end_date)
-                from utils_beheer_log import log_admin_action
+                from utils.utils_beheer_log import log_admin_action
                 log_admin_action(
                     action_type="recalculate_elos_for_season",
                     user=st.session_state.get("user", "onbekend"),
@@ -759,7 +759,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         if st.button("🔄 Reset en herbereken alle ELO scores", key="reset_all_elos"):
             with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
                 success = db.reset_all_elos()
-                from utils_beheer_log import log_admin_action
+                from utils.utils_beheer_log import log_admin_action
                 log_admin_action(
                     action_type="reset_all_elos",
                     user=st.session_state.get("user", "onbekend"),
@@ -792,7 +792,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                 end_date = selected_season[3]
                 with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
                     success = db.recalculate_elos_for_season(start_date, end_date)
-                    from utils_beheer_log import log_admin_action
+                    from utils.utils_beheer_log import log_admin_action
                     log_admin_action(
                         action_type="recalculate_elos_for_season",
                         user=st.session_state.get("user", "onbekend"),

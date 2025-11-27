@@ -5,7 +5,7 @@ import time
 from datetime import date, datetime
 import firestore_service as db # Use Firestore
 from styles import setup_page
-from utils import add_name, get_download_filename
+from utils.utils import add_name, get_download_filename
 import plotly.express as px
 import plotly.graph_objects as go
 # Import nieuwe modules

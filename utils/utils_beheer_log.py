@@ -1,3 +1,8 @@
+"""
+Beheerlog-functies voor de tafelvoetbal-app.
+Logt beheeracties naar Firestore.
+"""
+
 import streamlit as st
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 

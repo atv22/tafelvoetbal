@@ -1,6 +1,6 @@
 import streamlit as st
 import firestore_service as db
-from utils import get_download_filename
+from utils.utils import get_download_filename
 
 def render_data_tab():
     st.header("📊 Ruwe Data uit Firestore")
