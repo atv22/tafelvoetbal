@@ -115,17 +115,35 @@ auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/jouw-service-account%40jouw-project.iam.gserviceaccount.com"
 ```
 
-## 📊 Database Schema
 
-### Collections
+## 📊 Database Schema & Veldnamen
 
-- **players:** Speler informatie en ELO scores
-- **matches:** Wedstrijd resultaten en timestamps  
-- **seasons:** Seizoen definities
-- **elo_history:** ELO score historie
+### Collections (Firestore)
+
+- **spelers:** Speler informatie en ELO scores
+- **uitslag:** Wedstrijd resultaten en timestamps  
+- **elo:** ELO score historie
 - **requests:** Tijdelijke data opslag
+- **seizoenen:** Seizoen definities (afgeleid, niet als losse collectie)
 
-### CSV Import Formaten
+> **Let op:** In de code en app wordt soms de Engelse term 'matches' gebruikt als alias voor de Firestore-collectie 'uitslag'. In Firestore zelf heet de collectie altijd **uitslag**.
+
+### Veldnamen: Firestore vs. DataFrame/app
+
+- Sommige velden bestaan **alleen in de app of in DataFrames** en niet als veld in Firestore. Dit zijn zogeheten "afgeleide velden" (bijv. `match_id`, `speler_id`).
+- Firestore-documenten hebben standaard een automatisch ID (`doc.id`), dat in de app als `match_id` of `speler_id` wordt toegevoegd aan DataFrames voor makkelijke verwerking.
+- Verwacht dus **niet** dat deze velden als veld in Firestore-documenten staan; ze worden alleen in de app toegevoegd.
+
+#### Overzicht per collectie
+
+| Collectie   | Vereiste velden (Firestore) | Optioneel | Alleen in app/DataFrame |
+|-------------|----------------------------|-----------|------------------------|
+| spelers     | speler_naam                |           | speler_id              |
+| elo         | speler_naam, rating, timestamp |       |                        |
+| uitslag     | thuis_1, thuis_2, uit_1, uit_2, thuis_score, uit_score, timestamp | klinkers_thuis_1, klinkers_thuis_2, klinkers_uit_1, klinkers_uit_2 | match_id |
+| requests    | Verzoek, Timestamp         |           |                        |
+
+#### CSV Import Formaten
 
 **Wedstrijden:**
 
@@ -141,6 +159,17 @@ speler_id,speler_naam,elo_score
 1,Rick,1050
 2,Arthur,980
 ```
+
+#### Naming Conventies
+
+- Gebruik in code en documentatie consequent de naam **uitslag** voor de Firestore-collectie met wedstrijden.
+- Gebruik **match_id** en **speler_id** alleen als DataFrame/app-veld, niet als Firestore-veld.
+- Controleer bij import/export altijd of deze velden wel/niet in de brondata staan.
+
+#### Mogelijke valkuilen
+
+- Externe tools of scripts die direct Firestore-data exporteren/importeren missen deze afgeleide velden. Voeg ze toe in de app of bij verwerking in pandas.
+- Bugs kunnen ontstaan als code verwacht dat `match_id` of `speler_id` altijd als veld aanwezig is. Controleer altijd op aanwezigheid of voeg ze toe via `doc.id`.
 
 ## 🎯 Gebruik
 
