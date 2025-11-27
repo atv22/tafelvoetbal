@@ -1,3 +1,10 @@
+# --- HULPFUNCTIE: Cache volledig legen ---
+def clear_all_caches():
+    """Leeg alle relevante Streamlit caches na mutaties."""
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
 # --- HULPFUNCTIE: Timestamp normalisatie ---
 def normalize_timestamp_series(ts_series):
     """
@@ -37,7 +44,7 @@ def delete_all_elo_history():
             batch_counter = 0
     if batch_counter > 0:
         batch.commit()
-    st.cache_data.clear()
+    clear_all_caches()
     return deleted_count
 # Verwijder ELO entries voor een specifieke datum
 def delete_elo_history_for_date(target_date):
@@ -64,7 +71,7 @@ def delete_elo_history_for_date(target_date):
             batch_counter = 0
     if batch_counter > 0:
         batch.commit()
-    st.cache_data.clear()
+    clear_all_caches()
     return deleted_count
 def recalculate_elos_for_season(start_date, end_date):
     """
@@ -193,7 +200,7 @@ def recalculate_elos_for_season(start_date, end_date):
                 batch_counter = 0
         if batch_counter > 0:
             batch.commit()
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Fout bij herberekenen van ELO's voor seizoen: {e}")
@@ -539,7 +546,7 @@ def add_player(name, start_elo):
         })
 
         batch.commit()
-        st.cache_data.clear()
+        clear_all_caches()
         return "Success"
     except Exception as e:
         print(f"ERROR: Failed to add player '{name}'. Exception: {e}")
@@ -549,7 +556,7 @@ def add_request(request_text):
     """Voegt een nieuw verzoek toe aan de 'requests' collectie."""
     try:
         requests_ref.add({'Verzoek': request_text, 'Timestamp': SERVER_TIMESTAMP})
-        st.cache_data.clear()
+        clear_all_caches()
         return "Success"
     except Exception as e:
         return f"Error: {e}"
@@ -623,7 +630,7 @@ def add_match_and_update_elo(match_data, elo_updates):
             # Kies recalc vanaf die timestamp voor efficiency.
             recalculate_elo_from_match(match_timestamp)
 
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Error during batch commit: {e}")
@@ -652,7 +659,7 @@ def delete_player_by_id(player_id):
                 batch.delete(doc.reference)
         
         batch.commit()
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Fout bij verwijderen van speler {player_id}: {e}")
@@ -666,7 +673,7 @@ def delete_match_by_id(match_id):
     """Verwijdert een wedstrijd op basis van zijn ID."""
     try:
         matches_ref.document(match_id).delete()
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Fout bij verwijderen van wedstrijd {match_id}: {e}")
@@ -676,7 +683,7 @@ def update_match(match_id, updated_match_data):
     """Werkt een wedstrijd bij op basis van zijn ID."""
     try:
         matches_ref.document(match_id).update(updated_match_data)
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Fout bij bijwerken van wedstrijd {match_id}: {e}")
@@ -798,7 +805,7 @@ def recalculate_elo_from_match(match_timestamp):
         if batch_counter > 0:
             batch.commit()
         
-        st.cache_data.clear()
+        clear_all_caches()
         return True
         
     except Exception as e:
@@ -965,7 +972,7 @@ def reset_all_elos():
         if batch_counter > 0:
             batch.commit()
 
-        st.cache_data.clear()
+        clear_all_caches()
         return True
     except Exception as e:
         print(f"Fout bij resetten van alle ELO's: {e}")
@@ -1011,7 +1018,7 @@ def update_match_with_elo_recalculation(match_id, updated_match_data):
         # Herberekenen ELO's vanaf deze wedstrijd
         success = recalculate_elo_from_match(original_timestamp)
 
-        st.cache_data.clear()
+        clear_all_caches()
         return success
         
     except Exception as e:
@@ -1040,7 +1047,7 @@ def delete_match_with_elo_recalculation(match_id):
         # Herberekenen ELO's vanaf dit punt
         success = recalculate_elo_from_match(match_timestamp)
         
-        st.cache_data.clear()
+        clear_all_caches()
         return success
         
     except Exception as e:
@@ -1054,7 +1061,7 @@ def clear_collection(collection_name):
             docs = requests_ref.stream()
             for doc in docs:
                 doc.reference.delete()
-            st.cache_data.clear()
+            clear_all_caches()
             return True
         # Voeg hier eventueel andere collecties toe die geleegd mogen worden
         return False
@@ -1093,7 +1100,7 @@ def import_players(players_data):
                 # Optioneel: log de fout als add_player faalt
                 print(f"Kon speler {player_name} niet importeren: {result}")
 
-    st.cache_data.clear()
+    clear_all_caches()
     return added_count, duplicate_count
 
 def import_matches(matches_data):
@@ -1151,11 +1158,12 @@ def import_matches(matches_data):
     if commit_counter > 0:
         batch.commit() # Commit de resterende writes
 
-    st.cache_data.clear()
+    clear_all_caches()
     return added_count, duplicate_count
 
 def import_seasons(seasons_data):
     """
     Seizoenen worden nu automatisch bepaald door Prinsjesdag - import niet meer nodig.
     """
+    clear_all_caches()
     return 0, 0  # Geen toegevoegd, geen duplicaten
