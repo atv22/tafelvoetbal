@@ -1,3 +1,7 @@
+import sys
+import os
+# Voeg de hoofdmap toe aan sys.path zodat imports werken
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # test_elo.py
 """
 Combineert ELO-checks, functionele tests en seizoensoverzichten voor de tafelvoetbal-app.
@@ -223,10 +227,77 @@ def run_elo_test():
             print(f" -> SUCCES: {deleted_count} van de {len(player_ids_to_cleanup)} testspelers (en hun ELO-geschiedenis) verwijderd.")
     print("\nEINDE TEST")
 
-if __name__ == "__main__":
-    print("=== ELO CHECK PER SEIZOEN ===")
-    check_elo_per_season()
-    print("\n=== ELO FUNCTIONELE TESTS ===")
-    run_elo_test()
-    print("\n=== ELO OVERZICHT PER SEIZOEN ===")
-    elo_overview_per_season()
+
+# === PYTEST TEST: invoeren van een nieuwe uitslag en ELO-controle ===
+import pytest
+
+@pytest.mark.integration
+def test_invoeren_nieuwe_uitslag_en_elo():
+    """
+    Test het invoeren van een nieuwe uitslag en controleer of de ELO en andere zaken correct worden aangepast.
+    """
+    cleanup_test_players()
+    import time
+    time.sleep(2)
+    # Voeg testspelers toe
+    for name, elo in test_players.items():
+        result = db.add_player(name, elo)
+        assert result == "Success", f"Kon speler {name} niet toevoegen. Resultaat: {result}"
+    time.sleep(2)
+    df_players = db.get_players()
+    assert not df_players.empty, "DataFrame met spelers is leeg."
+    player_map = {row['speler_naam']: row for index, row in df_players.iterrows()}
+    for name, elo in test_players.items():
+        assert name in player_map, f"Testspeler {name} niet gevonden in database."
+        assert player_map[name]['rating'] == elo, f"ELO voor {name} is incorrect."
+        player_ids_to_cleanup.append(player_map[name]['speler_id'])
+
+
+    # Voeg een wedstrijd toe en controleer ELO-update
+    match_data = {
+        'thuis_1': "TestSpelerAlpha", 'thuis_2': "TestSpelerCharlie",
+        'uit_1': "TestSpelerBravo", 'uit_2': "TestSpelerDelta",
+        'thuis_score': 10, 'uit_score': 5,
+        'klinkers_thuis_1': 1, 'klinkers_thuis_2': 0,
+        'klinkers_uit_1': 0, 'klinkers_uit_2': 2,
+    }
+    # Bepaal verwachte ELO's met de actuele logica
+    from utils_new_elo import calculate_new_elo
+    all_ELO_ratings = {name: [elo] for name, elo in test_players.items()}
+    test_match = {
+        "Thuis_1": "TestSpelerAlpha",
+        "Thuis_2": "TestSpelerCharlie",
+        "Uit_1": "TestSpelerBravo",
+        "Uit_2": "TestSpelerDelta",
+        "Thuis_score": 10,
+        "Uit_score": 5
+    }
+    calculated = calculate_new_elo(test_match, all_ELO_ratings)
+    elo_updates = [(row['Speler'], round(row['ELO'], 0)) for _, row in calculated.iterrows()]
+    success = db.add_match_and_update_elo(match_data, elo_updates)
+    assert success, "Toevoegen van wedstrijd en loggen van ELO is mislukt."
+    time.sleep(2)
+    df_players_after = db.get_players()
+    player_map_after = {row['speler_naam']: row for index, row in df_players_after.iterrows()}
+    # Controleer dat de ELO's in de database overeenkomen met de berekende waarden
+    for speler, expected_elo in elo_updates:
+        actual_elo = player_map_after[speler]['rating']
+        assert actual_elo == expected_elo, f"ELO voor {speler} klopt niet: verwacht {expected_elo}, database {actual_elo}"
+
+    # Controle op dubbele ELO-entries per speler per wedstrijd
+    elo_histories = []
+    for name in test_players.keys():
+        elo_hist = db.get_elo_history(_ttl=60, speler_naam=name)
+        if not elo_hist.empty and 'match_id' in elo_hist.columns:
+            elo_histories.append(elo_hist[['speler_naam', 'match_id']])
+    if elo_histories:
+        all_elo = pd.concat(elo_histories, ignore_index=True)
+        dups = all_elo.duplicated(subset=['speler_naam', 'match_id'], keep=False)
+        if dups.any():
+            dup_rows = all_elo[dups]
+            raise AssertionError(f"Dubbele ELO-entries per speler per wedstrijd gevonden! {dup_rows}")
+
+    # Opruimen
+    for player_id in player_ids_to_cleanup:
+        db.delete_player_by_id(player_id)
+    player_ids_to_cleanup.clear()
