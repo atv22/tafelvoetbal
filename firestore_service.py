@@ -1,3 +1,23 @@
+# --- HULPFUNCTIE: Timestamp normalisatie ---
+def normalize_timestamp_series(ts_series):
+    """
+    Zet een pandas Series met timestamps om naar tz-naive UTC (indien mogelijk).
+    Werkt veilig voor zowel tz-aware als tz-naive series.
+    """
+    import pandas as pd
+    if not pd.api.types.is_datetime64_any_dtype(ts_series):
+        return ts_series
+    try:
+        # Als tz-aware, eerst naar UTC, dan tz-naive
+        if hasattr(ts_series.dt, 'tz') and ts_series.dt.tz is not None:
+            return ts_series.dt.tz_convert('UTC').dt.tz_localize(None)
+        else:
+            # Als al tz-naive, return as-is (of forceer zonder exceptie)
+            return ts_series.dt.tz_localize(None)
+    except (TypeError, ValueError):
+        # Als al tz-naive, return as-is
+        return ts_series
+
 # Verwijder alle ELO geschiedenis
 def delete_all_elo_history():
     """
@@ -295,19 +315,12 @@ def get_matches():
         matches.append(match_data)
     df = pd.DataFrame(matches)
 
+
     if not df.empty:
-        # Normaliseer timestamp naar pandas datetime
+        # Normaliseer timestamp naar pandas datetime en maak altijd tz-naive
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            # Maak alle timestamps tz-naive, alleen als dtype klopt
-            if pd.api.types.is_datetime64_any_dtype(df['timestamp']):
-                try:
-                    if hasattr(df['timestamp'].dt, 'tz') and df['timestamp'].dt.tz is not None:  # type: ignore
-                        df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
-                    else:
-                        df['timestamp'] = df['timestamp'].dt.tz_localize(None)  # type: ignore
-                except Exception:
-                    pass
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
 
         # Verwijder overbodige kolommen indien aanwezig (oude kolommen worden alleen verwijderd, niet meer gebruikt)
         cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
@@ -380,6 +393,10 @@ def get_seasons():
         prinsjesdag = first_tuesday + timedelta(days=14)
         dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
+
+
+    # Normaliseer timestamp kolom
+    df['timestamp'] = normalize_timestamp_series(df['timestamp'])
 
     if pd.api.types.is_datetime64_any_dtype(df['timestamp']):
         try:
@@ -768,6 +785,7 @@ def reset_all_elos():
     Gebruikt voor complete ELO reset.
     """
     try:
+        import pandas as pd
         from utils_new_elo import calculate_new_elo
         # Verwijder alle bestaande ELO entries
         existing_elo_docs = elo_ref.stream()
@@ -796,15 +814,7 @@ def reset_all_elos():
         matches_df = pd.DataFrame(all_matches)
         matches_df['timestamp'] = pd.to_datetime(matches_df['timestamp'], errors='coerce')
         matches_df = matches_df.dropna(subset=['timestamp'])
-        # Forceer alle timestamps naar tz-naive (UTC) als dtype klopt
-        if pd.api.types.is_datetime64_any_dtype(matches_df['timestamp']):
-            try:
-                if hasattr(matches_df['timestamp'].dt, 'tz') and matches_df['timestamp'].dt.tz is not None:  # type: ignore
-                    matches_df['timestamp'] = matches_df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)  # type: ignore
-                else:
-                    matches_df['timestamp'] = matches_df['timestamp'].dt.tz_localize(None)  # type: ignore
-            except Exception:
-                pass
+        matches_df['timestamp'] = normalize_timestamp_series(matches_df['timestamp'])
         if matches_df.empty:
             return True
         from datetime import date, timedelta, datetime
@@ -834,13 +844,10 @@ def reset_all_elos():
             ts = match['timestamp']
             # Forceer ook deze timestamp naar tz-naive
             if pd.notnull(ts) and hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                try:
-                    ts = ts.tz_convert('UTC').tz_localize(None)  # type: ignore
-                except Exception:
-                    try:
-                        ts = ts.tz_localize(None)  # type: ignore
-                    except Exception:
-                        pass
+                # Gebruik hulpfunctie voor losse timestamp
+                import pandas as pd
+                ts = pd.Series([ts])
+                ts = normalize_timestamp_series(ts).iloc[0]
             # Check of we aan een nieuw seizoen beginnen
             while season_idx < len(season_bounds) - 1 and ts >= season_bounds[season_idx + 1]:
                 season_idx += 1
