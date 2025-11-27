@@ -7,7 +7,6 @@ ENV/
 env.bak/
 venv.bak/
 Archief/
-/.streamlit
 secrets.toml
 /External Libraries
 .idea
@@ -15,3 +14,4 @@ secrets.toml
 __pycache__
 firestore-key.json
 data/
+.streamlit\secrets.toml
