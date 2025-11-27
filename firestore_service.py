@@ -917,7 +917,6 @@ def reset_all_elos():
             ts = match['timestamp']
             # Forceer ook deze timestamp naar tz-naive
             if pd.notnull(ts) and hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                # Gebruik hulpfunctie voor losse timestamp
                 import pandas as pd
                 ts = pd.Series([ts])
                 ts = normalize_timestamp_series(ts).iloc[0]
@@ -943,9 +942,14 @@ def reset_all_elos():
                 seizoen_spelers = set()
                 last_season_start = season_bounds[season_idx]
             # Verzamel spelers van deze wedstrijd
-            for speler in [match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]:
-                if speler:
-                    seizoen_spelers.add(speler)
+            players_in_match = [match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]
+            # Strict check: skip match if duplicate player names
+            filtered_players = [p for p in players_in_match if p]
+            if len(set(filtered_players)) < len(filtered_players):
+                print(f"[ELO RESET] Skipping match {match.get('match_id')} due to duplicate player names: {filtered_players}")
+                continue
+            for speler in filtered_players:
+                seizoen_spelers.add(speler)
             # Doorrekenen deze wedstrijd
             match_dict = {
                 "Thuis_1": match.get('thuis_1'),
@@ -955,9 +959,7 @@ def reset_all_elos():
                 "Thuis_score": int(match.get('thuis_score', 0)),
                 "Uit_score": int(match.get('uit_score', 0))
             }
-            # Only log unique, non-None players for this match
-            players_in_match = [match_dict["Thuis_1"], match_dict["Thuis_2"], match_dict["Uit_1"], match_dict["Uit_2"]]
-            unique_players = set(p for p in players_in_match if p)
+            unique_players = set(filtered_players)
             all_ELO_ratings = {player: [player_elos.get(player, 1000)] for player in unique_players}
             new_elo_df = calculate_new_elo(match_dict, all_ELO_ratings)
             for _, row in new_elo_df.iterrows():
