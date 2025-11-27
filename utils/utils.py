@@ -22,7 +22,6 @@ K_FACTOR = 32
 # ---------- Helpers voor namen & verzoeken ----------
 def add_name(name: str):
     """Valideer en voeg nieuwe speler toe aan Firestore."""
-    # Strip whitespace and check for duplicate (case-insensitive, ignore spaces)
     clean_name = name.strip()
     if not clean_name or not clean_name.isalpha():
         st.error("De naam mag alleen letters bevatten. Verander de naam naar alleen letters.")
@@ -34,7 +33,6 @@ def add_name(name: str):
         st.error("De eerste letter van de naam moet een hoofdletter zijn.")
         return
 
-    # Check for duplicate (case-insensitive, ignore spaces)
     existing_players = db.get_players()
     norm = lambda s: s.replace(" ", "").lower()
     if not existing_players.empty:
@@ -42,15 +40,16 @@ def add_name(name: str):
             st.error(f"De naam '{clean_name}' bestaat al (mogelijk met andere hoofdletters/spaties). Kies een unieke naam.")
             return
 
-    # Use firestore service to add player
     result = db.add_player(clean_name, start_elo=1000)
 
     if result == "Success":
         st.success(f"Naam '{clean_name}' toegevoegd.")
         time.sleep(1)
         st.rerun()
+        return clean_name
     else:
-        st.error(result) # Display error from firestore_service
+        st.error(result)
+        return
 
 def add_request(request: str):
     """Valideer en voeg verzoek toe aan Firestore."""
@@ -63,8 +62,10 @@ def add_request(request: str):
         st.success("Verzoek is toegevoegd.")
         time.sleep(1)
         st.rerun()
+        return request
     else:
         st.error(result)
+        return
 
 def get_download_filename(filename: str, extension: str) -> str:
     return f"{filename}_{dt.datetime.now().strftime('%d-%m-%Y_%H%M%S')}.{extension}"

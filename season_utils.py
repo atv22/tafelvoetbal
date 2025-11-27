@@ -10,15 +10,13 @@ def get_prinsjesdag(year):
     """Bereken Prinsjesdag (derde dinsdag van september) voor een gegeven jaar"""
     # Eerste dag van september
     first_september = date(year, 9, 1)
-    
     # Vind de eerste dinsdag (weekday 1 = dinsdag)
     days_until_tuesday = (1 - first_september.weekday()) % 7
     first_tuesday = first_september + timedelta(days=days_until_tuesday)
-    
     # Derde dinsdag is twee weken later
     prinsjesdag = first_tuesday + timedelta(days=14)
-    
-    return prinsjesdag
+    # Altijd als pd.Timestamp retourneren
+    return pd.Timestamp(prinsjesdag)
 
 
 def generate_prinsjesdag_seasons(matches_df):
@@ -232,10 +230,15 @@ def calculate_season_stats(season_matches):
 def format_season_period(season_info):
     """Formatteer seizoen periode voor weergave"""
     try:
-        start_date = pd.to_datetime(season_info['start_datum']).strftime('%d-%m-%Y')
-        end_date = pd.to_datetime(season_info['eind_datum']).strftime('%d-%m-%Y')
+        # Ondersteun zowel 'startdatum'/'einddatum' als 'start_datum'/'eind_datum'
+        if 'startdatum' in season_info and 'einddatum' in season_info:
+            start_date = pd.to_datetime(season_info['startdatum']).strftime('%d-%m-%Y')
+            end_date = pd.to_datetime(season_info['einddatum']).strftime('%d-%m-%Y')
+        else:
+            start_date = pd.to_datetime(season_info['start_datum']).strftime('%d-%m-%Y')
+            end_date = pd.to_datetime(season_info['eind_datum']).strftime('%d-%m-%Y')
         return f"{start_date} tot {end_date}"
-    except:
+    except Exception:
         return "Onbekende periode"
 
 
