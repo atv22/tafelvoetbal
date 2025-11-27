@@ -574,6 +574,23 @@ def add_match_and_update_elo(match_data, elo_updates):
                 provided_ts = datetime.combine(provided_ts, datetime.min.time())
         match_timestamp = provided_ts if provided_ts else SERVER_TIMESTAMP
 
+        # 1b. Dubbele wedstrijd validatie (zelfde spelers, score, timestamp)
+        # NB: timestamp kan SERVER_TIMESTAMP zijn, dus alleen checken als datetime bekend
+        check_fields = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
+        query = matches_ref
+        for field in check_fields:
+            query = query.where(field, '==', match_data.get(field))
+        if provided_ts is not None:
+            # Alleen checken als timestamp bekend
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            import pandas as pd
+            ts_start = pd.to_datetime(provided_ts) - pd.Timedelta(seconds=1)
+            ts_end = pd.to_datetime(provided_ts) + pd.Timedelta(seconds=1)
+            query = query.where(filter=FieldFilter('timestamp', '>=', ts_start)).where(filter=FieldFilter('timestamp', '<=', ts_end))
+            existing = list(query.stream())
+            if existing:
+                return f"Error: Dubbele wedstrijd gevonden met dezelfde spelers, score en timestamp ({provided_ts})"
+
         # 2. Voeg de nieuwe wedstrijd toe
         new_match_ref = matches_ref.document()
         match_id = new_match_ref.id
@@ -697,18 +714,27 @@ def recalculate_elo_from_match(match_timestamp):
         # Haal huidige spelers op
         players_df = get_players()
         if players_df.empty:
-            return True
-            
+            print("[ELO RECALC] Geen spelers gevonden, ELO-herberekening afgebroken.")
+            return False
+
+        # Controle op dataconsistentie: alle spelers in matches moeten bestaan
+        all_players = set(players_df['speler_naam'])
+        for match in all_matches:
+            for speler in [match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]:
+                if speler and speler not in all_players:
+                    print(f"[ELO RECALC] Fout: Speler '{speler}' in wedstrijd {match.get('match_id')} bestaat niet in spelerslijst!")
+                    return False
+
         # Maak een dictionary van de ELO's zoals ze waren VOOR de te herberekenen wedstrijd
         if target_index > 0:
             # Er zijn eerdere wedstrijden - bereken ELO's tot aan het herpunt
             previous_matches = all_matches[:target_index]
             player_elos = {}
-            
+
             # Start alle spelers met 1000 ELO
             for _, player in players_df.iterrows():
                 player_elos[player['speler_naam']] = 1000
-            
+
             # Bereken ELO's door alle wedstrijden vóór het herpunt
             for match in previous_matches:
                 # Prepare match dict for new ELO calculation
@@ -808,7 +834,16 @@ def reset_all_elos():
         # Haal alle spelers op
         players_df = get_players()
         if players_df.empty:
-            return True
+            print("[ELO RESET] Geen spelers gevonden, reset afgebroken.")
+            return False
+
+        # Controle op dataconsistentie: alle spelers in matches moeten bestaan
+        all_players = set(players_df['speler_naam'])
+        for match in all_matches:
+            for speler in [match.get('thuis_1'), match.get('thuis_2'), match.get('uit_1'), match.get('uit_2')]:
+                if speler and speler not in all_players:
+                    print(f"[ELO RESET] Fout: Speler '{speler}' in wedstrijd {match.get('match_id')} bestaat niet in spelerslijst!")
+                    return False
 
         # Bepaal seizoenen op basis van Prinsjesdag (zoals in get_seasons)
         matches_df = pd.DataFrame(all_matches)
