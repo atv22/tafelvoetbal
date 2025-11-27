@@ -12,5 +12,5 @@ def test_expected_score():
     assert 0 <= utils_new_elo.expected_score(1500, 1500, 1500) <= 1
 
 def test_get_klinkers_for_player():
-    row = pd.Series({'thuis_1': 'Jan', 'uit_1': 'Piet'})
-    assert isinstance(utils_new_elo.get_klinkers_for_player('Jan', row), int)
+    row = pd.Series({'thuis_1': 'TestThuisA', 'thuis_2': 'TestThuisB', 'uit_1': 'TestUitA', 'uit_2': 'TestUitB'})
+    assert isinstance(utils_new_elo.get_klinkers_for_player('TestThuisA', row), int)
