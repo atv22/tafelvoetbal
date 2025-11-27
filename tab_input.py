@@ -145,9 +145,14 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
     match_data = prepare_match_data(selected_names, home_score, away_score, match_date)
     elo_updates = list(new_elos.items())
 
-    # Opslaan in Firestore
-    success = db.add_match_and_update_elo(match_data, elo_updates)
-
+    # Opslaan in Firestore met failsafe
+    try:
+        success = db.add_match_and_update_elo(match_data, elo_updates)
+    except db.FirestoreUnavailable as e:
+        st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
+        with st.expander("Toon technische details"):
+            st.code(str(e.details) if hasattr(e, 'details') else str(e))
+        return False
     if success:
         st.success("Uitslag en nieuwe ELO ratings succesvol opgeslagen!")
         if (home_score == 10 and away_score == 0) or (home_score == 0 and away_score == 10):

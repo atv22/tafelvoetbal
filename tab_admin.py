@@ -78,12 +78,18 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         if not match_row.empty:
             match_id = match_row.iloc[0]["match_id"]
             with st.spinner("Wedstrijd wordt verwijderd..."):
-                if auto_recalc_delete:
-                    success = db.delete_match_with_elo_recalculation(match_id)
-                    action_type = "delete_match_with_elo_recalculation"
-                else:
-                    success = db.delete_match_by_id(match_id)
-                    action_type = "delete_match"
+                try:
+                    if auto_recalc_delete:
+                        success = db.delete_match_with_elo_recalculation(match_id)
+                        action_type = "delete_match_with_elo_recalculation"
+                    else:
+                        success = db.delete_match_by_id(match_id)
+                        action_type = "delete_match"
+                except db.FirestoreUnavailable as e:
+                    st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
+                    with st.expander("Toon technische details"):
+                        st.code(str(e.details) if hasattr(e, 'details') else str(e))
+                    return
                 if success:
                     from utils_beheer_log import log_admin_action
                     log_admin_action(

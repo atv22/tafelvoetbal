@@ -38,5 +38,9 @@ def render_verzoeken_tab(matches_df=None):
                 st.dataframe(df.head(10), width='stretch')
             else:
                 st.info("Nog geen verzoeken ingediend.")
+        except db.FirestoreUnavailable as e:
+            st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
+            with st.expander("Toon technische details"):
+                st.code(str(e.details) if hasattr(e, 'details') else str(e))
         except Exception as e:
             st.warning(f"Kon verzoeken niet laden: {e}")

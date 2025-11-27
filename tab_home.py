@@ -158,58 +158,92 @@ def show_elo_rankings(players_df, matches_df):
 def show_elo_history_selector(players_df, matches_df=None):
     """Toon speler selectie voor ELO geschiedenis. Optioneel: alleen spelers en wedstrijden van een specifiek seizoen."""
     import pandas as pd
-    if matches_df is None:
-        # Standaard: alleen spelers van huidig seizoen (zoals in show_elo_rankings)
-        from datetime import date
-        matches_df = db.get_matches()
-        today = date.today()
-        def get_prinsjesdag(year):
-            from datetime import date, timedelta
-            first_september = date(year, 9, 1)
-            days_until_tuesday = (1 - first_september.weekday()) % 7
-            first_tuesday = first_september + timedelta(days=days_until_tuesday)
-            prinsjesdag = first_tuesday + timedelta(days=14)
-            return prinsjesdag
-        if matches_df is None or matches_df.empty:
-            st.info("Er zijn nog geen wedstrijden gespeeld.")
-            return
-        match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
-        min_year = max(2020, match_dates.min().year - 1)
-        max_year = min(today.year + 1, match_dates.max().year + 1)
-        current_season = None
-        for year in range(min_year, max_year + 1):
-            start = get_prinsjesdag(year - 1)
-            end = get_prinsjesdag(year)
-            if start <= today <= end:
-                current_season = (start, end)
-                break
-        if current_season:
-            match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None).dt.date
-            season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
+    try:
+        if matches_df is None:
+            # Standaard: alleen spelers van huidig seizoen (zoals in show_elo_rankings)
+            from datetime import date
+            matches_df = db.get_matches()
+            today = date.today()
+            def get_prinsjesdag(year):
+                from datetime import date, timedelta
+                first_september = date(year, 9, 1)
+                days_until_tuesday = (1 - first_september.weekday()) % 7
+                first_tuesday = first_september + timedelta(days=days_until_tuesday)
+                prinsjesdag = first_tuesday + timedelta(days=14)
+                return prinsjesdag
+            if matches_df is None or matches_df.empty:
+                st.info("Er zijn nog geen wedstrijden gespeeld.")
+                return
+            match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
+            min_year = max(2020, match_dates.min().year - 1)
+            max_year = min(today.year + 1, match_dates.max().year + 1)
+            current_season = None
+            for year in range(min_year, max_year + 1):
+                start = get_prinsjesdag(year - 1)
+                end = get_prinsjesdag(year)
+                if start <= today <= end:
+                    current_season = (start, end)
+                    break
+            if current_season:
+                match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None).dt.date
+                season_matches = matches_df[(match_dates >= current_season[0]) & (match_dates <= current_season[1])]
+                season_players = set()
+                for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                    if col in season_matches.columns:
+                        season_players.update(season_matches[col].dropna().astype(str).tolist())
+                filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
+            else:
+                filtered_players_df = players_df.iloc[0:0]
+            player_names = sorted(filtered_players_df['speler_naam'].tolist())
+            # Gebruik een unieke key gebaseerd op het id van matches_df indien aanwezig
+            key = None
+            if matches_df is not None:
+                key = f"elo_select_{id(matches_df)}"
+            if not player_names:
+                st.info("Er zijn nog geen spelers met gespeelde wedstrijden.")
+                return
+            selected_player = st.selectbox("Selecteer een speler:", player_names, key=key)
+            if selected_player:
+                # Haal de ELO geschiedenis op voor de geselecteerde speler
+                history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
+                if history_df is None or history_df.empty:
+                    st.info(f"Geen ELO geschiedenis gevonden voor {selected_player}.")
+                    return
+                history_df['match_num'] = range(1, len(history_df) + 1)
+                st.line_chart(history_df, x='match_num', y='rating')
+        else:
+            # Gebruik alleen spelers en wedstrijden van het opgegeven matches_df (bijv. specifiek seizoen)
+            if matches_df is None or matches_df.empty:
+                st.info("Geen wedstrijden in dit seizoen.")
+                return
+            # Bepaal spelers die in deze matches_df voorkomen
             season_players = set()
             for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                if col in season_matches.columns:
-                    season_players.update(season_matches[col].dropna().astype(str).tolist())
+                if col in matches_df.columns:
+                    season_players.update(matches_df[col].dropna().astype(str).tolist())
             filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
-        else:
-            filtered_players_df = players_df.iloc[0:0]
-        player_names = sorted(filtered_players_df['speler_naam'].tolist())
-        # Gebruik een unieke key gebaseerd op het id van matches_df indien aanwezig
-        key = None
-        if matches_df is not None:
-            key = f"elo_select_{id(matches_df)}"
-        if not player_names:
-            st.info("Er zijn nog geen spelers met gespeelde wedstrijden.")
-            return
-        selected_player = st.selectbox("Selecteer een speler:", player_names, key=key)
-        if selected_player:
-            # Haal de ELO geschiedenis op voor de geselecteerde speler
-            history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
-            if history_df is None or history_df.empty:
-                st.info(f"Geen ELO geschiedenis gevonden voor {selected_player}.")
+            player_names = sorted(filtered_players_df['speler_naam'].tolist())
+            if not player_names:
+                st.info("Er zijn nog geen spelers met gespeelde wedstrijden in dit seizoen.")
                 return
-            history_df['match_num'] = range(1, len(history_df) + 1)
-            st.line_chart(history_df, x='match_num', y='rating')
+            selected_player = st.selectbox("Selecteer een speler:", player_names)
+            if selected_player:
+                # Haal de ELO geschiedenis op voor de geselecteerde speler, filter op dit seizoen
+                history_df = db.get_elo_history(_ttl=60, speler_naam=selected_player)
+                if history_df is None or history_df.empty:
+                    st.info(f"Geen ELO geschiedenis gevonden voor {selected_player}.")
+                    return
+                # Filter op alleen wedstrijden in dit seizoen
+                match_ids = set(matches_df['wedstrijd_id'].astype(str)) if 'wedstrijd_id' in matches_df.columns else set()
+                if match_ids:
+                    history_df = history_df[history_df['wedstrijd_id'].astype(str).isin(match_ids)]
+                history_df = history_df.reset_index(drop=True)
+                if history_df.empty:
+                    st.info(f"Geen ELO geschiedenis voor {selected_player} in dit seizoen.")
+    except db.FirestoreUnavailable as e:
+        st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
+        with st.expander("Toon technische details"):
+            st.code(str(e.details) if hasattr(e, 'details') else str(e))
     else:
         # Gebruik alleen spelers en wedstrijden van het opgegeven matches_df (bijv. specifiek seizoen)
         if matches_df is None or matches_df.empty:

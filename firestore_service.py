@@ -1,3 +1,24 @@
+# --- Failsafe: Firestore bereikbaarheidscheck en custom exception ---
+import streamlit as st
+class FirestoreUnavailable(Exception):
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details
+
+def handle_firestore_exceptions(func):
+    """Decorator: Vang Firestore exceptions en geef een duidelijke foutmelding."""
+    import functools
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            import google.api_core.exceptions
+            # Herken typische Firestore quota/budget errors
+            if isinstance(e, (google.api_core.exceptions.ResourceExhausted, google.api_core.exceptions.PermissionDenied)) or 'quota' in str(e).lower() or 'budget' in str(e).lower():
+                raise FirestoreUnavailable("Database niet bereikbaar: mogelijk budgetlimiet bereikt.", details=str(e))
+            raise FirestoreUnavailable("Database niet bereikbaar.", details=str(e))
+    return functools.wraps(func)(wrapper)
+
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches():
     """Leeg alle relevante Streamlit caches na mutaties."""
@@ -278,6 +299,7 @@ requests_ref = db.collection('requests')
 
 
 # DATA LEESFUNCTIES
+@handle_firestore_exceptions
 @st.cache_data
 def get_players():
     """Haalt alle spelers op en hun meest recente ELO-rating."""
@@ -311,6 +333,7 @@ def get_players():
     
     return players_with_elo_df
 
+@handle_firestore_exceptions
 @st.cache_data
 def get_matches():
     """Haalt alle wedstrijden op en normaliseert timestamps."""
@@ -349,6 +372,7 @@ def get_matches():
 
     return df
 
+@handle_firestore_exceptions
 @st.cache_data
 def get_elo_logs():
     """Haalt de volledige ELO geschiedenis op."""
@@ -356,6 +380,7 @@ def get_elo_logs():
     elos = [doc.to_dict() for doc in elo_docs]
     return pd.DataFrame(elos)
 
+@handle_firestore_exceptions
 @st.cache_data
 def get_beheer_log():
     """Haalt alle beheer-log entries op uit Firestore."""
@@ -370,6 +395,7 @@ def get_elo_history(_ttl, speler_naam):
     history = [doc.to_dict() for doc in history_docs]
     return pd.DataFrame(history)
 
+@handle_firestore_exceptions
 @st.cache_data
 def get_seasons():
     """Bepaalt seizoenen automatisch op basis van kalenderjaar uit de wedstrijddata."""
@@ -443,6 +469,7 @@ def get_seasons():
         df_seizoenen = df_seizoenen.sort_values('startdatum').reset_index(drop=True)
     return df_seizoenen
 
+@handle_firestore_exceptions
 @st.cache_data
 def get_requests():
     """Haalt alle verzoeken op, gesorteerd op tijdstip."""
@@ -561,6 +588,7 @@ def add_request(request_text):
     except Exception as e:
         return f"Error: {e}"
 
+@handle_firestore_exceptions
 def add_match_and_update_elo(match_data, elo_updates):
     """
     Voegt een wedstrijd toe en logt de nieuwe ELO's in een atomaire batch write.
