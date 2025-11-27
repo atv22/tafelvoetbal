@@ -384,22 +384,22 @@ def show_all_time_leaderboards(player_stats):
     row2 = st.columns(3)
     with row1[0]:
         st.write("**🥅 Top 5 All-time Topscorers:**")
-        st.dataframe(df_scorers, hide_index=True, use_container_width=True)
+        st.dataframe(df_scorers, hide_index=True, width='stretch')
     with row1[1]:
         st.write("**⚽ Top 5 Meest Actief:**")
-        st.dataframe(df_active, hide_index=True, use_container_width=True)
+        st.dataframe(df_active, hide_index=True, width='stretch')
     with row1[2]:
         st.write("**🏅 Top 5 Meeste Overwinningen:**")
-        st.dataframe(df_wins, hide_index=True, use_container_width=True)
+        st.dataframe(df_wins, hide_index=True, width='stretch')
     with row2[0]:
         st.write("**🎯 Top 5 Klinker Masters (hoogste ELO):**")
-        st.dataframe(df_klinkers, hide_index=True, use_container_width=True)
+        st.dataframe(df_klinkers, hide_index=True, width='stretch')
     with row2[1]:
         st.write("**📈 Top 5 Hoogste Winpercentage (min. 20 wedstrijden):**")
-        st.dataframe(df_win_pct, hide_index=True, use_container_width=True)
+        st.dataframe(df_win_pct, hide_index=True, width='stretch')
     with row2[2]:
         st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20 wedstrijden):**")
-        st.dataframe(df_gpm, hide_index=True, use_container_width=True)
+        st.dataframe(df_gpm, hide_index=True, width='stretch')
 
 
 def show_cross_season_charts(all_matches, seasons_df):
