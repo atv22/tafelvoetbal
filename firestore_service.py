@@ -638,7 +638,8 @@ def add_match_and_update_elo(match_data, elo_updates):
             batch.set(new_elo_ref, {
                 'speler_naam': speler_naam,
                 'rating': new_elo,
-                'timestamp': match_timestamp
+                'timestamp': match_timestamp,
+                'match_id': match_id
             })
 
         batch.commit()
