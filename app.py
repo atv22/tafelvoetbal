@@ -13,13 +13,13 @@ from analytics import show_timeline_chart, show_cross_season_charts, show_indivi
 import season_utils  # Import hele module om functie parameters correct te kunnen gebruiken
 # Import TAB modules
 from tab_home import render_home_tab, calculate_stats
-from tab_input import render_input_tab
-from tab_players import render_players_tab
+from tab_invullen import render_input_tab
+from tab_spelers import render_players_tab
 
 
 from tab_verzoeken import render_verzoeken_tab
 from tab_data import render_data_tab
-from tab_admin import render_admin_tab
+from tab_beheer import render_admin_tab
 from tab_colofon import render_colofon_tab
 
 setup_page()
