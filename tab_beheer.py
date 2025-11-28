@@ -45,6 +45,8 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         help="Automatische herberekening zorgt voor correcte ELO scores na verwijdering.",
         key="elo_delete_option",
     )
+    if elo_delete_option == "⚠️ Alleen verwijderen (geen ELO update)":
+        st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het verwijderen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
     auto_recalc_delete = elo_delete_option.startswith("🔄")
     if not auto_recalc_delete:
         st.warning(
@@ -176,6 +178,8 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
         ],
         help="Automatische herberekening zorgt voor correcte ELO scores maar duurt langer.",
     )
+    if elo_option == "⚠️ Alleen wedstrijd aanpassen (geen ELO update)":
+        st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het aanpassen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
     auto_recalculate = elo_option.startswith("🔄")
     if not auto_recalculate:
         st.warning(
