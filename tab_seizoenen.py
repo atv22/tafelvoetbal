@@ -31,42 +31,19 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                     m.get('uit_1', None), m.get('uit_2', None)
                 ])
             unieke_spelers = len([p for p in unieke_spelers if p])
-            # Top 3 winnaars bepalen + ELO
+            # Top 3 winnaars bepalen + ELO (herbruikbare logica)
+            from analytics import get_season_top3_elo
+            from firestore_service import get_elo_logs
             winnaar, tweede, derde = '-', '-', '-'
             winnaar_elo, tweede_elo, derde_elo = '', '', ''
-            if not seizoen_matches.empty:
-                from firestore_service import get_elo_logs
-                elo_df = get_elo_logs()
-                if not elo_df.empty and 'timestamp' in elo_df.columns:
-                    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
-                    elo_df['timestamp'] = normalize_timestamp_series(elo_df['timestamp'])
-                    laatste_dag = seizoen_matches['timestamp'].max()
-                    laatste_dag_naive = pd.to_datetime(laatste_dag)
-                    # Normaliseer losse timestamp
-                    laatste_dag_naive = normalize_timestamp_series(pd.Series([laatste_dag_naive])).iloc[0]
-                    match_ids_in_season = set(seizoen_matches[seizoen_matches['timestamp'] <= laatste_dag_naive]['match_id'])
-                    alle_spelers = set()
-                    for _, m in seizoen_matches.iterrows():
-                        alle_spelers.update([
-                            m.get('thuis_1', None), m.get('thuis_2', None),
-                            m.get('uit_1', None), m.get('uit_2', None)
-                        ])
-                    alle_spelers = {p for p in alle_spelers if p}
-                    elo_df = elo_df[(elo_df['match_id'].isin(match_ids_in_season)) & (elo_df['speler_naam'].isin(alle_spelers))]
-                    laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
-                    if not laatste_elo.empty:
-                        top3 = laatste_elo.sort_values('rating', ascending=False).head(3)
-                        top3_names = top3['speler_naam'].tolist()
-                        top3_elos = top3['rating'].tolist()
-                        if len(top3_names) > 0:
-                            winnaar = top3_names[0]
-                            winnaar_elo = f" ({int(top3_elos[0])})"
-                        if len(top3_names) > 1:
-                            tweede = top3_names[1]
-                            tweede_elo = f" ({int(top3_elos[1])})"
-                        if len(top3_names) > 2:
-                            derde = top3_names[2]
-                            derde_elo = f" ({int(top3_elos[2])})"
+            elo_df = get_elo_logs()
+            top3 = get_season_top3_elo(elo_df, seizoen_matches)
+            if len(top3) > 0:
+                winnaar, winnaar_elo = top3[0][0], f" ({int(top3[0][1])})"
+            if len(top3) > 1:
+                tweede, tweede_elo = top3[1][0], f" ({int(top3[1][1])})"
+            if len(top3) > 2:
+                derde, derde_elo = top3[2][0], f" ({int(top3[2][1])})"
             extra_metrics.append({
                 'totaal_goals': totaal_goals,
                 'unieke_spelers': unieke_spelers,

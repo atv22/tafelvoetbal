@@ -1,11 +1,41 @@
 """
 Analytics en visualisatie functies voor de tafelvoetbal app
 """
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from collections import defaultdict
+
+# --- Herbruikbare ELO-winnaar/top 3 logica per seizoen ---
+def get_season_top3_elo(elo_df, seizoen_matches):
+    """
+    Bepaal de top 3 spelers met hoogste laatst bekende ELO aan het einde van het seizoen.
+    elo_df: DataFrame met ELO-logs (kolommen: speler_naam, rating, timestamp, match_id)
+    seizoen_matches: DataFrame met alle matches van het seizoen (kolom: timestamp, match_id, spelers)
+    Retourneert: [(naam, elo), ...] (max 3)
+    """
+    if elo_df is None or elo_df.empty or seizoen_matches is None or seizoen_matches.empty:
+        return []
+    # Bepaal alle spelers die in het seizoen hebben gespeeld
+    alle_spelers = set()
+    for _, m in seizoen_matches.iterrows():
+        for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+            if col in m:
+                alle_spelers.add(m.get(col))
+    alle_spelers = {p for p in alle_spelers if p}
+    # Bepaal alle match_ids in het seizoen
+    match_ids_in_season = set(seizoen_matches['match_id']) if 'match_id' in seizoen_matches.columns else set()
+    # Filter ELO-logs op matches in seizoen en spelers
+    elo_df = elo_df[(elo_df['speler_naam'].isin(alle_spelers)) & (elo_df['match_id'].isin(match_ids_in_season))]
+    if elo_df.empty:
+        return []
+    # Pak per speler de laatste ELO in het seizoen
+    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
+    laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
+    top3 = laatste_elo.sort_values('rating', ascending=False).head(3)
+    return list(zip(top3['speler_naam'], top3['rating']))
 
 
 def show_timeline_chart(matches_df):
@@ -154,78 +184,97 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
         st.plotly_chart(fig_scatter, config={'responsive': True}, key=chart_key)
 
 
-def show_season_distribution_pie(seasons_df):
-    """Toon pie chart van seizoen distributie"""
-    if not seasons_df.empty and 'aantal_wedstrijden' in seasons_df.columns:
-        # Detect season name column
-        if 'seizoen_naam' in seasons_df.columns:
-            name_col = 'seizoen_naam'
-        elif 'seizoen' in seasons_df.columns:
-            name_col = 'seizoen'
-        else:
-            name_col = seasons_df.columns[0]
-        fig_pie = px.pie(
-            seasons_df,
-            values='aantal_wedstrijden',
-            names=name_col,
-            title="Distributie wedstrijden per seizoen"
-        )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, config={'responsive': True}, key="season_distribution_pie")
+def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
+    """Toon cross-seizoen analyse charts, incl. top 3 ELO per seizoen."""
+    import streamlit as st
+    import pandas as pd
+    from collections import defaultdict
 
+    if all_matches.empty or seasons_df.empty:
+        return
+    st.subheader("\ud83d\udcca Individueel Seizoen Analyses")
 
-def show_elo_bar_chart(season_elo):
-    """Toon ELO bar chart voor een specifiek seizoen"""
-    if not season_elo.empty:
-        fig_elo = px.bar(
-            season_elo.head(10),
-            x='speler_naam',
-            y='elo_rating',
-            title="Top 10 ELO Ratings",
-            color='elo_rating',
-            color_continuous_scale='viridis'
-        )
-        fig_elo.update_layout(xaxis_title="Speler", yaxis_title="ELO Rating")
-        st.plotly_chart(fig_elo, config={'responsive': True}, key="elo_bar_chart")
+    # Toon per seizoen de top 3 ELO (nieuw)
+    if elo_df is None:
+        from firestore_service import get_elo_logs
+        elo_df = get_elo_logs()
+    st.markdown("**Top 3 ELO per seizoen (op basis van laatst bekende ELO):**")
+    top3_table = []
+    for _, season in seasons_df.iterrows():
+        start_col = 'start_datum' if 'start_datum' in season else 'startdatum'
+        end_col = 'eind_datum' if 'eind_datum' in season else 'einddatum'
+        season_name = season.get('seizoen_naam') or season.get('seizoen') or str(season.get('jaar', 'Onbekend'))
+        season_start = pd.to_datetime(season[start_col])
+        season_end = pd.to_datetime(season[end_col])
+        seizoen_matches = all_matches[(all_matches['timestamp'] >= season_start) & (all_matches['timestamp'] <= season_end)]
+        top3 = get_season_top3_elo(elo_df, seizoen_matches)
+        row = {'Seizoen': season_name}
+        for i, (naam, elo) in enumerate(top3):
+            row[f'#{i+1}'] = f"{naam} ({int(elo)})"
+        top3_table.append(row)
+    if top3_table:
+        df_top3 = pd.DataFrame(top3_table)
+        st.dataframe(df_top3, width='stretch')
 
+    # (oude cross-seizoen analyses blijven behouden)
+    # ELO ontwikkeling over seizoenen (geschatte versie)
+    player_season_elo = defaultdict(lambda: defaultdict(int))
+    player_season_matches = defaultdict(lambda: defaultdict(int))
 
-def show_winrate_bar_chart(season_matches, min_matches=5):
-    """Toon winpercentage bar chart voor een specifiek seizoen"""
-    player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
-    
-    # Detect home/away columns
-    if not season_matches.empty:
-        match_row = season_matches.iloc[0]
+    # Detect column names for start/end date and season name
+    season_row = seasons_df.iloc[0]
+    start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
+    end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
+    if 'seizoen_naam' in season_row:
+        name_col = 'seizoen_naam'
+    elif 'seizoen' in season_row:
+        name_col = 'seizoen'
+    else:
+        name_col = seasons_df.columns[0]  # fallback to first column
+
+    # Detect player column names
+    if not all_matches.empty:
+        match_row = all_matches.iloc[0]
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
-    for _, match in season_matches.iterrows():
-        home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
-        away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
-        for player in home_players:
-            if player is not None:
-                player_stats[player]['matches'] += 1
-                if match['thuis_score'] > match['uit_score']:
-                    player_stats[player]['wins'] += 1
-        for player in away_players:
-            if player is not None:
-                player_stats[player]['matches'] += 1
-                if match['uit_score'] > match['thuis_score']:
-                    player_stats[player]['wins'] += 1
-    
-    winrate_data = []
-    for player, stats in player_stats.items():
-        if stats['matches'] >= min_matches:
-            win_rate = (stats['wins'] / stats['matches']) * 100
-            winrate_data.append({
-                'Speler': player,
-                'Winpercentage': win_rate,
-                'Wedstrijden': stats['matches']
+
+    for _, match in all_matches.iterrows():
+        match_date = pd.to_datetime(match['timestamp']).tz_localize(None)
+        # Vind seizoen voor deze wedstrijd
+        current_season = "Onbekend"
+        for _, season in seasons_df.iterrows():
+            season_start = pd.to_datetime(season[start_col]).tz_localize(None)
+            season_end = pd.to_datetime(season[end_col]).tz_localize(None)
+            if season_start <= match_date <= season_end:
+                current_season = season[name_col]
+                break
+        # Track matches per seizoen
+        home_players = [match[col] for col in home_cols]
+        away_players = [match[col] for col in away_cols]
+        for player in home_players + away_players:
+            player_season_matches[player][current_season] += 1
+    # Seizoen vergelijking chart
+    if len(seasons_df) > 1:
+        season_comparison = []
+        for _, season in seasons_df.iterrows():
+            season_comparison.append({
+                'Seizoen': season[name_col],
+                'Gem. Goals': season.get('gemiddelde_goals', 0)
             })
-    
-    if winrate_data:
+        if season_comparison:
+            comparison_df = pd.DataFrame(season_comparison)
+            if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
+                fig_season_goals = px.line(
+                    comparison_df,
+                    x='Seizoen',
+                    y='Gem. Goals',
+                    title="Gemiddelde Goals per Seizoen",
+                    markers=True
+                )
+                st.plotly_chart(fig_season_goals, config={'responsive': True}, key="cross_season_goals_chart")
         winrate_df = pd.DataFrame(winrate_data).sort_values('Winpercentage', ascending=False)
         fig_winrate = px.bar(
             winrate_df.head(10),

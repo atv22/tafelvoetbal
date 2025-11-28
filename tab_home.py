@@ -312,3 +312,14 @@ def render_home_tab(players_df, matches_df):
     # --- Huidige ELO rating tonen (alleen huidig seizoen) ---
     st.subheader("Huidige ELO rating van alle spelers (huidig seizoen)")
     show_elo_rankings(players_df, matches_df)
+
+    # --- Top 3 ELO van huidig seizoen (consistent met seizoenslogica) ---
+    if huidig_seizoen is not None and not matches_df.empty:
+        from analytics import get_season_top3_elo
+        from firestore_service import get_elo_logs
+        elo_df = get_elo_logs()
+        top3 = get_season_top3_elo(elo_df, matches_df)
+        if top3:
+            st.markdown("**Top 3 ELO (laatst bekende ELO in huidig seizoen):**")
+            for i, (naam, elo) in enumerate(top3, 1):
+                st.markdown(f"{i}. {naam} ({int(elo)})")
