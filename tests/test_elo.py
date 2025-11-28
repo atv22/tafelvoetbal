@@ -88,10 +88,10 @@ def elo_overview_per_season():
 
 # TEST CONFIGURATIE
 test_players = {
-    "TestSpelerAlpha": 1000,
-    "TestSpelerBravo": 1000,
-    "TestSpelerCharlie": 1000,
-    "TestSpelerDelta": 1000,
+    "TestThuisA": 1000,
+    "TestThuisB": 1000,
+    "TestUitA": 1000,
+    "TestUitB": 1000,
 }
 player_ids_to_cleanup = []
 
@@ -137,15 +137,15 @@ def run_elo_test():
         print(" -> SUCCES: Alle testspelers succesvol opgehaald en geverifieerd.")
         print("\n Wedstrijd toevoegen en ELO-update controleren...")
         match_data = {
-            'thuis_1': "TestSpelerAlpha", 'thuis_2': "TestSpelerCharlie",
-            'uit_1': "TestSpelerBravo", 'uit_2': "TestSpelerDelta",
+            'thuis_1': "TestThuisA", 'thuis_2': "TestUitA",
+            'uit_1': "TestThuisB", 'uit_2': "TestUitB",
             'thuis_score': 10, 'uit_score': 5,
             'klinkers_thuis_1': 1, 'klinkers_thuis_2': 0,
             'klinkers_uit_1': 0, 'klinkers_uit_2': 2,
         }
         elo_updates = [
-            ("TestSpelerAlpha", 1016), ("TestSpelerCharlie", 1016),
-            ("TestSpelerBravo", 984), ("TestSpelerDelta", 984)
+            ("TestThuisA", 1016), ("TestUitA", 1016),
+            ("TestThuisB", 984), ("TestUitB", 984)
         ]
         success = db.add_match_and_update_elo(match_data, elo_updates)
         assert success, "Toevoegen van wedstrijd en loggen van ELO is mislukt."
@@ -153,10 +153,10 @@ def run_elo_test():
         time.sleep(2)
         df_players_after = db.get_players()
         player_map_after = {row['speler_naam']: row for index, row in df_players_after.iterrows()}
-        assert player_map_after["TestSpelerAlpha"]['rating'] == 1016
-        assert player_map_after["TestSpelerCharlie"]['rating'] == 1016
-        assert player_map_after["TestSpelerBravo"]['rating'] == 984
-        assert player_map_after["TestSpelerDelta"]['rating'] == 984
+        assert player_map_after["TestThuisA"]['rating'] == 1016
+        assert player_map_after["TestUitA"]['rating'] == 1016
+        assert player_map_after["TestThuisB"]['rating'] == 984
+        assert player_map_after["TestUitB"]['rating'] == 984
 
         # Controleer of de ELO-berekening in de database overeenkomt met de berekening in de code
         print("\nControleren of ELO-berekening overeenkomt met de code...")
@@ -165,10 +165,10 @@ def run_elo_test():
         all_ELO_ratings = {name: [elo] for name, elo in test_players.items()}
         # Simuleer de testwedstrijd
         test_match = {
-            "Thuis_1": "TestSpelerAlpha",
-            "Thuis_2": "TestSpelerCharlie",
-            "Uit_1": "TestSpelerBravo",
-            "Uit_2": "TestSpelerDelta",
+            "Thuis_1": "TestThuisA",
+            "Thuis_2": "TestUitA",
+            "Uit_1": "TestThuisB",
+            "Uit_2": "TestUitB",
             "Thuis_score": 10,
             "Uit_score": 5
         }
@@ -260,8 +260,8 @@ def test_invoeren_nieuwe_uitslag_en_elo(testspelers_fixture):
 
     # Voeg een wedstrijd toe en controleer ELO-update
     match_data = {
-        'thuis_1': "TestSpelerAlpha", 'thuis_2': "TestSpelerCharlie",
-        'uit_1': "TestSpelerBravo", 'uit_2': "TestSpelerDelta",
+        'thuis_1': "TestThuisA", 'thuis_2': "TestUitA",
+        'uit_1': "TestThuisB", 'uit_2': "TestUitB",
         'thuis_score': 10, 'uit_score': 5,
         'klinkers_thuis_1': 1, 'klinkers_thuis_2': 0,
         'klinkers_uit_1': 0, 'klinkers_uit_2': 2,
@@ -270,10 +270,10 @@ def test_invoeren_nieuwe_uitslag_en_elo(testspelers_fixture):
     from utils.utils_new_elo import calculate_new_elo
     all_ELO_ratings = {name: [elo] for name, elo in test_players.items()}
     test_match = {
-        "Thuis_1": "TestSpelerAlpha",
-        "Thuis_2": "TestSpelerCharlie",
-        "Uit_1": "TestSpelerBravo",
-        "Uit_2": "TestSpelerDelta",
+        "Thuis_1": "TestThuisA",
+        "Thuis_2": "TestUitA",
+        "Uit_1": "TestThuisB",
+        "Uit_2": "TestUitB",
         "Thuis_score": 10,
         "Uit_score": 5
     }
