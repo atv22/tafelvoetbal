@@ -50,6 +50,21 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         st.warning(
             "⚠️ **Let op:** Verwijderen zonder ELO herberekening kan leiden tot inconsistenties in de ratings."
         )
+        matches_display_df = matches_df.copy()
+        # Detect home/away columns
+        if not matches_display_df.empty:
+            match_row = matches_display_df.iloc[0]
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+        matches_display_df["display"] = matches_display_df.apply(
+            lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
+            f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
+            f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
+            axis=1,
+        )
 
     matches_display_df = matches_df.copy()
     # Detect home/away columns
@@ -165,6 +180,21 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
     if not auto_recalculate:
         st.warning(
             "⚠️ **Let op:** Het bewerken van wedstrijden zonder ELO herberekening kan leiden tot inconsistenties in de ratings."
+        )
+        matches_display_df = matches_df.copy()
+        # Detect home/away columns
+        if not matches_display_df.empty:
+            match_row = matches_display_df.iloc[0]
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+        else:
+            home_cols = ['thuis_1', 'thuis_2']
+            away_cols = ['uit_1', 'uit_2']
+        matches_display_df["display"] = matches_display_df.apply(
+            lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
+            f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
+            f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
+            axis=1,
         )
 
     if players_df.empty:
