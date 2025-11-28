@@ -725,8 +725,8 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         return
 
     # Hoofd tabs in beheer
-    tab_elo, tab_verwijderen, tab_bewerken, tab_upload, tab_inspectie = st.tabs([
-        "⚡ ELO beheer", "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload", "🔍 Inspectie"])
+    tab_verwijderen, tab_bewerken, tab_elo, tab_upload, tab_inspectie = st.tabs([
+        "🗑️ Verwijderen", "✏️ Bewerken", "⚡ ELO beheer", "📁 Upload", "🔍 Inspectie"])
 
     # Cache wissen knop (bovenaan beheer-tab)
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -741,48 +741,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
 
     with tab_elo:
         st.header("⚡ ELO Beheer")
-        st.subheader("🗑️ Hele ELO Geschiedenis wissen")
-        if st.button("Wis alle ELO geschiedenis"):
-            from firestore_service import delete_all_elo_history
-            deleted_count = delete_all_elo_history()
-            if deleted_count > 0:
-                st.success(f"Alle ELO entries ({deleted_count}) zijn verwijderd.")
-            else:
-                st.info("Er was geen ELO geschiedenis om te verwijderen.")
-
-        st.subheader("🗑️ ELO Geschiedenis verwijderen voor een specifieke datum")
-        target_date = st.date_input("Kies een datum om ELO geschiedenis te verwijderen:", value=datetime.date.today(), key="elo_date_input")
-        if st.button("Verwijder ELO geschiedenis voor deze datum", key="delete_elo_date"):
-            from firestore_service import delete_elo_history_for_date
-            deleted_count = delete_elo_history_for_date(target_date)
-            if deleted_count > 0:
-                st.success(f"{deleted_count} ELO entries verwijderd voor {target_date}.")
-            else:
-                st.info(f"Geen ELO entries gevonden voor {target_date}.")
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("🔄 Complete ELO Reset & Herberekening")
-        st.info("💡 Reset alle ELO scores naar 1000 en herberekent ze op basis van alle wedstrijden.")
-        if st.button("🔄 Reset en herbereken alle ELO scores", key="reset_all_elos"):
-            with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
-                success = db.reset_all_elos()
-                from utils.utils_beheer_log import log_admin_action
-                log_admin_action(
-                    action_type="reset_all_elos",
-                    user=st.session_state.get("user", "onbekend"),
-                    details={"action": "reset_all_elos"},
-                    db=db.db
-                )
-                if success:
-                    st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
-                    st.balloons()
-                    time.sleep(1.5)
-                    st.rerun()
-                else:
-                    st.error("❌ Fout bij resetten van de ELO scores.")
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("🔄 Herbereken ELO voor een seizoen")
+        st.subheader("🗑️ ELO Geschiedenis wissen voor een seizoen")
         seasons_df = db.get_seasons()
         if seasons_df.empty:
             st.info("Geen seizoenen gevonden. Voeg eerst wedstrijden toe.")
@@ -792,27 +751,17 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                 season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
                 season_options.append((season_str, idx, season['startdatum'], season['einddatum']))
             season_names = [o[0] for o in season_options]
-            selected = st.selectbox("Selecteer een seizoen voor ELO herberekening", options=season_names)
-            if st.button("Herbereken ELO voor dit seizoen", key="recalc_elo_season"):
+            selected = st.selectbox("Selecteer een seizoen om ELO geschiedenis te wissen", options=season_names)
+            if st.button("Wis ELO geschiedenis voor dit seizoen", key="delete_elo_season"):
                 selected_season = next(o for o in season_options if o[0] == selected)
                 start_date = selected_season[2]
                 end_date = selected_season[3]
-                with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
-                    success = db.recalculate_elos_for_season(start_date, end_date)
-                    from utils.utils_beheer_log import log_admin_action
-                    log_admin_action(
-                        action_type="recalculate_elos_for_season",
-                        user=st.session_state.get("user", "onbekend"),
-                        details={"action": "recalculate_elos_for_season", "seizoen": selected},
-                        db=db.db
-                    )
-                    if success:
-                        st.success(f"✅ ELO scores succesvol herberekend voor seizoen: {selected}")
-                        st.balloons()
-                        time.sleep(1.5)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Fout bij herberekenen van de ELO scores voor seizoen: {selected}")
+                from utils.delete_elo_history_for_season import delete_elo_history_for_season
+                deleted_count = delete_elo_history_for_season(start_date, end_date)
+                if deleted_count > 0:
+                    st.success(f"{deleted_count} ELO entries verwijderd voor seizoen: {selected}")
+                else:
+                    st.info(f"Geen ELO entries gevonden voor seizoen: {selected}")
 
     with tab_verwijderen:
         st.header("🗑️ Verwijderen")
