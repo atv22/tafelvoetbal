@@ -1,3 +1,51 @@
+def show_winrate_bar_chart(season_matches, min_matches=5):
+    """Toon winpercentage bar chart voor een specifiek seizoen"""
+    player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
+    
+    # Detect home/away columns
+    if not season_matches.empty:
+        match_row = season_matches.iloc[0]
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
+    else:
+        home_cols = ['thuis_1', 'thuis_2']
+        away_cols = ['uit_1', 'uit_2']
+    for _, match in season_matches.iterrows():
+        home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+        away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
+        for player in home_players:
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['thuis_score'] > match['uit_score']:
+                    player_stats[player]['wins'] += 1
+        for player in away_players:
+            if player is not None:
+                player_stats[player]['matches'] += 1
+                if match['uit_score'] > match['thuis_score']:
+                    player_stats[player]['wins'] += 1
+    
+    winrate_data = []
+    for player, stats in player_stats.items():
+        if stats['matches'] >= min_matches:
+            win_rate = (stats['wins'] / stats['matches']) * 100
+            winrate_data.append({
+                'Speler': player,
+                'Winpercentage': win_rate,
+                'Wedstrijden': stats['matches']
+            })
+    
+    if winrate_data:
+        winrate_df = pd.DataFrame(winrate_data).sort_values('Winpercentage', ascending=False)
+        fig_winrate = px.bar(
+            winrate_df.head(10),
+            x='Speler',
+            y='Winpercentage',
+            title=f"Top 10 Winpercentages (min. {min_matches} wedstrijden)",
+            color='Winpercentage',
+            color_continuous_scale='RdYlGn'
+        )
+        fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
+        st.plotly_chart(fig_winrate, config={'responsive': True}, key="winrate_bar_chart")
 """
 Analytics en visualisatie functies voor de tafelvoetbal app
 """
