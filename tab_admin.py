@@ -1004,3 +1004,5 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                         st.markdown("---")
                 except Exception as e:
                     st.error(f"Schema inspectie mislukt: {e}")
+ 
+ 
