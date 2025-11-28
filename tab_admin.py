@@ -121,23 +121,30 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
                 match_row = matches_display_df[matches_display_df["display"] == match_display]
                 if not match_row.empty:
                     match_id = match_row.iloc[0]["match_id"]
+                    # Verwijder wedstrijd en bijbehorende ELO-logs
                     if db.delete_match_by_id(match_id):
+                        # Verwijder ELO-logs met deze match_id
+                        try:
+                            from google.cloud.firestore_v1.base_query import FieldFilter
+                            elo_docs = db.elo_ref.where(filter=FieldFilter('match_id', '==', match_id)).stream()
+                            batch = db.db.batch()
+                            batch_counter = 0
+                            for doc in elo_docs:
+                                batch.delete(doc.reference)
+                                batch_counter += 1
+                                if batch_counter >= 400:
+                                    batch.commit()
+                                    batch = db.db.batch()
+                                    batch_counter = 0
+                            if batch_counter > 0:
+                                batch.commit()
+                        except Exception as e:
+                            st.warning(f"Kon ELO-logs voor match {match_id} niet verwijderen: {e}")
                         success_count += 1
-            if auto_recalc_delete and success_count > 0:
-                with st.spinner("ELO scores worden herberekend..."):
-                    db.reset_all_elos()
             if success_count == len(matches_to_delete):
-                if auto_recalc_delete:
-                    st.success(
-                        f"Alle {success_count} wedstrijden succesvol verwijderd en ELO scores volledig herberekend!"
-                    )
-                else:
-                    st.success(f"Alle {success_count} wedstrijden succesvol verwijderd.")
-                    st.warning("⚠️ ELO scores zijn niet herberekend.")
+                st.success(f"Alle {success_count} wedstrijden en bijbehorende ELO-logs succesvol verwijderd.")
             else:
-                st.warning(
-                    f"{success_count} van de {len(matches_to_delete)} wedstrijden verwijderd."
-                )
+                st.warning(f"{success_count} van de {len(matches_to_delete)} wedstrijden verwijderd.")
             time.sleep(1)
             st.rerun()
 

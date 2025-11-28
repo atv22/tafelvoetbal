@@ -1064,9 +1064,22 @@ def update_match_with_elo_recalculation(match_id, updated_match_data):
             if batch_counter > 0:
                 batch.commit()
 
-        # Herberekenen ELO's vanaf deze wedstrijd
-        success = recalculate_elo_from_match(original_timestamp)
-
+        # Bepaal seizoen van deze match
+        from datetime import datetime
+        seasons = get_seasons()
+        match_ts = pd.to_datetime(original_timestamp)
+        season_row = seasons[(seasons['startdatum'] <= match_ts) & (seasons['einddatum'] >= match_ts)]
+        if not season_row.empty:
+            start_date = season_row.iloc[0]['startdatum']
+            end_date = season_row.iloc[0]['einddatum']
+        else:
+            start_date = None
+            end_date = None
+        # Herbereken alleen het seizoen van deze match
+        if start_date and end_date:
+            success = recalculate_elos_for_season(start_date, end_date)
+        else:
+            success = True
         clear_all_caches()
         return success
         
@@ -1089,13 +1102,25 @@ def delete_match_with_elo_recalculation(match_id):
             return True
             
         match_timestamp = match_data.get('timestamp')
-        
+        # Bepaal seizoen van deze match
+        from datetime import datetime
+        seasons = get_seasons()
+        match_ts = pd.to_datetime(match_timestamp)
+        season_row = seasons[(seasons['startdatum'] <= match_ts) & (seasons['einddatum'] >= match_ts)]
+        if not season_row.empty:
+            start_date = season_row.iloc[0]['startdatum']
+            end_date = season_row.iloc[0]['einddatum']
+        else:
+            # fallback: herbereken alles (zou niet moeten gebeuren)
+            start_date = None
+            end_date = None
         # Verwijder de wedstrijd
         matches_ref.document(match_id).delete()
-        
-        # Herberekenen ELO's vanaf dit punt
-        success = recalculate_elo_from_match(match_timestamp)
-        
+        # Herbereken alleen het seizoen van deze match
+        if start_date and end_date:
+            success = recalculate_elos_for_season(start_date, end_date)
+        else:
+            success = True
         clear_all_caches()
         return success
         
