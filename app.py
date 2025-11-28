@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 # Import nieuwe modules
 from analytics import show_timeline_chart, show_cross_season_charts, show_individual_season_analysis, create_all_time_leaderboards
-import season_utils  # Import hele module om functie parameters correct te kunnen gebruiken
+import utils.utils_seizoen as utils_seizoen  # Import hele module om functie parameters correct te kunnen gebruiken
 # Import TAB modules
 from tab_home import render_home_tab, calculate_stats
 from tab_invullen import render_input_tab

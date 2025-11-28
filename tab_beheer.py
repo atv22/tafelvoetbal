@@ -790,7 +790,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                 selected_season = next(o for o in season_options if o[0] == selected)
                 start_date = selected_season[2]
                 end_date = selected_season[3]
-                from utils.delete_elo_history_for_season import delete_elo_history_for_season
+                from admin.delete_elo_history_for_season import delete_elo_history_for_season
                 deleted_count = delete_elo_history_for_season(start_date, end_date)
                 if deleted_count > 0:
                     st.success(f"{deleted_count} ELO entries verwijderd voor seizoen: {selected}")
