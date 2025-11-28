@@ -821,11 +821,22 @@ def recalculate_elo_from_match(match_timestamp):
                 if speler in unique_players:
                     player_elos[speler] = row["ELO"]
                     new_elo_ref = elo_ref.document()
+                    # match_id fallback: probeer uit match, anders uit DataFrame (indien beschikbaar)
+                    match_id = match.get('match_id')
+                    if not match_id and 'match_id' in matches_df.columns:
+                        # Zoek op timestamp en spelers
+                        possible = matches_df[(matches_df['timestamp'] == match.get('timestamp')) &
+                                              (matches_df['thuis_1'] == match.get('thuis_1')) &
+                                              (matches_df['thuis_2'] == match.get('thuis_2')) &
+                                              (matches_df['uit_1'] == match.get('uit_1')) &
+                                              (matches_df['uit_2'] == match.get('uit_2'))]
+                        if not possible.empty:
+                            match_id = possible.iloc[0]['match_id']
                     batch.set(new_elo_ref, {
                         'speler_naam': speler,
                         'rating': row["ELO"],
                         'timestamp': match.get('timestamp', SERVER_TIMESTAMP),
-                        'match_id': match.get('match_id')
+                        'match_id': match_id
                     })
                     batch_counter += 1
             if batch_counter >= 400:
