@@ -79,8 +79,10 @@ def get_season_top3_elo(elo_df, seizoen_matches):
     elo_df = elo_df[(elo_df['speler_naam'].isin(alle_spelers)) & (elo_df['match_id'].isin(match_ids_in_season))]
     if elo_df.empty:
         return []
-    # Pak per speler de laatste ELO in het seizoen
-    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
+    # Pak per speler de laatste ELO in het seizoen (normaliseer timestamps naar tz-naive)
+    ts = pd.to_datetime(elo_df['timestamp'], errors='coerce', utc=True)
+    elo_df = elo_df.copy()
+    elo_df.loc[:, 'timestamp'] = ts.dt.tz_localize(None)
     laatste_elo = elo_df.sort_values('timestamp').groupby('speler_naam').last().reset_index()
     top3 = laatste_elo.sort_values('rating', ascending=False).head(3)
     return list(zip(top3['speler_naam'], top3['rating']))
