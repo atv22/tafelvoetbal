@@ -34,7 +34,30 @@ Het ELO-systeem bepaalt de sterkte van elke speler op basis van hun prestaties i
 
 6. **Exporteren van data**
    - Exporteer de volledige ELO-geschiedenis of uitslagen uit Firestore naar CSV voor archief, analyse of migratie.
-   - Scripts: `00_export_elo_firestore.py`, `00_export_wedstrijden_firestore.py`
+   - Scripts: `00_export_elo_firestore.py`, `00_export_wedstrijden_firestore.py`, `export_all_firestore_to_csv.py`
+
+## Offline modus (CSV fallback)
+
+Wanneer Firestore tijdelijk niet bereikbaar is (bijv. quota bereikt), blijft de app werken met CSV-fallbacks:
+
+- Lezen (backup): app leest uit `csv/read/*.csv` als Firestore faalt voor spelers, wedstrijden, ELO, requests en afgeleide seizoenen.
+- Schrijven (offline queue): nieuwe spelers, requests, uitslagen en ELO-updates worden in `csv/write/*.csv` opgeslagen.
+
+Zodra Firestore weer beschikbaar is, kun je de offline writes importeren:
+
+```powershell
+& .\.venv\Scripts\Activate.ps1
+python admin\import_offline_csv_writes.py --dry-run true   # bekijk wat er geïmporteerd wordt
+python admin\import_offline_csv_writes.py --dry-run false  # voer import uit
+```
+
+Dit script doet:
+- Spelers: voegt nieuwe namen toe (dupcheck op `speler_naam`).
+- Requests: schrijft alle verzoeken met timestamp.
+- Uitslagen: voegt unieke wedstrijden toe (dupcheck op spelers, score, timestamp), koppelt bijbehorende ELO-logs.
+- ELO: schrijft ELO-logs voor geïmporteerde wedstrijden met dezelfde timestamp.
+
+Tip: toon een melding in de UI wanneer de app in offline CSV-modus draait, zodat gebruikers weten dat hun invoer wordt gequeued en later gesynchroniseerd.
 
 ## Wanneer ELO-beheer uitvoeren?
 
