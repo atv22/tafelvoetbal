@@ -52,6 +52,7 @@ python admin\import_offline_csv_writes.py --dry-run false  # voer import uit
 ```
 
 Dit script doet:
+
 - Spelers: voegt nieuwe namen toe (dupcheck op `speler_naam`).
 - Requests: schrijft alle verzoeken met timestamp.
 - Uitslagen: voegt unieke wedstrijden toe (dupcheck op spelers, score, timestamp), koppelt bijbehorende ELO-logs.

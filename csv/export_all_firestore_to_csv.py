@@ -54,9 +54,34 @@ def export_all(outdir: str) -> None:
     # spelers
     try:
         players = db.get_players()
+        if players is None or getattr(players, 'empty', False):
+            raise Exception('Lege spelers DataFrame')
         df_to_csv(players, os.path.join(outdir, 'spelers.csv'))
     except Exception as e:
-        print(f"[WARN] Kon spelers niet exporteren: {e}")
+        print(f"[WARN] Kon spelers niet exporteren via get_players: {e}")
+        # Fallback: direct uit Firestore collectieref om toch een export te hebben
+        try:
+            rows = []
+            for doc in db.players_ref.stream():
+                d = doc.to_dict() or {}
+                d['speler_id'] = doc.id
+                rows.append(d)
+            players_df = pd.DataFrame(rows)
+            if not players_df.empty:
+                # Probeer laatste ELO per speler mee te mergen indien mogelijk
+                try:
+                    elo_df = db.get_elo_logs()
+                    if not elo_df.empty and 'speler_naam' in elo_df.columns and 'timestamp' in elo_df.columns:
+                        latest_elo = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
+                        players_df = players_df.merge(latest_elo[['speler_naam','rating']], on='speler_naam', how='left')
+                        players_df['rating'] = players_df['rating'].fillna(1000)
+                except Exception:
+                    pass
+                df_to_csv(players_df, os.path.join(outdir, 'spelers.csv'))
+            else:
+                print('[WARN] Geen spelersdocumenten gevonden in Firestore.')
+        except Exception as e2:
+            print(f"[WARN] Fallback spelers-export mislukt: {e2}")
 
     # elo logs
     try:

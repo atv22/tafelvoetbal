@@ -1,4 +1,4 @@
-"""
+r"""
 Ingest offline CSV writes from `csv/write` into Firestore.
 Handles players, matches, elo logs, and requests with duplicate checks.
 
@@ -93,7 +93,9 @@ def import_matches_and_elos(matches_df: pd.DataFrame, elo_df: pd.DataFrame, dry_
     existing_matches = set()
     for doc in db.matches_ref.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(5000).stream():
         d = doc.to_dict()
-        players_tuple = tuple(sorted([d.get('thuis_1'), d.get('thuis_2'), d.get('uit_1'), d.get('uit_2')]))
+        # Filter None before sorting to satisfy type checker and ensure stable comparison
+        players_list = [p for p in [d.get('thuis_1'), d.get('thuis_2'), d.get('uit_1'), d.get('uit_2')] if p is not None]
+        players_tuple = tuple(sorted(players_list))
         scores_tuple = (d.get('thuis_score'), d.get('uit_score'))
         ts = pd.to_datetime(d.get('timestamp'), errors='coerce')
         existing_matches.add((players_tuple, scores_tuple, ts))
@@ -103,7 +105,8 @@ def import_matches_and_elos(matches_df: pd.DataFrame, elo_df: pd.DataFrame, dry_
 
     for _, m in matches_df.iterrows():
         thuis_1 = m.get('thuis_1'); thuis_2 = m.get('thuis_2'); uit_1 = m.get('uit_1'); uit_2 = m.get('uit_2')
-        players_tuple = tuple(sorted([thuis_1, thuis_2, uit_1, uit_2]))
+        players_list = [p for p in [thuis_1, thuis_2, uit_1, uit_2] if p is not None]
+        players_tuple = tuple(sorted(players_list))
         scores_tuple = (m.get('thuis_score'), m.get('uit_score'))
         ts = m.get('timestamp')
         ts_val = ts if pd.notnull(ts) else datetime.utcnow()
