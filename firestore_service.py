@@ -24,6 +24,16 @@ def handle_firestore_exceptions(func):
 CSV_READ_DIR = os.path.join(os.path.dirname(__file__), 'csv', 'read')
 CSV_WRITE_DIR = os.path.join(os.path.dirname(__file__), 'csv', 'write')
 
+# --- OFFLINE STATUS ---
+OFFLINE_MODE = False
+
+def set_offline_mode(value: bool):
+    global OFFLINE_MODE
+    OFFLINE_MODE = bool(value)
+
+def is_offline():
+    return OFFLINE_MODE
+
 def _read_csv_fallback(filename):
     import pandas as pd
     path = os.path.join(CSV_READ_DIR, filename)
@@ -33,6 +43,8 @@ def _read_csv_fallback(filename):
             if 'timestamp' in df.columns:
                 df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
                 df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            # Markeer offline modus bij gebruik van CSV fallback
+            set_offline_mode(True)
             return df
         except Exception as e:
             print(f"[CSV READ] Fout bij lezen van {path}: {e}")
@@ -52,6 +64,8 @@ def _append_csv_write(filename, row_dict):
             if pd.api.types.is_datetime64_any_dtype(df[col]):
                 df[col] = pd.to_datetime(df[col], errors='coerce').dt.tz_localize(None)
         df.to_csv(path, index=False, encoding='utf-8')
+        # Markeer offline modus bij gebruik van CSV write-queue
+        set_offline_mode(True)
         return True
     except Exception as e:
         print(f"[CSV WRITE] Fout bij schrijven naar {path}: {e}")
@@ -375,6 +389,8 @@ def get_players():
         latest_elo_df = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
         players_with_elo_df = pd.merge(players_df, latest_elo_df[['speler_naam', 'rating']], on='speler_naam', how='left')
         players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
+        # Succesvolle Firestore read: zet offline uit
+        set_offline_mode(False)
         return players_with_elo_df
     except Exception:
         # CSV fallback
@@ -423,6 +439,8 @@ def get_matches():
             available_columns = [col for col in desired_columns if col in df.columns]
             other_columns = [col for col in df.columns if col not in available_columns]
             df = df[available_columns + other_columns]
+        # Succesvolle Firestore read: zet offline uit
+        set_offline_mode(False)
         return df
     except Exception:
         return _read_csv_fallback('uitslag.csv')
@@ -438,6 +456,8 @@ def get_elo_logs():
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        # Succesvolle Firestore read: zet offline uit
+        set_offline_mode(False)
         return df
     except Exception:
         df = _read_csv_fallback('elo.csv')
@@ -454,6 +474,8 @@ def get_beheer_log():
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        # Succesvolle Firestore read: zet offline uit
+        set_offline_mode(False)
         return df
     except Exception:
         return _read_csv_fallback('beheer_log.csv')
@@ -545,6 +567,7 @@ def get_seasons():
     df_seizoenen = pd.DataFrame(seizoenen)
     if not df_seizoenen.empty:
         df_seizoenen = df_seizoenen.sort_values('startdatum').reset_index(drop=True)
+    # Deze functie kan beide bronnen gebruiken; laat offline staan zoals gezet
     return df_seizoenen
 
 @handle_firestore_exceptions
@@ -553,7 +576,10 @@ def get_requests():
     """Haalt alle verzoeken op, gesorteerd op tijdstip."""
     docs = requests_ref.order_by("Timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
     requests = [doc.to_dict() for doc in docs]
-    return pd.DataFrame(requests)
+    # Succesvolle Firestore read: zet offline uit
+    return_df = pd.DataFrame(requests)
+    set_offline_mode(False)
+    return return_df
 
 # ---------------- Schema & Inspectie helpers ----------------
 def expected_schema():
@@ -646,6 +672,8 @@ def add_player(name, start_elo):
         })
         batch.commit()
         clear_all_caches()
+        # Succesvolle Firestore write: zet offline uit
+        set_offline_mode(False)
         return "Success"
     except Exception as e:
         # CSV write fallback
@@ -665,6 +693,7 @@ def add_request(request_text):
     try:
         requests_ref.add({'Verzoek': request_text, 'Timestamp': SERVER_TIMESTAMP})
         clear_all_caches()
+        set_offline_mode(False)
         return "Success"
     except Exception as e:
         from datetime import datetime
@@ -743,6 +772,7 @@ def add_match_and_update_elo(match_data, elo_updates):
             recalculate_elo_from_match(match_timestamp)
 
         clear_all_caches()
+        set_offline_mode(False)
         return True
     except Exception as e:
         print(f"Error during batch commit: {e}")

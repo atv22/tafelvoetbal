@@ -27,6 +27,11 @@ setup_page()
 st.title("Tafelvoetbal Competitie ⚽")
 st.caption("Versie 2.1")
 
+# --- Offline alert ---
+if hasattr(db, 'is_offline') and db.is_offline():
+    st.error("Firestore is offline. Back-up CSV data wordt gebruikt en kan achterlopen.")
+    st.caption("Ingevoerde gegevens worden in de wachtrij geplaatst en later gesynchroniseerd.")
+
 # --- Tab navigatie ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Home", 
