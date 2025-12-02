@@ -349,7 +349,22 @@ def get_players():
             player_data['speler_id'] = doc.id
             players_list.append(player_data)
         if not players_list:
-            return _read_csv_fallback('spelers.csv')
+            # CSV fallback: lees spelers en voeg rating toe indien mogelijk
+            csv_df = _read_csv_fallback('spelers.csv')
+            if csv_df.empty:
+                return csv_df
+            if 'rating' not in csv_df.columns:
+                elo_df = _read_csv_fallback('elo.csv')
+                if not elo_df.empty and 'speler_naam' in elo_df.columns and 'timestamp' in elo_df.columns:
+                    try:
+                        elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce', utc=True).dt.tz_localize(None)
+                        latest_elo = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
+                        csv_df = csv_df.merge(latest_elo[['speler_naam','rating']], on='speler_naam', how='left')
+                    except Exception:
+                        pass
+                if 'rating' not in csv_df.columns:
+                    csv_df['rating'] = 1000
+            return csv_df
         players_df = pd.DataFrame(players_list)
         elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
         elo_list = [doc.to_dict() for doc in elo_docs]
@@ -362,7 +377,22 @@ def get_players():
         players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
         return players_with_elo_df
     except Exception:
-        return _read_csv_fallback('spelers.csv')
+        # CSV fallback
+        csv_df = _read_csv_fallback('spelers.csv')
+        if csv_df.empty:
+            return csv_df
+        if 'rating' not in csv_df.columns:
+            elo_df = _read_csv_fallback('elo.csv')
+            if not elo_df.empty and 'speler_naam' in elo_df.columns and 'timestamp' in elo_df.columns:
+                try:
+                    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce', utc=True).dt.tz_localize(None)
+                    latest_elo = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
+                    csv_df = csv_df.merge(latest_elo[['speler_naam','rating']], on='speler_naam', how='left')
+                except Exception:
+                    pass
+            if 'rating' not in csv_df.columns:
+                csv_df['rating'] = 1000
+        return csv_df
 
 @handle_firestore_exceptions
 @st.cache_data
