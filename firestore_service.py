@@ -434,9 +434,14 @@ def get_elo_logs():
     try:
         elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
         elos = [doc.to_dict() for doc in elo_docs]
-        return pd.DataFrame(elos)
+        df = pd.DataFrame(elos)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        return df
     except Exception:
-        return _read_csv_fallback('elo.csv')
+        df = _read_csv_fallback('elo.csv')
+        return df
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -445,7 +450,11 @@ def get_beheer_log():
     try:
         beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
         beheer_logs = [doc.to_dict() for doc in beheer_docs]
-        return pd.DataFrame(beheer_logs)
+        df = pd.DataFrame(beheer_logs)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        return df
     except Exception:
         return _read_csv_fallback('beheer_log.csv')
 
