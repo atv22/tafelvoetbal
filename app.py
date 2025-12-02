@@ -48,22 +48,30 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 
 # ===== TAB 1: HOME =====
 with tab1:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     players_df = db.get_players()
     matches_df = db.get_matches()
     render_home_tab(players_df, matches_df)
 
 # ===== TAB 2: INVULLEN =====
 with tab2:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — invoer in wachtrij")
     players_df = db.get_players()
     render_input_tab(players_df)
 
 # ===== TAB 3: SPELERS =====
 with tab3:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     players_df = db.get_players()
     render_players_tab(players_df)
 
 # ===== TAB 4: SEIZOENEN =====
 with tab4:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     matches_df = db.get_matches()
     players_df = db.get_players()
     seasons_df = db.get_seasons()
@@ -73,19 +81,27 @@ with tab4:
 
 # ===== TAB 5: RUWE DATA =====
 with tab5:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     render_data_tab()
 
 # ===== TAB 6: BEHEER =====
 with tab6:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — beheer kan beperkt zijn")
     players_df = db.get_players()
     matches_df = db.get_matches()
     render_admin_tab(db, players_df, matches_df)
 
 # ===== TAB 7: VERZOEKEN =====
 with tab7:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     matches_df = db.get_matches()
     render_verzoeken_tab(matches_df)
 
 # ===== TAB 8: COLOFON =====
 with tab8:
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.caption("🔴 Offline modus — CSV-backup actief")
     render_colofon_tab()
