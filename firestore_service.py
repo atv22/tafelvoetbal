@@ -1,5 +1,6 @@
 # --- Failsafe: Firestore bereikbaarheidscheck en custom exception ---
 import streamlit as st
+import os
 class FirestoreUnavailable(Exception):
     def __init__(self, message, details=None):
         super().__init__(message)
@@ -18,6 +19,43 @@ def handle_firestore_exceptions(func):
                 raise FirestoreUnavailable("Database niet bereikbaar: mogelijk budgetlimiet bereikt.", details=str(e))
             raise FirestoreUnavailable("Database niet bereikbaar.", details=str(e))
     return functools.wraps(func)(wrapper)
+
+# --- CSV FALLBACK PADEN EN HULPFUNCTIES ---
+CSV_READ_DIR = os.path.join(os.path.dirname(__file__), 'csv', 'read')
+CSV_WRITE_DIR = os.path.join(os.path.dirname(__file__), 'csv', 'write')
+
+def _read_csv_fallback(filename):
+    import pandas as pd
+    path = os.path.join(CSV_READ_DIR, filename)
+    if os.path.exists(path):
+        try:
+            df = pd.read_csv(path)
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            return df
+        except Exception as e:
+            print(f"[CSV READ] Fout bij lezen van {path}: {e}")
+    return pd.DataFrame()
+
+def _append_csv_write(filename, row_dict):
+    import pandas as pd
+    os.makedirs(CSV_WRITE_DIR, exist_ok=True)
+    path = os.path.join(CSV_WRITE_DIR, filename)
+    try:
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            df = pd.concat([df, pd.DataFrame([row_dict])], ignore_index=True)
+        else:
+            df = pd.DataFrame([row_dict])
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.tz_localize(None)
+        df.to_csv(path, index=False, encoding='utf-8')
+        return True
+    except Exception as e:
+        print(f"[CSV WRITE] Fout bij schrijven naar {path}: {e}")
+        return False
 
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches():
@@ -303,90 +341,83 @@ requests_ref = db.collection('requests')
 @st.cache_data
 def get_players():
     """Haalt alle spelers op en hun meest recente ELO-rating."""
-    spelers_docs = players_ref.stream()
-    players_list = []
-    for doc in spelers_docs:
-        player_data = doc.to_dict()
-        player_data['speler_id'] = doc.id
-        players_list.append(player_data)
-    
-    if not players_list:
-        return pd.DataFrame()
-
-    players_df = pd.DataFrame(players_list)
-
-    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    elo_list = [doc.to_dict() for doc in elo_docs]
-
-    if not elo_list:
-        players_df['rating'] = 1000
-        return players_df
-
-    elo_df = pd.DataFrame(elo_list)
-    
-    # Get the latest ELO for each player
-    latest_elo_df = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
-
-    # Merge with players_df
-    players_with_elo_df = pd.merge(players_df, latest_elo_df[['speler_naam', 'rating']], on='speler_naam', how='left')
-    players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
-    
-    return players_with_elo_df
+    try:
+        spelers_docs = players_ref.stream()
+        players_list = []
+        for doc in spelers_docs:
+            player_data = doc.to_dict()
+            player_data['speler_id'] = doc.id
+            players_list.append(player_data)
+        if not players_list:
+            return _read_csv_fallback('spelers.csv')
+        players_df = pd.DataFrame(players_list)
+        elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        elo_list = [doc.to_dict() for doc in elo_docs]
+        if not elo_list:
+            players_df['rating'] = 1000
+            return players_df
+        elo_df = pd.DataFrame(elo_list)
+        latest_elo_df = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
+        players_with_elo_df = pd.merge(players_df, latest_elo_df[['speler_naam', 'rating']], on='speler_naam', how='left')
+        players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
+        return players_with_elo_df
+    except Exception:
+        return _read_csv_fallback('spelers.csv')
 
 @handle_firestore_exceptions
 @st.cache_data
 def get_matches():
     """Haalt alle wedstrijden op en normaliseert timestamps."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    matches = []
-    for doc in matches_docs:
-        match_data = doc.to_dict()
-        match_data['match_id'] = doc.id
-        matches.append(match_data)
-    df = pd.DataFrame(matches)
-
-
-    if not df.empty:
-        # Normaliseer timestamp naar pandas datetime en maak altijd tz-naive
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-
-        # Verwijder overbodige kolommen indien aanwezig (oude kolommen worden alleen verwijderd, niet meer gebruikt)
-        cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
-        for col in cols_to_remove:
-            if col in df.columns:
-                df = df.drop(columns=col)
-
-        # Herorder kolommen in logische volgorde
-        desired_columns = [
-            'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
-            'thuis_score', 'uit_score',
-            'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
-            'timestamp', 'match_id'
-        ]
-        available_columns = [col for col in desired_columns if col in df.columns]
-        # Voeg overige kolommen toe die niet in desired_columns staan
-        other_columns = [col for col in df.columns if col not in available_columns]
-        df = df[available_columns + other_columns]
-
-    return df
+    try:
+        matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        matches = []
+        for doc in matches_docs:
+            match_data = doc.to_dict()
+            match_data['match_id'] = doc.id
+            matches.append(match_data)
+        df = pd.DataFrame(matches)
+        if not df.empty:
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            cols_to_remove = ['thuis_speler_1', 'thuis_speler_2', 'uit_speler_1', 'uit_speler_2', 'datum', 'tijd']
+            for col in cols_to_remove:
+                if col in df.columns:
+                    df = df.drop(columns=col)
+            desired_columns = [
+                'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
+                'thuis_score', 'uit_score',
+                'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
+                'timestamp', 'match_id'
+            ]
+            available_columns = [col for col in desired_columns if col in df.columns]
+            other_columns = [col for col in df.columns if col not in available_columns]
+            df = df[available_columns + other_columns]
+        return df
+    except Exception:
+        return _read_csv_fallback('uitslag.csv')
 
 @handle_firestore_exceptions
 @st.cache_data
 def get_elo_logs():
     """Haalt de volledige ELO geschiedenis op."""
-    elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    elos = [doc.to_dict() for doc in elo_docs]
-    return pd.DataFrame(elos)
+    try:
+        elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        elos = [doc.to_dict() for doc in elo_docs]
+        return pd.DataFrame(elos)
+    except Exception:
+        return _read_csv_fallback('elo.csv')
 
 @handle_firestore_exceptions
 @st.cache_data
 def get_beheer_log():
     """Haalt alle beheer-log entries op uit Firestore."""
-    beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-    beheer_logs = [doc.to_dict() for doc in beheer_docs]
-    return pd.DataFrame(beheer_logs)
+    try:
+        beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        beheer_logs = [doc.to_dict() for doc in beheer_docs]
+        return pd.DataFrame(beheer_logs)
+    except Exception:
+        return _read_csv_fallback('beheer_log.csv')
 
 def get_elo_history(_ttl, speler_naam):
     """Haalt de ELO geschiedenis voor een specifieke speler op."""
@@ -399,11 +430,19 @@ def get_elo_history(_ttl, speler_naam):
 @st.cache_data
 def get_seasons():
     """Bepaalt seizoenen automatisch op basis van kalenderjaar uit de wedstrijddata."""
-    matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
-    matches = [doc.to_dict() for doc in matches_docs]
-    if not matches:
-        return pd.DataFrame()
-    df = pd.DataFrame(matches)
+    try:
+        matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING).stream()
+        matches = [doc.to_dict() for doc in matches_docs]
+        if not matches:
+            df = _read_csv_fallback('uitslag.csv')
+            if df.empty:
+                return pd.DataFrame()
+        else:
+            df = pd.DataFrame(matches)
+    except Exception:
+        df = _read_csv_fallback('uitslag.csv')
+        if df.empty:
+            return pd.DataFrame()
     if 'timestamp' not in df.columns:
         return pd.DataFrame()
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
@@ -553,30 +592,33 @@ def add_season(startdatum, einddatum):
 
 def add_player(name, start_elo):
     """Voegt een nieuwe speler en zijn initiële ELO-rating toe in een batch."""
-    # Controleer eerst of de speler al bestaat
-    existing_player_query = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1)
-    if len(list(existing_player_query.stream())) > 0:
-        return f"Error: Speler '{name}' bestaat al."
-
-    batch = db.batch()
     try:
-        # 1. Voeg de speler toe aan de 'spelers' collectie
+        existing_player_query = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1)
+        if len(list(existing_player_query.stream())) > 0:
+            return f"Error: Speler '{name}' bestaat al."
+        batch = db.batch()
         new_player_ref = players_ref.document()
         batch.set(new_player_ref, {'speler_naam': name})
-
-        # 2. Voeg de initiële ELO-rating toe aan de 'elo' collectie
         new_elo_ref = elo_ref.document()
         batch.set(new_elo_ref, {
             'speler_naam': name,
             'rating': start_elo,
             'timestamp': SERVER_TIMESTAMP
         })
-
         batch.commit()
         clear_all_caches()
         return "Success"
     except Exception as e:
-        print(f"ERROR: Failed to add player '{name}'. Exception: {e}")
+        # CSV write fallback
+        from datetime import datetime
+        ok1 = _append_csv_write('spelers.csv', {'speler_naam': name})
+        ok2 = _append_csv_write('elo.csv', {
+            'speler_naam': name,
+            'rating': start_elo,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        if ok1 and ok2:
+            return "Success"
         return f"Error: Could not add player. {e}"
 
 def add_request(request_text):
@@ -586,7 +628,9 @@ def add_request(request_text):
         clear_all_caches()
         return "Success"
     except Exception as e:
-        return f"Error: {e}"
+        from datetime import datetime
+        ok = _append_csv_write('requests.csv', {'Verzoek': request_text, 'Timestamp': datetime.utcnow().isoformat()})
+        return "Success" if ok else f"Error: {e}"
 
 @handle_firestore_exceptions
 def add_match_and_update_elo(match_data, elo_updates):
@@ -663,7 +707,26 @@ def add_match_and_update_elo(match_data, elo_updates):
         return True
     except Exception as e:
         print(f"Error during batch commit: {e}")
-        return False
+        # CSV fallback: append match and ELO updates so app remains writable
+        from datetime import datetime
+        ts = match_data.get('timestamp')
+        if ts is None:
+            ts_iso = datetime.utcnow().isoformat()
+        else:
+            try:
+                ts_iso = pd.to_datetime(ts).to_pydatetime().isoformat()  # type: ignore
+            except Exception:
+                ts_iso = datetime.utcnow().isoformat()
+        match_row = {**match_data, 'timestamp': ts_iso}
+        ok_match = _append_csv_write('uitslag.csv', match_row)
+        ok_elos = True
+        for speler_naam, new_elo in elo_updates:
+            ok_elos = ok_elos and _append_csv_write('elo.csv', {
+                'speler_naam': speler_naam,
+                'rating': new_elo,
+                'timestamp': ts_iso
+            })
+        return ok_match and ok_elos
 
 def delete_player_by_id(player_id):
     """Verwijdert een speler en al zijn ELO-geschiedenis."""
