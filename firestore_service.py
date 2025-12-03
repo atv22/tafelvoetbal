@@ -744,8 +744,9 @@ def add_match_and_update_elo(match_data, elo_updates):
         # NB: timestamp kan SERVER_TIMESTAMP zijn, dus alleen checken als datetime bekend
         check_fields = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
         query = matches_ref
+        from google.cloud.firestore_v1.base_query import FieldFilter
         for field in check_fields:
-            query = query.where(field, '==', match_data.get(field))
+            query = query.where(filter=FieldFilter(field, '==', match_data.get(field)))
         if provided_ts is not None:
             # Alleen checken als timestamp bekend
             from google.cloud.firestore_v1.base_query import FieldFilter
