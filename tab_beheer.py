@@ -583,25 +583,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
 def _render_system_management(db, players_df: pd.DataFrame):
     st.header("⚙️ Systeem Beheer")
     st.subheader("ELO Rating Beheer")
-    st.write("**Complete ELO Reset & Herberekening**")
-    st.info("💡 Reset alle ELO scores naar 1000 en herberekent ze op basis van alle wedstrijden.")
-    if st.button("🔄 Reset en herbereken alle ELO scores", type="secondary"):
-        with st.spinner("Alle ELO scores worden gereset en herberekend... Dit kan even duren."):
-            success = db.reset_all_elos()
-            from utils.utils_beheer_log import log_admin_action
-            log_admin_action(
-                action_type="reset_all_elos",
-                user=st.session_state.get("user", "onbekend"),
-                details={"action": "reset_all_elos"},
-                db=db.db
-            )
-            if success:
-                st.success("✅ Alle ELO scores succesvol gereset en herberekend!")
-                st.balloons()
-                time.sleep(1.5)
-                st.rerun()
-            else:
-                st.error("❌ Fout bij resetten van de ELO scores.")
+    # Optie voor complete ELO reset verwijderd om onbedoelde zware acties te voorkomen.
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Herbereken ELO voor een seizoen")
