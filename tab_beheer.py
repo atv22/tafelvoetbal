@@ -586,38 +586,7 @@ def _render_system_management(db, players_df: pd.DataFrame):
     # Optie voor complete ELO reset verwijderd om onbedoelde zware acties te voorkomen.
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("Herbereken ELO voor een seizoen")
-    seasons_df = db.get_seasons()
-    if seasons_df.empty:
-        st.info("Geen seizoenen gevonden. Voeg eerst wedstrijden toe.")
-    else:
-        season_options = []
-        for idx, season in seasons_df.iterrows():
-            season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
-            season_options.append((season_str, idx, season['startdatum'], season['einddatum']))
-        season_names = [o[0] for o in season_options]
-        selected = st.selectbox("Selecteer een seizoen voor ELO herberekening", options=season_names)
-        if st.button("Herbereken ELO voor dit seizoen", type="primary"):
-            # Vind de juiste start/einddatum
-            selected_season = next(o for o in season_options if o[0] == selected)
-            start_date = selected_season[2]
-            end_date = selected_season[3]
-            with st.spinner("ELO scores worden herberekend voor het gekozen seizoen... Dit kan even duren."):
-                success = db.recalculate_elos_for_season(start_date, end_date)
-                from utils.utils_beheer_log import log_admin_action
-                log_admin_action(
-                    action_type="recalculate_elos_for_season",
-                    user=st.session_state.get("user", "onbekend"),
-                    details={"action": "recalculate_elos_for_season", "seizoen": selected},
-                    db=db.db
-                )
-                if success:
-                    st.success(f"✅ ELO scores succesvol herberekend voor seizoen: {selected}")
-                    st.balloons()
-                    time.sleep(1.5)
-                    st.rerun()
-                else:
-                    st.error(f"❌ Fout bij herberekenen van de ELO scores voor seizoen: {selected}")
+    # Optie voor seizoensherberekening verwijderd. Gebruik scripts in 'admin' folder.
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Speler Verwijderen")
     if players_df.empty:
