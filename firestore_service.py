@@ -480,12 +480,31 @@ def get_beheer_log():
     except Exception:
         return _read_csv_fallback('beheer_log.csv')
 
+@handle_firestore_exceptions
+@st.cache_data
 def get_elo_history(_ttl, speler_naam):
     """Haalt de ELO geschiedenis voor een specifieke speler op."""
-    elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING)
-    history_docs = elo_query.stream()
-    history = [doc.to_dict() for doc in history_docs]
-    return pd.DataFrame(history)
+    try:
+        elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING)
+        history_docs = elo_query.stream()
+        history = [doc.to_dict() for doc in history_docs]
+        df = pd.DataFrame(history)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        # Succesvolle Firestore read: zet offline uit
+        set_offline_mode(False)
+        return df
+    except Exception:
+        # CSV fallback: filter op speler_naam
+        df = _read_csv_fallback('elo.csv')
+        if not df.empty:
+            if 'speler_naam' in df.columns:
+                df = df[df['speler_naam'] == speler_naam]
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        return df
 
 @handle_firestore_exceptions
 @st.cache_data
