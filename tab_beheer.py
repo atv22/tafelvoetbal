@@ -588,6 +588,9 @@ def _render_system_management(db, players_df: pd.DataFrame):
     st.markdown("<hr>", unsafe_allow_html=True)
     # Optie voor seizoensherberekening verwijderd. Gebruik scripts in 'admin' folder.
     st.markdown("<hr>", unsafe_allow_html=True)
+        # Opmerking: complete ELO reset UI is verwijderd om onbedoelde zware acties te voorkomen.
+    
+    
     st.subheader("Speler Verwijderen")
     if players_df.empty:
         st.info("Geen spelers om te beheren.")
@@ -614,38 +617,9 @@ def _render_system_management(db, players_df: pd.DataFrame):
             else:
                 st.error("Kon de speler ID niet vinden.")
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("Seizoen Verwijderen")
-    seasons_df = db.get_seasons()
-    if seasons_df.empty:
-        st.info("Geen seizoenen om te beheren.")
-    else:
-        season_options = []
-        for _, season in seasons_df.iterrows():
-            season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
-            season_options.append((season_str, season.name))
-        if season_options:
-            season_names = [o[0] for o in season_options]
-            selected = st.selectbox(
-                "Selecteer een seizoen om te verwijderen", options=season_names
-            )
-            if st.button(f"Verwijder seizoen: {selected}"):
-                season_index = next(o[1] for o in season_options if o[0] == selected)
-                season_doc_id = seasons_df.iloc[season_index].name
-                with st.spinner("Bezig met verwijderen van seizoen..."):
-                    if db.delete_season_by_id(season_doc_id):
-                        st.success(f"Seizoen {selected} is verwijderd.")
-                        st.rerun()
-                    else:
-                        st.error("Kon het seizoen niet verwijderen.")
+    # Seizoen Verwijderen UI verwijderd. Gebruik scripts in 'admin' voor seizoensbeheer.
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("Overige Database Cleanup")
-    if st.button("🗑️ Verwijder alle 'Requests'", type="secondary"):
-        with st.spinner("Alle requests worden verwijderd..."):
-            if db.clear_collection("requests"):
-                st.success("Alle requests zijn succesvol verwijderd.")
-                st.rerun()
-            else:
-                st.error("Kon de requests niet verwijderen.")
+    # Overige Database Cleanup - 'Verwijder alle Requests' optie verwijderd
 
     # Database Inspectie & Schema Vergelijking
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -710,8 +684,8 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         return
 
     # Hoofd tabs in beheer
-    tab_verwijderen, tab_bewerken, tab_elo, tab_upload, tab_inspectie = st.tabs([
-        "🗑️ Verwijderen", "✏️ Bewerken", "⚡ ELO beheer", "📁 Upload", "🔍 Inspectie"])
+    tab_verwijderen, tab_bewerken, tab_upload, tab_inspectie = st.tabs([
+        "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload", "🔍 Inspectie"])
 
     # Cache wissen knop (bovenaan beheer-tab)
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -724,30 +698,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         time.sleep(1)
         st.rerun()
 
-    with tab_elo:
-        st.header("⚡ ELO Beheer")
-        
-        st.subheader("🗑️ ELO Geschiedenis wissen voor een seizoen")
-        seasons_df = db.get_seasons()
-        if seasons_df.empty:
-            st.info("Geen seizoenen gevonden. Voeg eerst wedstrijden toe.")
-        else:
-            season_options = []
-            for idx, season in seasons_df.iterrows():
-                season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
-                season_options.append((season_str, idx, season['startdatum'], season['einddatum']))
-            season_names = [o[0] for o in season_options]
-            selected = st.selectbox("Selecteer een seizoen om ELO geschiedenis te wissen", options=season_names)
-            if st.button("Wis ELO geschiedenis voor dit seizoen", key="delete_elo_season"):
-                selected_season = next(o for o in season_options if o[0] == selected)
-                start_date = selected_season[2]
-                end_date = selected_season[3]
-                from admin.delete_elo_history_for_season import delete_elo_history_for_season
-                deleted_count = delete_elo_history_for_season(start_date, end_date)
-                if deleted_count > 0:
-                    st.success(f"{deleted_count} ELO entries verwijderd voor seizoen: {selected}")
-                else:
-                    st.info(f"Geen ELO entries gevonden voor seizoen: {selected}")
+    # ⚡ ELO Beheer tab verwijderd
 
     with tab_verwijderen:
         st.header("🗑️ Verwijderen")
@@ -782,30 +733,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                 else:
                     st.error("Kon de speler ID niet vinden.")
 
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("🗑️ Seizoen Verwijderen")
-        seasons_df = db.get_seasons()
-        if seasons_df.empty:
-            st.info("Geen seizoenen om te beheren.")
-        else:
-            season_options = []
-            for _, season in seasons_df.iterrows():
-                season_str = f"{season['startdatum'].strftime('%Y-%m-%d')} tot {season['einddatum'].strftime('%Y-%m-%d')}"
-                season_options.append((season_str, season.name))
-            if season_options:
-                season_names = [o[0] for o in season_options]
-                selected = st.selectbox(
-                    "Selecteer een seizoen om te verwijderen", options=season_names
-                )
-                if st.button(f"Verwijder seizoen: {selected}", key="delete_season"):
-                    season_index = next(o[1] for o in season_options if o[0] == selected)
-                    season_doc_id = seasons_df.iloc[season_index].name
-                    with st.spinner("Bezig met verwijderen van seizoen..."):
-                        if db.delete_season_by_id(season_doc_id):
-                            st.success(f"Seizoen {selected} is verwijderd.")
-                            st.rerun()
-                        else:
-                            st.error("Kon het seizoen niet verwijderen.")
+        # Seizoen verwijderen optie verwijderd
 
     with tab_bewerken:
         st.header("✏️ Bewerken")
@@ -906,22 +834,12 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
 
     with tab_upload:
         st.header("📁 Upload")
-        if matches_df.empty:
-            st.info("Geen wedstrijden om te beheren.")
-            st.subheader("📁 Historische Data Upload")
-            st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
+        st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
 
     with tab_inspectie:
         st.header("🔍 Inspectie")
-        st.subheader("🧹 Overige Database Cleanup")
-        if st.button("🗑️ Verwijder alle 'Requests'", type="secondary"):
-            with st.spinner("Alle requests worden verwijderd..."):
-                if db.clear_collection("requests"):
-                    st.success("Alle requests zijn succesvol verwijderd.")
-                    st.rerun()
-                else:
-                    st.error("Kon de requests niet verwijderen.")
+        # Overige Database Cleanup - 'Verwijder alle Requests' optie verwijderd
 
         st.markdown("<hr>", unsafe_allow_html=True)
         st.subheader("🔎 Database Inspectie & Schema")
