@@ -360,61 +360,103 @@ requests_ref = db.collection('requests')
 @handle_firestore_exceptions
 @st.cache_data
 def get_players():
-    """Haalt alle spelers op en hun meest recente ELO-rating."""
+    """Haalt alle spelers op. Gebruikt opgeslagen rating indien beschikbaar."""
     try:
         spelers_docs = players_ref.stream()
         players_list = []
         for doc in spelers_docs:
             player_data = doc.to_dict()
             player_data['speler_id'] = doc.id
+            # Zorg dat rating aanwezig is, anders default 1000
+            if 'rating' not in player_data:
+                player_data['rating'] = 1000
             players_list.append(player_data)
+        
         if not players_list:
-            # CSV fallback: lees spelers en voeg rating toe indien mogelijk
-            csv_df = _read_csv_fallback('spelers.csv')
-            if csv_df.empty:
-                return csv_df
-            if 'rating' not in csv_df.columns:
-                elo_df = _read_csv_fallback('elo.csv')
-                if not elo_df.empty and 'speler_naam' in elo_df.columns and 'timestamp' in elo_df.columns:
-                    try:
-                        elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce', utc=True).dt.tz_localize(None)
-                        latest_elo = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
-                        csv_df = csv_df.merge(latest_elo[['speler_naam','rating']], on='speler_naam', how='left')
-                    except Exception:
-                        pass
-                if 'rating' not in csv_df.columns:
-                    csv_df['rating'] = 1000
-            return csv_df
+            # CSV fallback
+            return _read_csv_fallback('spelers.csv')
+            
         players_df = pd.DataFrame(players_list)
-        elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        elo_list = [doc.to_dict() for doc in elo_docs]
-        if not elo_list:
-            players_df['rating'] = 1000
-            return players_df
-        elo_df = pd.DataFrame(elo_list)
-        latest_elo_df = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
-        players_with_elo_df = pd.merge(players_df, latest_elo_df[['speler_naam', 'rating']], on='speler_naam', how='left')
-        players_with_elo_df['rating'] = players_with_elo_df['rating'].fillna(1000)
+        
         # Succesvolle Firestore read: zet offline uit
         set_offline_mode(False)
-        return players_with_elo_df
+        return players_df
     except Exception:
         # CSV fallback
         csv_df = _read_csv_fallback('spelers.csv')
         if csv_df.empty:
             return csv_df
         if 'rating' not in csv_df.columns:
-            elo_df = _read_csv_fallback('elo.csv')
-            if not elo_df.empty and 'speler_naam' in elo_df.columns and 'timestamp' in elo_df.columns:
-                try:
-                    elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce', utc=True).dt.tz_localize(None)
-                    latest_elo = elo_df.loc[elo_df.groupby('speler_naam')['timestamp'].idxmax()]
-                    csv_df = csv_df.merge(latest_elo[['speler_naam','rating']], on='speler_naam', how='left')
-                except Exception:
-                    pass
-            if 'rating' not in csv_df.columns:
-                csv_df['rating'] = 1000
+             csv_df['rating'] = 1000
         return csv_df
+
+def migrate_player_ratings():
+    """
+    Eenmalige migratie: berekent de huidige ELO voor alle spelers op basis van de historie
+    en slaat deze op in het speler-document.
+    """
+    try:
+        print("Start migratie van speler ratings...")
+        # 1. Haal alle spelers op
+        players_docs = list(players_ref.stream())
+        if not players_docs:
+            print("Geen spelers gevonden om te migreren.")
+            return "Geen spelers gevonden."
+
+        # 2. Haal de allerlaatste ELO entry voor elke speler
+        # Dit doen we door alle ELO records op te halen en lokaal te filteren (sneller dan N queries)
+        elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        elo_list = [doc.to_dict() for doc in elo_docs]
+        
+        latest_ratings = {}
+        if elo_list:
+            elo_df = pd.DataFrame(elo_list)
+            # Converteer timestamps indien nodig
+            if 'timestamp' in elo_df.columns:
+                elo_df['timestamp'] = pd.to_datetime(elo_df['timestamp'], errors='coerce')
+            
+            # Vind laatste rating per speler
+            latest_idx = elo_df.groupby('speler_naam')['timestamp'].idxmax()
+            latest_ratings_df = elo_df.loc[latest_idx]
+            
+            for _, row in latest_ratings_df.iterrows():
+                latest_ratings[row['speler_naam']] = row['rating']
+
+        # 3. Update elke speler met zijn rating
+        batch = db.batch()
+        batch_counter = 0
+        updated_count = 0
+        
+        for doc in players_docs:
+            data = doc.to_dict()
+            name = data.get('speler_naam')
+            current_stored_rating = data.get('rating')
+            
+            # Bepaal de juiste rating: uit historie, of default 1000
+            actual_rating = latest_ratings.get(name, 1000)
+            
+            # Update alleen als het verschilt of ontbreekt
+            if current_stored_rating != actual_rating:
+                batch.update(doc.reference, {'rating': actual_rating})
+                batch_counter += 1
+                updated_count += 1
+            
+            if batch_counter >= 400:
+                batch.commit()
+                batch = db.batch()
+                batch_counter = 0
+                
+        if batch_counter > 0:
+            batch.commit()
+            
+        clear_all_caches()
+        print(f"Migratie voltooid. {updated_count} spelers bijgewerkt.")
+        return f"Succes: {updated_count} spelers bijgewerkt."
+        
+    except Exception as e:
+        print(f"Fout tijdens migratie: {e}")
+        return f"Fout: {e}"
+
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -450,6 +492,38 @@ def get_matches():
         return df
     except Exception:
         return _read_csv_fallback('uitslag.csv')
+
+@handle_firestore_exceptions
+@st.cache_data
+def get_matches_in_range(start_ts, end_ts):
+    """Haalt wedstrijden op binnen een tijdsinterval [start_ts, end_ts]."""
+    import pandas as pd
+    try:
+        # Zorg voor pandas.Timestamp voor Firestore range
+        start = pd.to_datetime(start_ts)
+        end = pd.to_datetime(end_ts)
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        query = matches_ref.where(filter=FieldFilter('timestamp', '>=', start)).where(filter=FieldFilter('timestamp', '<=', end)).order_by('timestamp', direction=google.cloud.firestore.Query.DESCENDING)
+        matches_docs = query.stream()
+        matches = []
+        for doc in matches_docs:
+            d = doc.to_dict()
+            d['match_id'] = doc.id
+            matches.append(d)
+        df = pd.DataFrame(matches)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        set_offline_mode(False)
+        return df
+    except Exception:
+        # Fallback: lees CSV en filter
+        df = _read_csv_fallback('uitslag.csv')
+        if df.empty or 'timestamp' not in df.columns:
+            return df
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df = df[(df['timestamp'] >= pd.to_datetime(start_ts)) & (df['timestamp'] <= pd.to_datetime(end_ts))]
+        return df
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -779,6 +853,16 @@ def add_match_and_update_elo(match_data, elo_updates):
                 'timestamp': match_timestamp,
                 'match_id': match_id
             })
+            
+            # Update ook de rating in het spelers-document (denormalisatie voor performance)
+            # We moeten het document zoeken op naam
+            try:
+                # Dit is een extra query per speler, maar gebeurt alleen bij toevoegen wedstrijd
+                player_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).limit(1).stream())
+                if player_docs:
+                    batch.update(player_docs[0].reference, {'rating': new_elo})
+            except Exception as e:
+                print(f"Kon speler {speler_naam} niet updaten: {e}")
 
         batch.commit()
 

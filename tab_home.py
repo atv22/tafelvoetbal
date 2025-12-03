@@ -302,10 +302,17 @@ def render_home_tab(players_df, matches_df):
     if huidig_seizoen is not None:
         st.markdown(f"**Huidig seizoen:** {huidig_seizoen['seizoen_naam']}  ")
         st.markdown(f"Periode: {pd.to_datetime(huidig_seizoen['startdatum']).strftime('%d-%m-%Y %H:%M')} t/m {pd.to_datetime(huidig_seizoen['einddatum']).strftime('%d-%m-%Y %H:%M')}")
-        # Filter wedstrijden op huidig seizoen
-        start = pd.to_datetime(huidig_seizoen['startdatum'])
-        end = pd.to_datetime(huidig_seizoen['einddatum'])
-        matches_df = matches_df[(matches_df['timestamp'] >= start) & (matches_df['timestamp'] <= end)]
+        # Haal alleen wedstrijden van het huidige seizoen via Firestore range query (sneller)
+        try:
+            start = pd.to_datetime(huidig_seizoen['startdatum'])
+            end = pd.to_datetime(huidig_seizoen['einddatum'])
+            from firestore_service import get_matches_in_range
+            matches_df = get_matches_in_range(start, end)
+        except Exception:
+            # Fallback: filter lokaal
+            start = pd.to_datetime(huidig_seizoen['startdatum'])
+            end = pd.to_datetime(huidig_seizoen['einddatum'])
+            matches_df = matches_df[(matches_df['timestamp'] >= start) & (matches_df['timestamp'] <= end)]
     else:
         st.markdown("**Geen huidig seizoen gevonden.**")
 

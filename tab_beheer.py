@@ -726,6 +726,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
 
     with tab_elo:
         st.header("⚡ ELO Beheer")
+        
         st.subheader("🗑️ ELO Geschiedenis wissen voor een seizoen")
         seasons_df = db.get_seasons()
         if seasons_df.empty:
