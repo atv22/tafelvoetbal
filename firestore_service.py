@@ -182,6 +182,12 @@ def recalculate_elos_for_season(start_date, end_date):
         for match in all_matches:
             ts = match.get('timestamp')
             match_ts = pd.to_datetime(ts) if not isinstance(ts, pd.Timestamp) else ts
+            # Normaliseer naar tz-naive om vergelijkingen veilig te maken
+            try:
+                match_ts = pd.to_datetime(match_ts, errors='coerce')
+                match_ts = match_ts.tz_convert('UTC').tz_localize(None) if getattr(match_ts, 'tz', None) is not None else match_ts.tz_localize(None)
+            except Exception:
+                pass
             match_date = match_ts.date()
             if match_date < start_date:
                 matches_before_season.append(match)
@@ -1080,10 +1086,12 @@ def reset_all_elos():
         for _, match in matches_df.sort_values('timestamp').iterrows():
             ts = match['timestamp']
             # Forceer ook deze timestamp naar tz-naive
-            if pd.notnull(ts) and hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                import pandas as pd
-                ts = pd.Series([ts])
-                ts = normalize_timestamp_series(ts).iloc[0]
+            if pd.notnull(ts):
+                try:
+                    ts = pd.Series([ts])
+                    ts = normalize_timestamp_series(ts).iloc[0]
+                except Exception:
+                    pass
             # Check of we aan een nieuw seizoen beginnen
             while season_idx < len(season_bounds) - 1 and ts >= season_bounds[season_idx + 1]:
                 season_idx += 1
