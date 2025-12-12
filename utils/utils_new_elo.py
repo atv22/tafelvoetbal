@@ -98,13 +98,16 @@ def calculate_new_elo(match, all_ELO_ratings):
     k3 = 50 / (1 + len(all_ELO_ratings[match["Uit_1"]]) / 300)
     k4 = 50 / (1 + len(all_ELO_ratings[match["Uit_2"]]) / 300)
 
+    # klinkers bonus
+    KLINKER_BONUS = 15
+
     # 5. Bereken de nieuwe ELO's voor alle spelers
-    # Formule: nieuwe ELO = oude ELO + K * impact * (resultaat - verwachting)
+    # Formule: nieuwe ELO = oude ELO + K * impact * (resultaat - verwachting) + (klinkers * bonus)
     rows = [
-        [match["Thuis_1"], player1_rating + k1 * point_factor * (result_thuis - player1_expected_score)],
-        [match["Thuis_2"], player2_rating + k2 * point_factor * (result_thuis - player2_expected_score)],
-        [match["Uit_1"], player3_rating + k3 * point_factor * (result_uit - player3_expected_score)],
-        [match["Uit_2"], player4_rating + k4 * point_factor * (result_uit - player4_expected_score)],
+        [match["Thuis_1"], player1_rating + k1 * point_factor * (result_thuis - player1_expected_score) + (match.get("klinkers_thuis_1", 0) * KLINKER_BONUS)],
+        [match["Thuis_2"], player2_rating + k2 * point_factor * (result_thuis - player2_expected_score) + (match.get("klinkers_thuis_2", 0) * KLINKER_BONUS)],
+        [match["Uit_1"], player3_rating + k3 * point_factor * (result_uit - player3_expected_score) + (match.get("klinkers_uit_1", 0) * KLINKER_BONUS)],
+        [match["Uit_2"], player4_rating + k4 * point_factor * (result_uit - player4_expected_score) + (match.get("klinkers_uit_2", 0) * KLINKER_BONUS)],
     ]
     totaal_overzicht = pd.DataFrame(rows, columns=["Speler", "ELO"])
     return totaal_overzicht

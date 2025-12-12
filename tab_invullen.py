@@ -102,7 +102,11 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
         "Uit_1": selected_names['Uit 1']['name'],
         "Uit_2": selected_names['Uit 2']['name'],
         "Thuis_score": home_score,
-        "Uit_score": away_score
+        "Uit_score": away_score,
+        "klinkers_thuis_1": selected_names['Thuis 1']['klinkers'],
+        "klinkers_thuis_2": selected_names['Thuis 2']['klinkers'],
+        "klinkers_uit_1": selected_names['Uit 1']['klinkers'],
+        "klinkers_uit_2": selected_names['Uit 2']['klinkers']
     }
     all_ELO_ratings = {}
     for player in [match["Thuis_1"], match["Thuis_2"], match["Uit_1"], match["Uit_2"]]:

@@ -58,6 +58,7 @@ def render_colofon_tab():
     - Nieuwe spelers zien hun ELO sneller stijgen/dalen
 
     **Wat beïnvloedt je ELO-score?**
+    - **Klinkers:** Een klinker scoren levert een directe bonus van **15 punten** op voor de speler, ongeacht de uitslag.
     - Winnen van sterkere tegenstanders levert meer op
     - Grote uitslagen geven extra bonus/malus
     - Veel spelen maakt je ELO stabieler (lagere K-factor)
