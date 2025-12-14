@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """
 Exporteer de volledige uitslagen (wedstrijden) uit Firestore naar een CSV-bestand in ./data
 Bestandsnaam: Tafelvoetbal_Uitslagen_Export_<datum>.csv

@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """
 Vergelijk ELO-historie uit Firestore-export en lokale herberekening.
 - Toont verschillen per speler per match_id (rating, aanwezigheid, etc)

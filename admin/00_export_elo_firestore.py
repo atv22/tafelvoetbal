@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """
 Exporteer de volledige ELO-historie uit Firestore naar een CSV-bestand in ./data
 Bestandsnaam: Tafelvoetbal_ELO_Geschiedenis_<datum>.csv

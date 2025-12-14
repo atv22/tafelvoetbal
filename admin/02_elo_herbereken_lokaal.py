@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """
 Lokaal ELO-herbereken-script op basis van uitslagen-CSV.
 - Leest uitslagen uit data/Tafelvoetbal_Uitslagen_*.csv
@@ -65,7 +68,11 @@ def main():
                 'Uit_1': row['uit_1'],
                 'Uit_2': row['uit_2'],
                 'Thuis_score': int(row['thuis_score']),
-                'Uit_score': int(row['uit_score'])
+                'Uit_score': int(row['uit_score']),
+                'klinkers_thuis_1': int(row.get('klinkers_thuis_1', 0)) if pd.notna(row.get('klinkers_thuis_1', 0)) else 0,
+                'klinkers_thuis_2': int(row.get('klinkers_thuis_2', 0)) if pd.notna(row.get('klinkers_thuis_2', 0)) else 0,
+                'klinkers_uit_1': int(row.get('klinkers_uit_1', 0)) if pd.notna(row.get('klinkers_uit_1', 0)) else 0,
+                'klinkers_uit_2': int(row.get('klinkers_uit_2', 0)) if pd.notna(row.get('klinkers_uit_2', 0)) else 0
             }
             # ELO input
             all_ELO_ratings = {p: [player_elos.get(p, 1000)] for p in [row['thuis_1'], row['thuis_2'], row['uit_1'], row['uit_2']]}

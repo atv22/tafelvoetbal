@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 r"""
 Ingest offline CSV writes from `csv/write` into Firestore.
 Handles players, matches, elo logs, and requests with duplicate checks.

@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 r"""
 Export all Firestore collections used by the app to CSV files.
 Outputs:
