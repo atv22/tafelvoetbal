@@ -149,7 +149,8 @@ def show_elo_rankings(players_df, matches_df):
     # Toon de tabel met voldoende hoogte zodat alle rijen zichtbaar zijn (of met verticale scroll)
     st.dataframe(
         display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
-        .style.apply(highlight_top3_lightgreen, axis=1),
+        .style.apply(highlight_top3_lightgreen, axis=1)
+        .format({'Win%': '{:.1f}%'}),
         width='stretch',
         height=max(600, 40 * len(display_df))  # 40px per rij, minimaal 600px
     )
