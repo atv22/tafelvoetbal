@@ -684,8 +684,8 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         return
 
     # Hoofd tabs in beheer
-    tab_verwijderen, tab_bewerken, tab_upload, tab_inspectie = st.tabs([
-        "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload", "🔍 Inspectie"])
+    tab_verwijderen, tab_bewerken, tab_elo, tab_upload, tab_inspectie = st.tabs([
+        "🗑️ Verwijderen", "✏️ Bewerken", "⚡ ELO beheer", "📁 Upload", "🔍 Inspectie"])
 
     # Cache wissen knop (bovenaan beheer-tab)
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -698,7 +698,10 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         time.sleep(1)
         st.rerun()
 
-    # ⚡ ELO Beheer tab verwijderd
+
+    with tab_elo:
+        st.header("⚡ ELO beheer")
+        st.info("Hier kun je ELO gerelateerde beheeracties uitvoeren. (Placeholder)")
 
     with tab_verwijderen:
         st.header("🗑️ Verwijderen")

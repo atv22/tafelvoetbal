@@ -500,6 +500,29 @@ def show_all_time_leaderboards(player_stats):
         st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20 wedstrijden):**")
         st.dataframe(df_gpm, hide_index=True, width='stretch')
 
+    # Extra: Gemiddelde goals per speler (all-time) - grafiek
+    gpm_list = []
+    for player, stats in player_stats.items():
+        if stats['matches'] > 0:
+            gpm = stats['goals'] / stats['matches']
+            gpm_list.append({'Speler': player, 'GemGoals': gpm, 'Wedstrijden': stats['matches']})
+    if gpm_list:
+        gpm_df = pd.DataFrame(gpm_list).sort_values('GemGoals', ascending=False)
+        # Toon top 10 gemiddelde scorers (minimaal 10 wedstrijden)
+        gpm_df_filtered = gpm_df[gpm_df['Wedstrijden'] >= 10].head(10)
+        if not gpm_df_filtered.empty:
+            st.subheader("⚖️ Gemiddelde Goals per Speler (All-time, min. 10 wedstrijden)")
+            fig_gpm_all = px.bar(
+                gpm_df_filtered,
+                x='Speler',
+                y='GemGoals',
+                title='Top 10 Gemiddelde Goals per Wedstrijd (all-time, min. 10 wedstrijden)',
+                color='GemGoals',
+                color_continuous_scale='Viridis'
+            )
+            fig_gpm_all.update_layout(xaxis_title='Speler', yaxis_title='Gem. Goals/Wedstrijd')
+            st.plotly_chart(fig_gpm_all, config={'responsive': True}, key='all_time_avg_goals_chart')
+
 
 def show_cross_season_charts(all_matches, seasons_df):
     """Toon cross-seizoen analyse charts"""
@@ -661,6 +684,38 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
             )
             fig_klinkers.update_layout(xaxis_title="Speler", yaxis_title="Klinkers")
             st.plotly_chart(fig_klinkers, config={'responsive': True}, key="klinkers_bar_chart_season")
+            # Grafiek: Gemiddelde goals per speler in dit seizoen
+            avg_stats = defaultdict(lambda: {'goals': 0, 'matches': 0})
+            for _, match in season_matches.iterrows():
+                for col in home_cols:
+                    speler = match.get(col, None)
+                    if speler is not None:
+                        avg_stats[speler]['goals'] += match.get('thuis_score', 0) or 0
+                        avg_stats[speler]['matches'] += 1
+                for col in away_cols:
+                    speler = match.get(col, None)
+                    if speler is not None:
+                        avg_stats[speler]['goals'] += match.get('uit_score', 0) or 0
+                        avg_stats[speler]['matches'] += 1
+            avg_list = []
+            for speler, s in avg_stats.items():
+                if s['matches'] > 0:
+                    avg_list.append({'Speler': speler, 'GemGoals': s['goals'] / s['matches'], 'Wedstrijden': s['matches']})
+            if avg_list:
+                avg_df = pd.DataFrame(avg_list).sort_values('GemGoals', ascending=False)
+                avg_df_filtered = avg_df[avg_df['Wedstrijden'] >= 10].head(10)
+                if not avg_df_filtered.empty:
+                    st.subheader("⚖️ Gemiddelde Goals per Speler (Seizoen, min. 10 wedstrijden)")
+                    fig_avg_season = px.bar(
+                        avg_df_filtered,
+                        x='Speler',
+                        y='GemGoals',
+                        title=f"Top 10 Gem. Goals per Wedstrijd - {seizoen_naam} (min. 10 wedstrijden)",
+                        color='GemGoals',
+                        color_continuous_scale='Blues'
+                    )
+                    fig_avg_season.update_layout(xaxis_title='Speler', yaxis_title='Gem. Goals/Wedstrijd')
+                    st.plotly_chart(fig_avg_season, config={'responsive': True}, key=f'avg_goals_season_{seizoen_naam}')
     
     # ELO ratings als beschikbaar
     if season_elo is not None and not season_elo.empty:

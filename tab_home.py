@@ -36,7 +36,7 @@ def calculate_stats(players, matches):
             player_matches = matches[pd.concat(conditions, axis=1).any(axis=1)]
 
         if player_matches.empty:
-            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Speler': ""}
+            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Gem. Goals': 0.0, 'Speler': ""}
         else:
             goals_for = 0
             goals_against = 0
@@ -69,6 +69,7 @@ def calculate_stats(players, matches):
                 'Voor': int(goals_for),
                 'Tegen': int(goals_against),
                 'Doelsaldo': int(goals_for - goals_against),
+                'Gem. Goals': round(goals_for / gespeeld, 2) if gespeeld > 0 else 0.0,
                 'Klinkers': int(klinkers),
                 'Win%': round(win_pct, 1),
                 'Speler': ""  # Placeholder voor string type
@@ -134,7 +135,10 @@ def show_elo_rankings(players_df, matches_df):
     if stats_df.empty:
         st.info("Geen spelers hebben dit seizoen een wedstrijd gespeeld.")
         return
-    display_df = stats_df.sort_values(by='ELO', ascending=False).reset_index(drop=True)
+    # Toon alle spelers, maar 'Gem. Goals' alleen voor spelers met >=10 wedstrijden
+    display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
+    import numpy as np
+    display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
     # Top 3 lichtgroen kleuren
     def highlight_top3_lightgreen(row):
         idx = row.name
@@ -147,10 +151,12 @@ def show_elo_rankings(players_df, matches_df):
         else:
             return [''] * len(row)
     # Toon de tabel met voldoende hoogte zodat alle rijen zichtbaar zijn (of met verticale scroll)
+    # Toon '-' voor lege Gem. Goals
+    styled = display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
+    styled = styled.style.apply(highlight_top3_lightgreen, axis=1)
+    styled = styled.format({'Win%': '{:.1f}%', 'Gem. Goals': lambda x: f'{x:.2f}' if pd.notnull(x) else '-'})
     st.dataframe(
-        display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
-        .style.apply(highlight_top3_lightgreen, axis=1)
-        .format({'Win%': '{:.1f}%'}),
+        styled,
         width='stretch',
         height=max(600, 40 * len(display_df))  # 40px per rij, minimaal 600px
     )
