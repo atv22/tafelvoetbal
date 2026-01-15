@@ -37,7 +37,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Home", 
     "📝 Invullen", 
     "👥 Spelers", 
-    "📅 Seizoenen",
+    "� Analytics",
     "📊 Ruwe Data", 
     "⚙️ Beheer", 
     "💬 Verzoeken",
@@ -68,7 +68,7 @@ with tab3:
     players_df = db.get_players()
     render_players_tab(players_df)
 
-# ===== TAB 4: SEIZOENEN =====
+# ===== TAB 4: ANALYTICS =====
 with tab4:
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
