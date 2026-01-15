@@ -1,4 +1,4 @@
-from tab_seizoenen import render_seizoenen_tab
+from tab_analytics import render_seizoenen_tab
 import streamlit as st
 import pandas as pd
 import time

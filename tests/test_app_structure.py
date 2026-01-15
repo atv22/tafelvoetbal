@@ -13,7 +13,7 @@ MODULES = [
     "tab_home",
     "tab_invullen",
     "tab_spelers",
-    "tab_seizoenen",
+    "tab_analytics",
     "tab_data",
     "tab_beheer",
     "tab_verzoeken",
