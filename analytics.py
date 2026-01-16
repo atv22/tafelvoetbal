@@ -1,4 +1,4 @@
-def show_winrate_bar_chart(season_matches, min_matches=5):
+def show_winrate_bar_chart(season_matches, min_matches=10):
     """Toon winpercentage bar chart voor een specifiek seizoen"""
     player_stats = defaultdict(lambda: {'matches': 0, 'wins': 0})
     
@@ -206,7 +206,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
                     player_stats[player]['wins'] += 1
     scatter_data = []
     for player, stats in player_stats.items():
-        if stats['matches'] >= 5:
+        if stats['matches'] >= 10:
             win_rate = (stats['wins'] / stats['matches']) * 100
             scatter_data.append({
                 'Speler': player,
@@ -225,7 +225,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
             color='Wins',
             color_continuous_scale='Blues',
             text='Speler',
-            title="Activiteit vs Winpercentage (min. 5 wedstrijden)",
+            title="Activiteit vs Winpercentage (min. 10 wedstrijden)",
             hover_data=['Speler', 'Wedstrijden', 'Winpercentage', 'Goals', 'Wins']
         )
         fig_scatter.update_traces(textposition="top center")
@@ -625,7 +625,6 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
                 avg_df = pd.DataFrame(avg_list).sort_values('GemGoals', ascending=False)
                 avg_df_filtered = avg_df[avg_df['Wedstrijden'] >= 10].head(10)
                 if not avg_df_filtered.empty:
-                    st.subheader("⚖️ Gemiddelde Goals per Speler (Seizoen, min. 10)")
                     fig_avg_season = px.bar(
                         avg_df_filtered,
                         x='Speler',

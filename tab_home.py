@@ -63,7 +63,7 @@ def calculate_stats(players, matches):
                         if player_name == match.get(col):
                             klinkers += int(match.get(klinkers_away[i], 0) or 0)
             gespeeld = len(player_matches)
-            win_pct = (wins / gespeeld * 100) if gespeeld > 0 else 0.0
+            win_pct = (wins / gespeeld * 100) if gespeeld >= 10 else 0.0  # Alleen tonen voor >= 10 wedstrijden
             stats = {
                 'Gespeeld': gespeeld,
                 'Voor': int(goals_for),
@@ -139,6 +139,7 @@ def show_elo_rankings(players_df, matches_df):
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
     import numpy as np
     display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
+    display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
     # Top 3 lichtgroen kleuren
     def highlight_top3_lightgreen(row):
         idx = row.name
@@ -151,10 +152,10 @@ def show_elo_rankings(players_df, matches_df):
         else:
             return [''] * len(row)
     # Toon de tabel met voldoende hoogte zodat alle rijen zichtbaar zijn (of met verticale scroll)
-    # Toon '-' voor lege Gem. Goals
+    # Toon '-' voor lege Gem. Goals en Win%
     styled = display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
     styled = styled.style.apply(highlight_top3_lightgreen, axis=1)
-    styled = styled.format({'Win%': '{:.1f}%', 'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) else '-'})
+    styled = styled.format({'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) else '-', 'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) else '-'})
     st.dataframe(
         styled,
         width='stretch',
