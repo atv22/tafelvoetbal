@@ -478,7 +478,7 @@ def show_all_time_leaderboards(player_stats):
         # Toon top 5 gemiddelde scorers (minimaal 10 wedstrijden)
         gpm_df_avg = gpm_df[gpm_df['Wedstrijden'] >= 10].head(5)
         df_avg_goals = pd.DataFrame([
-            {"#": i, "Speler": player, "Gem. Goals": f"{gpm_row['GemGoals']:.2f}", "Wedstrijden": int(gpm_row['Wedstrijden'])} 
+            {"#": i, "Speler": gpm_row['Speler'], "Gem. Goals": f"{gpm_row['GemGoals']:.2f}", "Wedstrijden": int(gpm_row['Wedstrijden'])} 
             for i, (_, gpm_row) in enumerate(gpm_df_avg.iterrows(), 1)
         ])
     else:
@@ -513,80 +513,6 @@ def show_all_time_leaderboards(player_stats):
             st.info("Geen data beschikbaar")
     with row2[3]:
         st.empty()  # Lege kolom voor balans
-
-
-def show_cross_season_charts(all_matches, seasons_df):
-    """Toon cross-seizoen analyse charts"""
-    import streamlit as st
-    import pandas as pd
-    from collections import defaultdict
-
-    if all_matches.empty:
-        return
-    st.subheader("📊 Individueel Seizoen Analyses")
-    # ELO ontwikkeling over seizoenen (geschatte versie)
-    player_season_elo = defaultdict(lambda: defaultdict(int))
-    player_season_matches = defaultdict(lambda: defaultdict(int))
-
-    # Detect column names for start/end date and season name
-    if not seasons_df.empty:
-        season_row = seasons_df.iloc[0]
-        start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
-        end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
-        if 'seizoen_naam' in season_row:
-            name_col = 'seizoen_naam'
-        elif 'seizoen' in season_row:
-            name_col = 'seizoen'
-        else:
-            name_col = seasons_df.columns[0]  # fallback to first column
-    else:
-        start_col = 'start_datum'
-        end_col = 'eind_datum'
-        name_col = 'seizoen_naam'
-
-    # Detect player column names
-    if not all_matches.empty:
-        match_row = all_matches.iloc[0]
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-    else:
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-
-    for _, match in all_matches.iterrows():
-        match_date = pd.to_datetime(match['timestamp']).tz_localize(None)
-        # Vind seizoen voor deze wedstrijd
-        current_season = "Onbekend"
-        for _, season in seasons_df.iterrows():
-            season_start = pd.to_datetime(season[start_col]).tz_localize(None)
-            season_end = pd.to_datetime(season[end_col]).tz_localize(None)
-            if season_start <= match_date <= season_end:
-                current_season = season[name_col]
-                break
-        # Track matches per seizoen
-        home_players = [match[col] for col in home_cols]
-        away_players = [match[col] for col in away_cols]
-        for player in home_players + away_players:
-            player_season_matches[player][current_season] += 1
-    # Seizoen vergelijking chart
-    if len(seasons_df) > 1:
-        season_comparison = []
-        for _, season in seasons_df.iterrows():
-            season_comparison.append({
-                'Seizoen': season[name_col],
-                'Gem. Goals': season.get('gemiddelde_goals', 0)
-            })
-        if season_comparison:
-            comparison_df = pd.DataFrame(season_comparison)
-            if 'Gem. Goals' in comparison_df.columns and comparison_df['Gem. Goals'].sum() > 0:
-                fig_season_goals = px.line(
-                    comparison_df,
-                    x='Seizoen',
-                    y='Gem. Goals',
-                    title="Gemiddelde Goals per Seizoen",
-                    markers=True
-                )
-                st.plotly_chart(fig_season_goals, config={'responsive': True}, key="cross_season_goals_chart")
 
 
 def show_individual_season_analysis(season_info, season_matches, season_elo=None):
