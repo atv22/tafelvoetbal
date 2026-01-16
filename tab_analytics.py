@@ -83,11 +83,12 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
     player_stats = create_all_time_leaderboards(matches_df)
     show_all_time_leaderboards(player_stats)
 
-    # Extra analyses: timeline
-    from analytics import show_timeline_chart
+    # Extra analyses: timeline, activiteit vs winpercentage (all-time)
+    from analytics import show_timeline_chart, show_activity_vs_winrate_scatter
 
     # Geen extra subheaders, want de grafieken hebben titels
     show_timeline_chart(matches_df)
+    show_activity_vs_winrate_scatter(matches_df, key_suffix="seizoenen")
 
     # Toon cross-seizoen analyses altijd (zonder extra subheader)
     show_cross_season_charts(matches_df, seasons_df)
@@ -138,6 +139,3 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
                 matches_df['timestamp'] = normalize_timestamp_series(ts)
             season_matches = matches_df[(matches_df['timestamp'] >= season_start) & (matches_df['timestamp'] <= season_end)]
             show_individual_season_analysis(season_row, season_matches)
-            # Toevoegen: activiteit vs winpercentage voor geselecteerd seizoen
-            from analytics import show_activity_vs_winrate_scatter
-            show_activity_vs_winrate_scatter(season_matches, key_suffix=f"seizoen_{selected}")
