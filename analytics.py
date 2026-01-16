@@ -40,7 +40,7 @@ def show_winrate_bar_chart(season_matches, min_matches=5):
             winrate_df.head(10),
             x='Speler',
             y='Winpercentage',
-            title=f"Top 10 Winpercentages (min. {min_matches} wedstrijden)",
+            title=f"Top 10 Win% (min. {min_matches})",
             color='Winpercentage',
             color_continuous_scale='RdYlGn'
         )
@@ -325,17 +325,6 @@ def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
                     markers=True
                 )
                 st.plotly_chart(fig_season_goals, config={'responsive': True}, key="cross_season_goals_chart")
-        winrate_df = pd.DataFrame(winrate_data).sort_values('Winpercentage', ascending=False)
-        fig_winrate = px.bar(
-            winrate_df.head(10),
-            x='Speler',
-            y='Winpercentage',
-            title=f"Top 10 Winpercentages (min. {min_matches} wedstrijden)",
-            color='Winpercentage',
-            color_continuous_scale='RdYlGn'
-        )
-        fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
-        st.plotly_chart(fig_winrate, config={'responsive': True}, key="winrate_bar_chart")
 
 
 def show_goals_bar_chart_season(season_matches):
@@ -511,13 +500,13 @@ def show_all_time_leaderboards(player_stats):
         st.write("**🎯 Top 5 Klinker Masters (hoogste ELO):**")
         st.dataframe(df_klinkers, hide_index=True, width='stretch')
     with row2[0]:
-        st.write("**📈 Top 5 Hoogste Winpercentage (min. 20 wedstrijden):**")
+        st.write("**📈 Top 5 Hoogste Winpercentage (min. 20):**")
         st.dataframe(df_win_pct, hide_index=True, width='stretch')
     with row2[1]:
-        st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20 wedstrijden):**")
+        st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20):**")
         st.dataframe(df_gpm, hide_index=True, width='stretch')
     with row2[2]:
-        st.write("**⚖️ Top 5 Gem. Goals per Wedstrijd (min. 10 wedstrijden):**")
+        st.write("**⚖️ Top 5 Gem. Goals per Wedstrijd (min. 10):**")
         if not df_avg_goals.empty:
             st.dataframe(df_avg_goals, hide_index=True, width='stretch')
         else:
@@ -707,12 +696,12 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
                 avg_df = pd.DataFrame(avg_list).sort_values('GemGoals', ascending=False)
                 avg_df_filtered = avg_df[avg_df['Wedstrijden'] >= 10].head(10)
                 if not avg_df_filtered.empty:
-                    st.subheader("⚖️ Gemiddelde Goals per Speler (Seizoen, min. 10 wedstrijden)")
+                    st.subheader("⚖️ Gemiddelde Goals per Speler (Seizoen, min. 10)")
                     fig_avg_season = px.bar(
                         avg_df_filtered,
                         x='Speler',
                         y='GemGoals',
-                        title=f"Top 10 Gem. Goals per Wedstrijd - {seizoen_naam} (min. 10 wedstrijden)",
+                        title=f"Top 10 Gem. Goals per Wedstrijd - {seizoen_naam} (min. 10)",
                         color='GemGoals',
                         color_continuous_scale='Blues'
                     )
@@ -722,6 +711,17 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     # ELO ratings als beschikbaar
     if season_elo is not None and not season_elo.empty:
         st.subheader("🏆 ELO Rankings")
-        show_elo_bar_chart(season_elo)
+        elo_df_season = season_elo.sort_values('rating', ascending=False).head(10)
+        if not elo_df_season.empty:
+            fig_elo = px.bar(
+                elo_df_season,
+                x='speler_naam',
+                y='rating',
+                title="Top 10 ELO Ratings",
+                color='rating',
+                color_continuous_scale='Viridis'
+            )
+            fig_elo.update_layout(xaxis_title="Speler", yaxis_title="ELO Rating")
+            st.plotly_chart(fig_elo, config={'responsive': True}, key="elo_bar_chart_season")
     
     # (verwijderd: goals trend over tijd)
