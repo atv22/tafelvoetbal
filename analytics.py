@@ -563,6 +563,9 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     # Visualisaties in columns
     st.subheader("📊 Seizoen Visualisaties")
     
+    # Scatter plot: Activiteit vs Winpercentage (bovenaan)
+    show_activity_vs_winrate_scatter(season_matches, key_suffix=f"season_{seizoen_naam}")
+    
     # 2x2 layout voor seizoenspecifieke grafieken
     row1 = st.columns(2)
     row2 = st.columns(2)
