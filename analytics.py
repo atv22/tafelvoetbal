@@ -478,9 +478,26 @@ def show_all_time_leaderboards(player_stats):
         {"#": i, "Speler": player, "Goals/Wedstrijd": f"{gpm:.2f}", "Wedstrijden": matches} for i, (player, gpm, matches) in enumerate(top_gpm, 1)
     ])
 
-    # Toon zes tabellen in 2 rijen van 3 kolommen
-    row1 = st.columns(3)
-    row2 = st.columns(3)
+    # Gemiddelde goals per speler (all-time) - tabel
+    gpm_list = []
+    for player, stats in player_stats.items():
+        if stats['matches'] > 0:
+            gpm = stats['goals'] / stats['matches']
+            gpm_list.append({'Speler': player, 'GemGoals': gpm, 'Wedstrijden': stats['matches']})
+    if gpm_list:
+        gpm_df = pd.DataFrame(gpm_list).sort_values('GemGoals', ascending=False)
+        # Toon top 5 gemiddelde scorers (minimaal 10 wedstrijden)
+        gpm_df_avg = gpm_df[gpm_df['Wedstrijden'] >= 10].head(5)
+        df_avg_goals = pd.DataFrame([
+            {"#": i, "Speler": player, "Gem. Goals": f"{gpm_row['GemGoals']:.2f}", "Wedstrijden": int(gpm_row['Wedstrijden'])} 
+            for i, (_, gpm_row) in enumerate(gpm_df_avg.iterrows(), 1)
+        ])
+    else:
+        df_avg_goals = pd.DataFrame()
+
+    # Toon acht tabellen in 2 rijen van 4 kolommen
+    row1 = st.columns(4)
+    row2 = st.columns(4)
     with row1[0]:
         st.write("**🥅 Top 5 All-time Topscorers:**")
         st.dataframe(df_scorers, hide_index=True, width='stretch')
@@ -490,38 +507,23 @@ def show_all_time_leaderboards(player_stats):
     with row1[2]:
         st.write("**🏅 Top 5 Meeste Overwinningen:**")
         st.dataframe(df_wins, hide_index=True, width='stretch')
-    with row2[0]:
+    with row1[3]:
         st.write("**🎯 Top 5 Klinker Masters (hoogste ELO):**")
         st.dataframe(df_klinkers, hide_index=True, width='stretch')
-    with row2[1]:
+    with row2[0]:
         st.write("**📈 Top 5 Hoogste Winpercentage (min. 20 wedstrijden):**")
         st.dataframe(df_win_pct, hide_index=True, width='stretch')
-    with row2[2]:
+    with row2[1]:
         st.write("**🚀 Top 5 Goals per Wedstrijd (min. 20 wedstrijden):**")
         st.dataframe(df_gpm, hide_index=True, width='stretch')
-
-    # Extra: Gemiddelde goals per speler (all-time) - grafiek
-    gpm_list = []
-    for player, stats in player_stats.items():
-        if stats['matches'] > 0:
-            gpm = stats['goals'] / stats['matches']
-            gpm_list.append({'Speler': player, 'GemGoals': gpm, 'Wedstrijden': stats['matches']})
-    if gpm_list:
-        gpm_df = pd.DataFrame(gpm_list).sort_values('GemGoals', ascending=False)
-        # Toon top 10 gemiddelde scorers (minimaal 10 wedstrijden)
-        gpm_df_filtered = gpm_df[gpm_df['Wedstrijden'] >= 10].head(10)
-        if not gpm_df_filtered.empty:
-            st.subheader("⚖️ Gemiddelde Goals per Speler (All-time, min. 10 wedstrijden)")
-            fig_gpm_all = px.bar(
-                gpm_df_filtered,
-                x='Speler',
-                y='GemGoals',
-                title='Top 10 Gemiddelde Goals per Wedstrijd (all-time, min. 10 wedstrijden)',
-                color='GemGoals',
-                color_continuous_scale='Viridis'
-            )
-            fig_gpm_all.update_layout(xaxis_title='Speler', yaxis_title='Gem. Goals/Wedstrijd')
-            st.plotly_chart(fig_gpm_all, config={'responsive': True}, key='all_time_avg_goals_chart')
+    with row2[2]:
+        st.write("**⚖️ Top 5 Gem. Goals per Wedstrijd (min. 10 wedstrijden):**")
+        if not df_avg_goals.empty:
+            st.dataframe(df_avg_goals, hide_index=True, width='stretch')
+        else:
+            st.info("Geen data beschikbaar")
+    with row2[3]:
+        st.empty()  # Lege kolom voor balans
 
 
 def show_cross_season_charts(all_matches, seasons_df):
