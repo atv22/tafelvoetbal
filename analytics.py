@@ -242,7 +242,7 @@ def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
 
     if all_matches.empty or seasons_df.empty:
         return
-    st.subheader("\ud83d\udcca Individueel Seizoen Analyses")
+    st.subheader("📊 Individueel Seizoen Analyses")
 
     # Toon per seizoen de top 3 ELO (nieuw)
     if elo_df is None:
