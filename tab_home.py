@@ -154,7 +154,7 @@ def show_elo_rankings(players_df, matches_df):
     # Toon '-' voor lege Gem. Goals
     styled = display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
     styled = styled.style.apply(highlight_top3_lightgreen, axis=1)
-    styled = styled.format({'Win%': '{:.1f}%', 'Gem. Goals': lambda x: f'{x:.2f}' if pd.notnull(x) else '-'})
+    styled = styled.format({'Win%': '{:.1f}%', 'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) else '-'})
     st.dataframe(
         styled,
         width='stretch',
@@ -307,8 +307,7 @@ def render_home_tab(players_df, matches_df):
                 huidig_seizoen = row
                 break
     if huidig_seizoen is not None:
-        st.markdown(f"**Huidig seizoen:** {huidig_seizoen['seizoen_naam']}  ")
-        st.markdown(f"Periode: {pd.to_datetime(huidig_seizoen['startdatum']).strftime('%d-%m-%Y %H:%M')} t/m {pd.to_datetime(huidig_seizoen['einddatum']).strftime('%d-%m-%Y %H:%M')}")
+        st.markdown(f"**Huidig seizoen:** {huidig_seizoen['seizoen_naam']} - Periode: {pd.to_datetime(huidig_seizoen['startdatum']).strftime('%d-%m-%Y %H:%M')} t/m {pd.to_datetime(huidig_seizoen['einddatum']).strftime('%d-%m-%Y %H:%M')}")
         # Haal alleen wedstrijden van het huidige seizoen via Firestore range query (sneller)
         try:
             start = pd.to_datetime(huidig_seizoen['startdatum'])
