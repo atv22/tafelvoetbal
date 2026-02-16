@@ -313,16 +313,29 @@ def initialize_firestore():
     # Probeer eerst Streamlit secrets (voor cloud deployment)
     try:
         if hasattr(st, 'secrets') and 'firestore_credentials' in st.secrets:
-            # Streamlit Cloud: gebruik secrets
-            key_dict = dict(st.secrets["firestore_credentials"])
+            # Streamlit Cloud: gebruik secrets. Ondersteun zowel dict als JSON-string.
+            secret_val = st.secrets["firestore_credentials"]
+            if isinstance(secret_val, str):
+                try:
+                    key_dict = json.loads(secret_val)
+                except Exception as e:
+                    raise ValueError("firestore_credentials in secrets is een string maar geen geldige JSON") from e
+            elif isinstance(secret_val, dict):
+                key_dict = secret_val
+            else:
+                try:
+                    key_dict = dict(secret_val)
+                except Exception as e:
+                    raise ValueError("firestore_credentials in secrets heeft een ongeldige structuur") from e
+
             project_id = key_dict.get("project_id")
             creds = service_account.Credentials.from_service_account_info(key_dict)
             print("Firestore credentials geladen vanuit Streamlit secrets")
         else:
             raise KeyError("Geen firestore_credentials gevonden in secrets")
-    except (KeyError, AttributeError, ValueError) as e:
-        print(f"Streamlit secrets niet beschikbaar ({e}), probeer lokaal bestand...")
-        
+    except (KeyError, AttributeError, ValueError, json.JSONDecodeError) as e:
+        print(f"Streamlit secrets niet beschikbaar of ongeldig ({e}), probeer lokaal bestand...")
+
         # Fallback naar lokaal bestand (voor lokale ontwikkeling)
         try:
             with open("firestore-key.json") as f:
