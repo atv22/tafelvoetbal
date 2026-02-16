@@ -1,6 +1,6 @@
 # Tafelvoetbal Competitie App
 
-Een webapplicatie voor het beheren van tafelvoetbal competities, ontwikkeld tijdens de **Hackatron van oktober 2025**.
+Een webapplicatie voor het beheren van tafelvoetbal competities, ontwikkeld tijdens de **Hackatron van oktober 2025**. 
 
 ## 👥 Team
 
@@ -31,7 +31,7 @@ Ontwikkeld door:
 
 #### Uitleg ELO Berekening
 
-Het ELO-systeem in deze app is speciaal aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
+Het ELO-systeem in deze app is aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
 
 - Het verwachte resultaat (op basis van de ELO van beide teams)
 - Het daadwerkelijke scoreverschil
