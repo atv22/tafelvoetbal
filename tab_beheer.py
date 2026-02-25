@@ -684,24 +684,11 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         return
 
     # Hoofd tabs in beheer
-    tab_verwijderen, tab_bewerken, tab_elo, tab_upload, tab_inspectie = st.tabs([
-        "🗑️ Verwijderen", "✏️ Bewerken", "⚡ ELO beheer", "📁 Upload", "🔍 Inspectie"])
-
-    # Cache wissen knop (bovenaan beheer-tab)
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("🧹 Streamlit Cache wissen")
-    st.info("Gebruik deze knop als je problemen ervaart met verouderde data, seizoensindeling of na een grote wijziging. De app wordt direct herladen.")
-    if st.button("Cache wissen en herladen", key="clear_cache"):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("Streamlit cache is gewist. De app wordt herladen...")
-        time.sleep(1)
-        st.rerun()
+    tab_verwijderen, tab_bewerken, tab_upload = st.tabs([
+        "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload"])
 
 
-    with tab_elo:
-        st.header("⚡ ELO beheer")
-        st.info("Hier kun je ELO gerelateerde beheeracties uitvoeren. (Placeholder)")
+    # 'ELO beheer' is verplaatst naar admin scripts; UI verwijderd to prevent heavy operations.
 
     with tab_verwijderen:
         st.header("🗑️ Verwijderen")
@@ -840,58 +827,4 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
 
-    with tab_inspectie:
-        st.header("🔍 Inspectie")
-        # Overige Database Cleanup - 'Verwijder alle Requests' optie verwijderd
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("🔎 Database Inspectie & Schema")
-        st.caption("Bekijk welke collecties en velden in Firestore aanwezig zijn en vergelijk met wat de app verwacht.")
-
-        if st.button("Analyseer Firestore schema"):
-            with st.spinner("Firestore wordt geïnspecteerd..."):
-                try:
-                    expected = db.expected_schema()
-                    actual = db.inspect_collections(max_docs=250)
-
-                    for coll in ["spelers", "uitslag", "elo", "requests"]:
-                        st.markdown(f"**Collectie: `{coll}`**")
-                        exp = expected.get(coll, {})
-                        act = actual.get(coll, {"fields": [], "sample_size": 0, "examples": []})
-
-                        exp_required = exp.get("required", set())
-                        exp_optional = exp.get("optional", set())
-                        exp_derived = exp.get("derived_only_in_app", set())
-                        act_fields = set(act.get("fields", []))
-
-                        missing = sorted(list((exp_required | exp_optional) - act_fields))
-                        unexpected = sorted(list(act_fields - (exp_required | exp_optional)))
-
-                        colA, colB, colC = st.columns(3)
-                        with colA:
-                            st.write("Verwacht (required):")
-                            st.code(", ".join(sorted(list(exp_required))) or "—")
-                        with colB:
-                            st.write("Verwacht (optioneel):")
-                            st.code(", ".join(sorted(list(exp_optional))) or "—")
-                        with colC:
-                            st.write("Alleen in app (afgeleid):")
-                            st.code(", ".join(sorted(list(exp_derived))) or "—")
-
-                        st.write("Aangetroffen velden (sample):")
-                        st.code(", ".join(sorted(list(act_fields))) or "—")
-
-                        info_cols = st.columns(2)
-                        with info_cols[0]:
-                            st.write("Ontbrekend t.o.v. verwachting:")
-                            st.code(", ".join(missing) or "—")
-                        with info_cols[1]:
-                            st.write("Onverwacht (bestaat niet in app):")
-                            st.code(", ".join(unexpected) or "—")
-
-                        if act.get("examples"):
-                            st.write("Voorbeelden (max 5):")
-                            st.dataframe(pd.DataFrame(act["examples"]))
-                        st.markdown("---")
-                except Exception as e:
-                    st.error(f"Schema inspectie mislukt: {e}")
+    # De inspectie-subtab is verplaatst naar admin/inspectie.py als zelfstandig script.

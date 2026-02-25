@@ -30,7 +30,7 @@ def test_module_imports(module_name):
 def test_app_tabs():
     # Controleer of de tab-namen in de app overeenkomen met verwachting
     expected_tabs = [
-        "🏠 Home", "📝 Invullen", "👥 Spelers", "📅 Seizoenen",
+        "🏠 Home", "📝 Invullen", "👥 Spelers", "� Analytics",
         "📊 Ruwe Data", "⚙️ Beheer", "💬 Verzoeken", "ℹ️ Colofon"
     ]
     app_path = os.path.join(os.path.dirname(__file__), "..", "app.py")
@@ -45,7 +45,7 @@ def test_admin_subtabs():
         content = f.read()
     # Hoofd subtabs
     expected_subtabs = [
-        "🗑️ Verwijderen", "✏️ Bewerken", "⚡ ELO beheer", "📁 Upload", "🔍 Inspectie"
+        "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload"
     ]
     for subtab in expected_subtabs:
         assert subtab in content, f"Subtab '{subtab}' niet gevonden in tab_beheer.py"
