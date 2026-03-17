@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from firestore_service import normalize_timestamp_series
+from firestore_service import normalize_timestamp_series, get_elo_logs
 from analytics import (
     show_cross_season_charts,
     show_individual_season_analysis,
@@ -8,8 +8,10 @@ from analytics import (
     show_all_time_leaderboards
 )
 
-def render_seizoenen_tab(matches_df, players_df, seasons_df):
+def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     st.header("📅 Seizoensanalyse")
+    if elo_df is None:
+        elo_df = get_elo_logs()
 
     # Cross-seizoen analyses direct bovenaan
     st.subheader("📊 Cross-Seizoen Analyses")
@@ -33,10 +35,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df):
             unieke_spelers = len([p for p in unieke_spelers if p])
             # Top 3 winnaars bepalen + ELO (herbruikbare logica)
             from analytics import get_season_top3_elo
-            from firestore_service import get_elo_logs
             winnaar, tweede, derde = '-', '-', '-'
             winnaar_elo, tweede_elo, derde_elo = '', '', ''
-            elo_df = get_elo_logs()
             top3 = get_season_top3_elo(elo_df, seizoen_matches)
             if len(top3) > 0:
                 winnaar, winnaar_elo = top3[0][0], f" ({int(top3[0][1])})"

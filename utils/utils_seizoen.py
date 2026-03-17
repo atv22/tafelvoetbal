@@ -3,7 +3,7 @@ Seizoen utilities voor de tafelvoetbal app - Prinsjesdag gebaseerd systeem
 """
 import pandas as pd
 import streamlit as st
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 
 def get_prinsjesdag(year):
@@ -19,94 +19,128 @@ def get_prinsjesdag(year):
     return pd.Timestamp(prinsjesdag)
 
 
+def get_march15(year):
+    return pd.Timestamp(datetime(year, 3, 15, 23, 59, 59))
+
+
+def get_march16(year):
+    return pd.Timestamp(datetime(year, 3, 16, 0, 0, 0))
+
+
 def generate_prinsjesdag_seasons(matches_df):
-    """Genereer automatische seizoenen op basis van Prinsjesdag"""
+    """Genereer automatische seizoenen op basis van Prinsjesdag + 15 maart split"""
     prinsjesdag_seasons = []
-    
+
     try:
         current_year = date.today().year
-        
+
         # Bepaal jaar bereik - alleen seizoenen tot huidig jaar
         if not matches_df.empty:
             try:
-                # Converteer datum kolom naar datetime en haal timezone info weg
-                match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
-                min_year = max(2020, match_dates.min().year - 1)  # Vanaf 2020 of eerste match jaar
-                max_year = min(current_year + 1, match_dates.max().year + 1)  # Tot huidig jaar
+                if 'datum' in matches_df.columns:
+                    date_series = pd.to_datetime(matches_df['datum'], errors='coerce')
+                elif 'timestamp' in matches_df.columns:
+                    date_series = pd.to_datetime(matches_df['timestamp'], errors='coerce')
+                else:
+                    st.warning("Geen 'datum' of 'timestamp' kolom gevonden in matches_df")
+                    return pd.DataFrame()
+
+                # Zet naar tz-naive om consistent te blijven
+                try:
+                    if hasattr(date_series.dt, 'tz') and date_series.dt.tz is not None:
+                        date_series = date_series.dt.tz_convert('UTC').dt.tz_localize(None)
+                    else:
+                        date_series = date_series.dt.tz_localize(None)
+                except Exception:
+                    pass
+
+                match_dates = date_series
+                min_year = max(2020, match_dates.min().year - 1)
+                max_year = min(current_year + 1, match_dates.max().year + 1)
             except Exception as date_error:
-                # Alleen waarschuwen bij daadwerkelijke data problemen
-                if not matches_df.empty:
-                    st.warning(f"Probleem met datum conversie: {date_error}")
-                # Fallback naar huidige datum bereik
+                st.warning(f"Probleem met datum conversie: {date_error}")
                 min_year = 2020
                 max_year = current_year + 1
         else:
-            # Geen wedstrijden - geen seizoenen tonen
             return pd.DataFrame()
-        
+
         for year in range(min_year, max_year + 1):
-            try:
-                # Skip jaar 1900 of andere ongeldige jaren, en toekomstige jaren
-                if year < 1900 or year > current_year + 1:
-                    continue
-                    
-                prinsjesdag = get_prinsjesdag(year)
-                prev_prinsjesdag = get_prinsjesdag(year - 1)
-                
-                # Seizoen loopt van vorige Prinsjesdag tot huidige Prinsjesdag 24:00
-                season_start = prev_prinsjesdag
-                season_end = prinsjesdag
-                
-                prinsjesdag_seasons.append({
-                    'seizoen_naam': f"Seizoen {year - 1}/{year}",
-                    'start_datum': season_start,
-                    'eind_datum': season_end,
-                    'prinsjesdag': prinsjesdag,
-                    'seizoen_jaar': year
-                })
-            except Exception as season_error:
-                # Skip dit seizoen bij problemen
+            if year < 1900 or year > current_year + 1:
                 continue
-        
+
+            prinsjesdag = get_prinsjesdag(year)
+            next_prinsjesdag = get_prinsjesdag(year + 1)
+
+            # Seizoen 1: Prinsjesdag tot 15 maart volgende jaar
+            season1_start = prinsjesdag
+            season1_end = get_march15(year + 1)
+            prinsjesdag_seasons.append({
+                'seizoen_naam': f"Seizoen {year}/{year + 1} (P→15 mrt)",
+                'start_datum': season1_start,
+                'eind_datum': season1_end,
+                'prinsjesdag': prinsjesdag,
+                'seizoen_jaar': year + 1
+            })
+
+            # Seizoen 2: 16 maart volgende jaar tot volgende Prinsjesdag
+            season2_start = get_march16(year + 1)
+            # Eind op Prinsjesdag (00:00), zodat de volgende Prinsjesdag-start meteen hierna kan beginnen zonder overlap
+            season2_end = next_prinsjesdag
+            prinsjesdag_seasons.append({
+                'seizoen_naam': f"Seizoen {year}/{year + 1} (16 mrt→P)",
+                'start_datum': season2_start,
+                'eind_datum': season2_end,
+                'prinsjesdag': prinsjesdag,
+                'seizoen_jaar': year + 1
+            })
+
         seasons_df = pd.DataFrame(prinsjesdag_seasons)
-        
+
         if not seasons_df.empty and not matches_df.empty:
-            # Voeg statistieken toe per seizoen
             seasons_with_stats = []
-            
+
             for _, season in seasons_df.iterrows():
                 try:
-                    # Filter wedstrijden voor dit seizoen
-                    match_dates_tz_naive = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
-                    season_start_tz_naive = pd.to_datetime(season['start_datum']).tz_localize(None) if pd.api.types.is_datetime64_any_dtype(pd.to_datetime(season['start_datum'])) else pd.to_datetime(season['start_datum'])
-                    season_end_tz_naive = pd.to_datetime(season['eind_datum']).tz_localize(None) if pd.api.types.is_datetime64_any_dtype(pd.to_datetime(season['eind_datum'])) else pd.to_datetime(season['eind_datum'])
-                    
+                    if 'datum' in matches_df.columns:
+                        match_dates_tz_naive = pd.to_datetime(matches_df['datum'], errors='coerce')
+                    elif 'timestamp' in matches_df.columns:
+                        match_dates_tz_naive = pd.to_datetime(matches_df['timestamp'], errors='coerce')
+                    else:
+                        match_dates_tz_naive = pd.Series([], dtype='datetime64[ns]')
+
+                    try:
+                        if hasattr(match_dates_tz_naive.dt, 'tz') and match_dates_tz_naive.dt.tz is not None:
+                            match_dates_tz_naive = match_dates_tz_naive.dt.tz_convert('UTC').dt.tz_localize(None)
+                        else:
+                            match_dates_tz_naive = match_dates_tz_naive.dt.tz_localize(None)
+                    except Exception:
+                        pass
+
+                    season_start_tz_naive = pd.to_datetime(season.get('start_datum') or season.get('start_datum'), errors='coerce')
+                    season_end_tz_naive = pd.to_datetime(season.get('eind_datum') or season.get('eind_datum'), errors='coerce')
                     season_matches = matches_df[
-                        (match_dates_tz_naive >= season_start_tz_naive) & 
+                        (match_dates_tz_naive >= season_start_tz_naive) &
                         (match_dates_tz_naive <= season_end_tz_naive)
                     ]
-                    
-                    # Skip seizoenen zonder wedstrijden of in de toekomst
+
                     if len(season_matches) == 0:
                         continue
-                    
-                    # Skip seizoenen die volledig in de toekomst liggen
+
                     if season_start_tz_naive.date() > date.today():
                         continue
-                    
-                    # Bereken statistieken
-                    total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
+
+                    if 'thuis_score' in season_matches.columns and 'uit_score' in season_matches.columns:
+                        total_goals = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
+                    else:
+                        total_goals = 0
                     avg_goals = total_goals / len(season_matches) if len(season_matches) > 0 else 0
-                    
-                    # Unieke spelers
+
                     unique_players = set()
                     for _, match in season_matches.iterrows():
-                        unique_players.update([
-                            match['thuis_1'], match['thuis_2'],
-                            match['uit_1'], match['uit_2']
-                        ])
-                    
-                    # Detect season name column
+                        for p in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                            if p in match and pd.notna(match[p]):
+                                unique_players.add(match[p])
+
                     if 'seizoen_naam' in season:
                         season_name = season['seizoen_naam']
                     elif 'seizoen' in season:
@@ -142,9 +176,33 @@ def get_season_matches(matches_df, season_info):
     """Filter wedstrijden voor een specifiek seizoen"""
     try:
         # Converteer alle datums naar timezone-naive voor vergelijking
-        match_dates = pd.to_datetime(matches_df['datum']).dt.tz_localize(None)
-        season_start = pd.to_datetime(season_info['start_datum']).tz_localize(None) if pd.api.types.is_datetime64_any_dtype(pd.to_datetime(season_info['start_datum'])) else pd.to_datetime(season_info['start_datum'])
-        season_end = pd.to_datetime(season_info['eind_datum']).tz_localize(None) if pd.api.types.is_datetime64_any_dtype(pd.to_datetime(season_info['eind_datum'])) else pd.to_datetime(season_info['eind_datum'])
+        if 'datum' in matches_df.columns:
+            match_dates = pd.to_datetime(matches_df['datum'], errors='coerce')
+        elif 'timestamp' in matches_df.columns:
+            match_dates = pd.to_datetime(matches_df['timestamp'], errors='coerce')
+        else:
+            match_dates = pd.Series([], dtype='datetime64[ns]')
+
+        try:
+            if hasattr(match_dates.dt, 'tz') and match_dates.dt.tz is not None:
+                match_dates = match_dates.dt.tz_convert('UTC').dt.tz_localize(None)
+            else:
+                match_dates = match_dates.dt.tz_localize(None)
+        except Exception:
+            pass
+
+        season_start = pd.to_datetime(season_info.get('start_datum') or season_info.get('startdatum'), errors='coerce')
+        season_end = pd.to_datetime(season_info.get('eind_datum') or season_info.get('einddatum'), errors='coerce')
+        try:
+            if hasattr(season_start.dt, 'tz') and season_start.dt.tz is not None:
+                season_start = season_start.dt.tz_convert('UTC').dt.tz_localize(None)
+        except Exception:
+            pass
+        try:
+            if hasattr(season_end.dt, 'tz') and season_end.dt.tz is not None:
+                season_end = season_end.dt.tz_convert('UTC').dt.tz_localize(None)
+        except Exception:
+            pass
         
         # Filter wedstrijden binnen seizoen periode
         season_mask = (match_dates >= season_start) & (match_dates <= season_end)

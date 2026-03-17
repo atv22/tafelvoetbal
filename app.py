@@ -27,6 +27,18 @@ setup_page()
 st.title("Tafelvoetbal Competitie ⚽")
 st.caption("Versie 2.1")
 
+# --- Timing (server logs) ---
+app_start = time.perf_counter()
+
+# --- Eénmaal laden, hergebruik voor tabs ---
+load_start = time.perf_counter()
+players_df = db.get_players()
+matches_df = db.get_matches()
+seasons_df = db.get_seasons()
+elo_df = db.get_elo_logs()
+load_end = time.perf_counter()
+print(f"[TIMING] data load 1: players={len(players_df) if players_df is not None else 0}, matches={len(matches_df) if matches_df is not None else 0}, seasons={len(seasons_df) if seasons_df is not None else 0}, elo={len(elo_df) if elo_df is not None else 0} in {load_end-load_start:.3f}s")
+
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
     st.error("Firestore is offline. Back-up CSV data wordt gebruikt en kan achterlopen.")
@@ -48,60 +60,78 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 
 # ===== TAB 1: HOME =====
 with tab1:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    players_df = db.get_players()
-    matches_df = db.get_matches()
     render_home_tab(players_df, matches_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab HOME rendered in {t1-t0:.3f}s")
 
 # ===== TAB 2: INVULLEN =====
 with tab2:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — invoer in wachtrij")
-    players_df = db.get_players()
     render_input_tab(players_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab INVULLEN rendered in {t1-t0:.3f}s")
 
 # ===== TAB 3: SPELERS =====
+
 with tab3:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    players_df = db.get_players()
     render_players_tab(players_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab SPELERS rendered in {t1-t0:.3f}s")
 
 # ===== TAB 4: ANALYTICS =====
 with tab4:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    matches_df = db.get_matches()
-    players_df = db.get_players()
-    seasons_df = db.get_seasons()
-    render_seizoenen_tab(matches_df, players_df, seasons_df)
+    render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab ANALYTICS rendered in {t1-t0:.3f}s")
 
 # ===== TAB 5: RUWE DATA =====
 
 # ===== TAB 5: RUWE DATA =====
 with tab5:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
     render_data_tab()
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab RUWE DATA rendered in {t1-t0:.3f}s")
 
 # ===== TAB 6: BEHEER =====
 with tab6:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — beheer kan beperkt zijn")
-    players_df = db.get_players()
-    matches_df = db.get_matches()
     render_admin_tab(db, players_df, matches_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab BEHEER rendered in {t1-t0:.3f}s")
 
 # ===== TAB 7: VERZOEKEN =====
 with tab7:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    matches_df = db.get_matches()
     render_verzoeken_tab(matches_df)
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab VERZOEKEN rendered in {t1-t0:.3f}s")
 
 # ===== TAB 8: COLOFON =====
 with tab8:
+    t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
     render_colofon_tab()
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab COLOFON rendered in {t1-t0:.3f}s")
+
+app_end = time.perf_counter()
+print(f"[TIMING] app run total {app_end-app_start:.3f}s")

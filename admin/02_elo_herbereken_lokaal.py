@@ -22,17 +22,37 @@ def get_prinsjesdag(year):
     prinsjesdag = first_tuesday + timedelta(days=14)
     return prinsjesdag.replace(hour=0, minute=0, second=0, microsecond=0)
 
+
+def get_march15(year):
+    return datetime(year, 3, 15, 23, 59, 59)
+
+
+def get_march16(year):
+    return datetime(year, 3, 16, 0, 0, 0)
+
+
 def bepaal_seizoenen(df):
     jaren = sorted(set(df['timestamp'].dt.year))
     bounds = [get_prinsjesdag(y) for y in range(min(jaren)-1, max(jaren)+2)]
     bounds = sorted(bounds)
     seizoenen = []
-    for i in range(len(bounds)-1):
-        start = bounds[i] + timedelta(days=1)
-        end = bounds[i+1]
-        mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
-        if mask.sum() > 0:
-            seizoenen.append({'start': start, 'end': end})
+    for year in range(min(jaren) - 1, max(jaren) + 1):
+        prinsjesdag = get_prinsjesdag(year)
+        next_prinsjesdag = get_prinsjesdag(year + 1)
+
+        # Seizoen 1: Prinsjesdag tot 15 maart (inclusief)
+        season1_start = prinsjesdag
+        season1_end = get_march15(year + 1)
+        mask1 = (df['timestamp'] >= season1_start) & (df['timestamp'] <= season1_end)
+        if mask1.sum() > 0:
+            seizoenen.append({'start': season1_start, 'end': season1_end})
+
+        # Seizoen 2: 16 maart tot Prinsjesdag
+        season2_start = get_march16(year + 1)
+        season2_end = next_prinsjesdag.replace(hour=23, minute=59, second=59, microsecond=0)
+        mask2 = (df['timestamp'] >= season2_start) & (df['timestamp'] <= season2_end)
+        if mask2.sum() > 0:
+            seizoenen.append({'start': season2_start, 'end': season2_end})
     return seizoenen
 
 def main():

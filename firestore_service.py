@@ -639,6 +639,11 @@ def get_seasons():
         dt = datetime.combine(prinsjesdag, datetime.min.time())
         return dt.replace(tzinfo=None)
 
+    def get_march15(year):
+        return datetime(year, 3, 15, 23, 59, 59)
+
+    def get_march16(year):
+        return datetime(year, 3, 16, 0, 0, 0)
 
     # Normaliseer timestamp kolom
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
@@ -651,30 +656,42 @@ def get_seasons():
             min_year = max_year = None
     else:
         min_year = max_year = None
-    if min_year is not None and max_year is not None:
-        season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
-        season_bounds = sorted(season_bounds)
-    else:
-        season_bounds = []
 
     seizoenen = []
-    for i in range(len(season_bounds) - 1):
-        vorige_prinsjesdag = season_bounds[i]
-        deze_prinsjesdag = season_bounds[i + 1]
-        start = vorige_prinsjesdag + timedelta(days=1)
-        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = deze_prinsjesdag.replace(hour=23, minute=59, second=59, microsecond=0)
-        seizoen_naam = f"Seizoen {start.year}/{end.year}"
-        mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
-        seizoen_df = df[mask]
-        n_matches = int(mask.sum())
-        seizoenen.append({
-            'startdatum': start,
-            'einddatum': end,
-            'jaar': end.year,
-            'seizoen_naam': seizoen_naam,
-            'aantal_wedstrijden': n_matches
-        })
+    if min_year is not None and max_year is not None:
+        for year in range(min_year - 1, max_year + 1):
+            prinsjesdag_start = get_prinsjesdag(year)
+            prinsjesdag_end = get_prinsjesdag(year + 1)
+
+            # Seizoen: Prinsjesdag tot 15 maart
+            start_1 = prinsjesdag_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_1 = get_march15(year + 1)
+            seizoen_naam_1 = f"Seizoen {year}/{year+1} (P→15 mrt)"
+            mask_1 = (df['timestamp'] >= start_1) & (df['timestamp'] <= end_1)
+            seizoenen.append({
+                'startdatum': start_1,
+                'einddatum': end_1,
+                'jaar': year + 1,
+                'seizoen_naam': seizoen_naam_1,
+                'aantal_wedstrijden': int(mask_1.sum())
+            })
+
+            # Seizoen: 16 maart tot Prinsjesdag
+            start_2 = get_march16(year + 1)
+            end_2 = prinsjesdag_end.replace(hour=23, minute=59, second=59, microsecond=0)
+            seizoen_naam_2 = f"Seizoen {year}/{year+1} (16 mrt→P)"
+            mask_2 = (df['timestamp'] >= start_2) & (df['timestamp'] <= end_2)
+            seizoenen.append({
+                'startdatum': start_2,
+                'einddatum': end_2,
+                'jaar': year + 1,
+                'seizoen_naam': seizoen_naam_2,
+                'aantal_wedstrijden': int(mask_2.sum())
+            })
+    
+    # Filter weg seizoenen zonder wedstrijden, tenzij het huidige (includerend vandaag)
+    seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['startdatum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['einddatum'])]
+
     seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['startdatum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['einddatum'])]
     df_seizoenen = pd.DataFrame(seizoenen)
     if not df_seizoenen.empty:
@@ -1166,11 +1183,17 @@ def reset_all_elos():
             dt_prinsjesdag = datetime.combine(prinsjesdag, datetime.min.time())
             return dt_prinsjesdag.replace(tzinfo=None)
 
-        min_year = matches_df['timestamp'].dt.year.min()  # type: ignore
-        max_year = matches_df['timestamp'].dt.year.max()  # type: ignore
-        season_bounds = [get_prinsjesdag(y) for y in range(min_year - 1, max_year + 2)]
-        season_bounds = sorted([pd.Timestamp(s).to_pydatetime().replace(tzinfo=None) for s in season_bounds])
+        min_year = int(matches_df['timestamp'].dt.year.min())  # type: ignore
+        max_year = int(matches_df['timestamp'].dt.year.max())  # type: ignore
 
+        def get_march16(year):
+            return datetime(year, 3, 16, 0, 0, 0)
+
+        season_bounds = []
+        for y in range(min_year - 1, max_year + 3):
+            season_bounds.append(get_prinsjesdag(y))
+            season_bounds.append(get_march16(y + 1))
+        season_bounds = sorted({pd.Timestamp(s).to_pydatetime().replace(tzinfo=None) for s in season_bounds})
 
         # Doorloop alle wedstrijden chronologisch, reset ELO bij seizoensstart
         player_elos = {player['speler_naam']: 1000 for _, player in players_df.iterrows()}
