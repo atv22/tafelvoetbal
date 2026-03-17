@@ -473,8 +473,14 @@ def migrate_player_ratings():
 
 @handle_firestore_exceptions
 @st.cache_data
-def get_matches():
-    """Haalt alle wedstrijden op en normaliseert timestamps."""
+def get_matches(start_ts=None, end_ts=None):
+    """
+    Haalt wedstrijden op en normaliseert timestamps.
+    Indien start_ts en end_ts zijn opgegeven, wordt er gefilterd op datum.
+    """
+    if start_ts is not None and end_ts is not None:
+        return get_matches_in_range(start_ts, end_ts)
+        
     try:
         matches_docs = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
         matches = []

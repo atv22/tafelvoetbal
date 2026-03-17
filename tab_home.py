@@ -8,80 +8,55 @@ import firestore_service as db
 from utils.utils_seizoen import get_current_season, generate_prinsjesdag_seasons
 
 
+from analytics import get_vectorized_player_stats
+
+@st.cache_data
 def calculate_stats(players, matches):
-    """Bereken statistieken voor alle spelers"""
+    """Bereken statistieken voor alle spelers met vectorized Pandas operations"""
+    if matches is None or matches.empty:
+        # Fallback voor spelers zonder wedstrijden
+        stats_list = []
+        for _, player in players.iterrows():
+            stats_list.append({
+                'Speler': player.get('speler_naam', ''),
+                'ELO': int(player.get('rating', 1000)),
+                'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Gem. Goals': 0.0
+            })
+        return pd.DataFrame(stats_list)
+
+    # Gebruik de geoptimaliseerde helper uit analytics.py
+    vector_stats = get_vectorized_player_stats(matches)
+    
     stats_list = []
-    # Detect column names for home/away players
-    if not matches.empty:
-        match_row = matches.iloc[0]
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
-    else:
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-        klinkers_home = ['klinkers_thuis_1', 'klinkers_thuis_2']
-        klinkers_away = ['klinkers_uit_1', 'klinkers_uit_2']
-
-    for index, player in players.iterrows():
-        player_name = str(player['speler_naam']) if player['speler_naam'] is not None else ""
-        # Veilige filtering om KeyError te voorkomen
-        conditions = []
-        for col in home_cols + away_cols:
-            if col in matches.columns:
-                conditions.append(matches[col] == player_name)
-        if not conditions:
-            player_matches = pd.DataFrame()
-        else:
-            player_matches = matches[pd.concat(conditions, axis=1).any(axis=1)]
-
-        if player_matches.empty:
-            stats = {'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Gem. Goals': 0.0, 'Speler': ""}
-        else:
-            goals_for = 0
-            goals_against = 0
-            klinkers = 0
-            wins = 0
-            for _, match in player_matches.iterrows():
-                thuis_spelers = [match.get(col) for col in home_cols]
-                uit_spelers = [match.get(col) for col in away_cols]
-                if player_name in thuis_spelers:
-                    goals_for += int(match.get('thuis_score', 0) or 0)
-                    goals_against += int(match.get('uit_score', 0) or 0)
-                    if match.get('thuis_score', 0) > match.get('uit_score', 0):
-                        wins += 1
-                    # Klinkers
-                    for i, col in enumerate(home_cols):
-                        if player_name == match.get(col):
-                            klinkers += int(match.get(klinkers_home[i], 0) or 0)
-                elif player_name in uit_spelers:
-                    goals_for += int(match.get('uit_score', 0) or 0)
-                    goals_against += int(match.get('thuis_score', 0) or 0)
-                    if match.get('uit_score', 0) > match.get('thuis_score', 0):
-                        wins += 1
-                    for i, col in enumerate(away_cols):
-                        if player_name == match.get(col):
-                            klinkers += int(match.get(klinkers_away[i], 0) or 0)
-            gespeeld = len(player_matches)
-            win_pct = (wins / gespeeld * 100) if gespeeld >= 10 else 0.0  # Alleen tonen voor >= 10 wedstrijden
+    for _, player in players.iterrows():
+        p_name = str(player['speler_naam'])
+        p_stats = vector_stats[vector_stats['Speler'] == p_name]
+        
+        if p_stats.empty:
             stats = {
-                'Gespeeld': gespeeld,
-                'Voor': int(goals_for),
-                'Tegen': int(goals_against),
-                'Doelsaldo': int(goals_for - goals_against),
-                'Gem. Goals': round(goals_for / gespeeld, 2) if gespeeld > 0 else 0.0,
-                'Klinkers': int(klinkers),
-                'Win%': round(win_pct, 1),
-                'Speler': ""  # Placeholder voor string type
+                'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 
+                'Win%': 0.0, 'Gem. Goals': 0.0, 'Speler': p_name
             }
-        stats['Speler'] = player_name
-        # Veilige conversie van rating met fallback naar 1000 als default
+        else:
+            row = p_stats.iloc[0]
+            stats = {
+                'Gespeeld': int(row['Matches']),
+                'Voor': int(row['Goals']),
+                'Tegen': int(row['Goals_Tegen']),
+                'Doelsaldo': int(row['Goal_Diff']),
+                'Gem. Goals': round(float(row['Goals_Per_Match']), 2),
+                'Klinkers': int(row['Klinkers']),
+                'Win%': round(float(row['Winrate']), 1),
+                'Speler': p_name
+            }
+        
+        # Rating uit players_df halen (huidige rating)
         rating_value = player.get('rating', 1000)
         if rating_value is None or pd.isna(rating_value):
             rating_value = 1000
         stats['ELO'] = int(rating_value)
         stats_list.append(stats)
+        
     return pd.DataFrame(stats_list)
 
 

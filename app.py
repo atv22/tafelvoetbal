@@ -27,17 +27,30 @@ setup_page()
 st.title("Tafelvoetbal Competitie ⚽")
 st.caption("Versie 2.1")
 
+# --- Data Loading (Cached) ---
+@st.cache_data(ttl=600)  # Cache voor 10 minuten
+def load_all_data():
+    load_start = time.perf_counter()
+    p = db.get_players()
+    m = db.get_matches()
+    s = db.get_seasons()
+    e = db.get_elo_logs()
+    load_end = time.perf_counter()
+    print(f"[TIMING] data load 1: players={len(p) if p is not None else 0}, matches={len(m) if m is not None else 0}, seasons={len(s) if s is not None else 0}, elo={len(e) if e is not None else 0} in {load_end-load_start:.3f}s")
+    return p, m, s, e
+
+# --- Sidebar met Refresh optie ---
+with st.sidebar:
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
+    st.divider()
+
+# --- Initialize data ---
+players_df, matches_df, seasons_df, elo_df = load_all_data()
+
 # --- Timing (server logs) ---
 app_start = time.perf_counter()
-
-# --- Eénmaal laden, hergebruik voor tabs ---
-load_start = time.perf_counter()
-players_df = db.get_players()
-matches_df = db.get_matches()
-seasons_df = db.get_seasons()
-elo_df = db.get_elo_logs()
-load_end = time.perf_counter()
-print(f"[TIMING] data load 1: players={len(players_df) if players_df is not None else 0}, matches={len(matches_df) if matches_df is not None else 0}, seasons={len(seasons_df) if seasons_df is not None else 0}, elo={len(elo_df) if elo_df is not None else 0} in {load_end-load_start:.3f}s")
 
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
