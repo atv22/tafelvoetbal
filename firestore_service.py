@@ -646,10 +646,8 @@ def get_seasons():
         return dt.replace(tzinfo=None)
 
     def get_march15(year):
-        return datetime(year, 3, 15, 23, 59, 59)
-
-    def get_march16(year):
-        return datetime(year, 3, 16, 0, 0, 0)
+        """Start van 15 maart"""
+        return datetime(year, 3, 15, 0, 0, 0)
 
     # Normaliseer timestamp kolom
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
@@ -665,13 +663,15 @@ def get_seasons():
 
     seizoenen = []
     if min_year is not None and max_year is not None:
-        for year in range(min_year - 1, max_year + 1):
-            prinsjesdag_start = get_prinsjesdag(year)
-            prinsjesdag_end = get_prinsjesdag(year + 1)
+        # Ruimer bereik om ook huidige/toekomstige seizoenen te vangen
+        for year in range(min_year - 1, max_year + 2):
+            p_start = get_prinsjesdag(year)
+            p_end = get_prinsjesdag(year + 1)
+            m15 = get_march15(year + 1)
 
-            # Seizoen: Prinsjesdag tot 15 maart
-            start_1 = prinsjesdag_start.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_1 = get_march15(year + 1)
+            # Seizoen: Prinsjesdag tot 15 maart (exclusief 15 maart 00:00)
+            start_1 = p_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_1 = m15 - timedelta(seconds=1)
             seizoen_naam_1 = f"Seizoen {year}/{year+1} (P→15 mrt)"
             mask_1 = (df['timestamp'] >= start_1) & (df['timestamp'] <= end_1)
             seizoenen.append({
@@ -682,10 +682,10 @@ def get_seasons():
                 'aantal_wedstrijden': int(mask_1.sum())
             })
 
-            # Seizoen: 16 maart tot Prinsjesdag
-            start_2 = get_march16(year + 1)
-            end_2 = prinsjesdag_end.replace(hour=23, minute=59, second=59, microsecond=0)
-            seizoen_naam_2 = f"Seizoen {year}/{year+1} (16 mrt→P)"
+            # Seizoen: 15 maart tot volgende Prinsjesdag
+            start_2 = m15
+            end_2 = p_end - timedelta(seconds=1)
+            seizoen_naam_2 = f"Seizoen {year}/{year+1} (15 mrt→P)"
             mask_2 = (df['timestamp'] >= start_2) & (df['timestamp'] <= end_2)
             seizoenen.append({
                 'startdatum': start_2,

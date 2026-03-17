@@ -20,11 +20,8 @@ def get_prinsjesdag(year):
 
 
 def get_march15(year):
-    return pd.Timestamp(datetime(year, 3, 15, 23, 59, 59))
-
-
-def get_march16(year):
-    return pd.Timestamp(datetime(year, 3, 16, 0, 0, 0))
+    """Start van 15 maart"""
+    return pd.Timestamp(datetime(year, 3, 15, 0, 0, 0))
 
 
 def generate_prinsjesdag_seasons(matches_df):
@@ -34,63 +31,42 @@ def generate_prinsjesdag_seasons(matches_df):
     try:
         current_year = date.today().year
 
-        # Bepaal jaar bereik - alleen seizoenen tot huidig jaar
+        # Bepaal jaar bereik
         if not matches_df.empty:
-            try:
-                if 'datum' in matches_df.columns:
-                    date_series = pd.to_datetime(matches_df['datum'], errors='coerce')
-                elif 'timestamp' in matches_df.columns:
-                    date_series = pd.to_datetime(matches_df['timestamp'], errors='coerce')
-                else:
-                    st.warning("Geen 'datum' of 'timestamp' kolom gevonden in matches_df")
-                    return pd.DataFrame()
+            if 'timestamp' in matches_df.columns:
+                date_series = pd.to_datetime(matches_df['timestamp'], errors='coerce')
+            elif 'datum' in matches_df.columns:
+                date_series = pd.to_datetime(matches_df['datum'], errors='coerce')
+            else:
+                return pd.DataFrame()
 
-                # Zet naar tz-naive om consistent te blijven
-                try:
-                    if hasattr(date_series.dt, 'tz') and date_series.dt.tz is not None:
-                        date_series = date_series.dt.tz_convert('UTC').dt.tz_localize(None)
-                    else:
-                        date_series = date_series.dt.tz_localize(None)
-                except Exception:
-                    pass
-
-                match_dates = date_series
-                min_year = max(2020, match_dates.min().year - 1)
-                max_year = min(current_year + 1, match_dates.max().year + 1)
-            except Exception as date_error:
-                st.warning(f"Probleem met datum conversie: {date_error}")
-                min_year = 2020
-                max_year = current_year + 1
+            min_year = max(2020, date_series.min().year - 1)
+            max_year = current_year + 1
         else:
-            return pd.DataFrame()
+            min_year = 2020
+            max_year = current_year + 1
 
         for year in range(min_year, max_year + 1):
-            if year < 1900 or year > current_year + 1:
-                continue
+            p_day = get_prinsjesdag(year)
+            next_p_day = get_prinsjesdag(year + 1)
+            m15 = get_march15(year + 1)
 
-            prinsjesdag = get_prinsjesdag(year)
-            next_prinsjesdag = get_prinsjesdag(year + 1)
-
-            # Seizoen 1: Prinsjesdag tot 15 maart volgende jaar
-            season1_start = prinsjesdag
-            season1_end = get_march15(year + 1)
+            # Seizoen 1: Prinsjesdag tot 15 maart (exclusief 15 maart 00:00)
+            # Dus t/m 14 maart 23:59:59
             prinsjesdag_seasons.append({
                 'seizoen_naam': f"Seizoen {year}/{year + 1} (P→15 mrt)",
-                'start_datum': season1_start,
-                'eind_datum': season1_end,
-                'prinsjesdag': prinsjesdag,
+                'start_datum': p_day,
+                'eind_datum': m15 - timedelta(seconds=1),
+                'prinsjesdag': p_day,
                 'seizoen_jaar': year + 1
             })
 
-            # Seizoen 2: 16 maart volgende jaar tot volgende Prinsjesdag
-            season2_start = get_march16(year + 1)
-            # Eind op Prinsjesdag (00:00), zodat de volgende Prinsjesdag-start meteen hierna kan beginnen zonder overlap
-            season2_end = next_prinsjesdag
+            # Seizoen 2: 15 maart tot volgende Prinsjesdag
             prinsjesdag_seasons.append({
-                'seizoen_naam': f"Seizoen {year}/{year + 1} (16 mrt→P)",
-                'start_datum': season2_start,
-                'eind_datum': season2_end,
-                'prinsjesdag': prinsjesdag,
+                'seizoen_naam': f"Seizoen {year}/{year + 1} (15 mrt→P)",
+                'start_datum': m15,
+                'eind_datum': next_p_day - timedelta(seconds=1),
+                'prinsjesdag': p_day,
                 'seizoen_jaar': year + 1
             })
 
