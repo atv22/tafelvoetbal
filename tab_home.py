@@ -67,8 +67,13 @@ def calculate_elo_trends(elo_df):
         return {}
     
     trends = {}
+    # Defensieve kopie en type-conversie om sorteringsfouten te voorkomen
+    df = elo_df.copy()
+    df['speler_naam'] = df['speler_naam'].astype(str)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+    
     # Sorteer op speler en timestamp
-    elo_sorted = elo_df.sort_values(['speler_naam', 'timestamp'], ascending=[True, True])
+    elo_sorted = df.sort_values(['speler_naam', 'timestamp'], ascending=[True, True])
     
     for speler, group in elo_sorted.groupby('speler_naam'):
         if len(group) >= 2:
