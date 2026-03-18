@@ -840,48 +840,58 @@ def add_request(request_text):
 def add_match_and_update_elo(match_data, elo_updates):
     """
     Voegt een wedstrijd toe en logt de nieuwe ELO's in een atomaire batch write.
-    Ondersteunt nu custom historische timestamp in match_data['timestamp'].
-    Als historische wedstrijd toegevoegd wordt (datum < vandaag), herbereken ELO's vanaf begin.
+    Garandeert een unieke en strikt oplopende timestamp (geen duplicaten).
     """
     batch = db.batch()
-    from datetime import datetime, date
+    from datetime import datetime, timedelta, timezone
+    import pandas as pd
 
     try:
-        # 1. Timestamp bepalen: gebruik aangeleverde timestamp indien aanwezig, anders server
+        # 1. Bepaal gewenste timestamp
         provided_ts = match_data.get('timestamp')
         if provided_ts is not None:
-            # Zorg dat het een native datetime is
             if hasattr(provided_ts, 'to_pydatetime'):
-                provided_ts = provided_ts.to_pydatetime()
-            if isinstance(provided_ts, date) and not isinstance(provided_ts, datetime):
-                provided_ts = datetime.combine(provided_ts, datetime.min.time())
-        match_timestamp = provided_ts if provided_ts else SERVER_TIMESTAMP
+                new_ts = provided_ts.to_pydatetime()
+            elif isinstance(provided_ts, str):
+                new_ts = pd.to_datetime(provided_ts).to_pydatetime()
+            else:
+                new_ts = provided_ts
+        else:
+            new_ts = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # 1b. Dubbele wedstrijd validatie (zelfde spelers, score, timestamp)
-        # NB: timestamp kan SERVER_TIMESTAMP zijn, dus alleen checken als datetime bekend
-        check_fields = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2', 'thuis_score', 'uit_score']
-        query = matches_ref
-        from google.cloud.firestore_v1.base_query import FieldFilter
-        for field in check_fields:
-            query = query.where(filter=FieldFilter(field, '==', match_data.get(field)))
-        if provided_ts is not None:
-            # Alleen checken als timestamp bekend
-            from google.cloud.firestore_v1.base_query import FieldFilter
-            import pandas as pd
-            ts_start = pd.to_datetime(provided_ts) - pd.Timedelta(seconds=1)
-            ts_end = pd.to_datetime(provided_ts) + pd.Timedelta(seconds=1)
-            query = query.where(filter=FieldFilter('timestamp', '>=', ts_start)).where(filter=FieldFilter('timestamp', '<=', ts_end))
-            existing = list(query.stream())
-            if existing:
-                return f"Error: Dubbele wedstrijd gevonden met dezelfde spelers, score en timestamp ({provided_ts})"
+        # 2. Haal laatste timestamp uit DB om overlap te voorkomen
+        try:
+            last_match_query = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).limit(1).stream()
+            last_match_docs = list(last_match_query)
+            if last_match_docs:
+                last_ts = last_match_docs[0].to_dict().get('timestamp')
+                if last_ts:
+                    if hasattr(last_ts, 'to_pydatetime'):
+                        last_ts = last_ts.to_pydatetime()
+                    
+                    # Forceer naar naive UTC voor vergelijking
+                    if last_ts.tzinfo is not None:
+                        last_ts = last_ts.astimezone(timezone.utc).replace(tzinfo=None)
+                    
+                    # Als nieuwe tijd niet na de laatste tijd ligt, voeg 1 seconde toe
+                    if new_ts <= last_ts:
+                        new_ts = last_ts + timedelta(seconds=1)
+        except Exception as e:
+            print(f"[TIMESTAMP FIX] Kon laatste match niet checken: {e}")
 
-        # 2. Voeg de nieuwe wedstrijd toe
+        # Zorg dat we naive datetime opslaan voor consistentie
+        if new_ts.tzinfo is not None:
+            new_ts = new_ts.astimezone(timezone.utc).replace(tzinfo=None)
+        
+        match_timestamp = new_ts
+
+        # 3. Voeg de nieuwe wedstrijd toe
         new_match_ref = matches_ref.document()
         match_id = new_match_ref.id
         match_data_with_timestamp = {**match_data, 'timestamp': match_timestamp, 'match_id': match_id}
         batch.set(new_match_ref, match_data_with_timestamp)
 
-        # 3. Log ELO updates met de timestamp van de wedstrijd (voor correcte historie)
+        # 4. Log ELO updates met de unieke timestamp
         for speler_naam, new_elo in elo_updates:
             new_elo_ref = elo_ref.document()
             batch.set(new_elo_ref, {
@@ -891,10 +901,9 @@ def add_match_and_update_elo(match_data, elo_updates):
                 'match_id': match_id
             })
             
-            # Update ook de rating in het spelers-document (denormalisatie voor performance)
-            # We moeten het document zoeken op naam
+            # Update speler rating
             try:
-                # Dit is een extra query per speler, maar gebeurt alleen bij toevoegen wedstrijd
+                from google.cloud.firestore_v1.base_query import FieldFilter
                 player_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).limit(1).stream())
                 if player_docs:
                     batch.update(player_docs[0].reference, {'rating': new_elo})
@@ -902,22 +911,6 @@ def add_match_and_update_elo(match_data, elo_updates):
                 print(f"Kon speler {speler_naam} niet updaten: {e}")
 
         batch.commit()
-
-        # 4. Indien historische wedstrijd (timestamp < vandaag) => volledige ELO herberekening
-        need_recalc = False
-        try:
-            if isinstance(match_timestamp, datetime):
-                today_midnight = datetime.combine(date.today(), datetime.min.time())
-                if match_timestamp < today_midnight:
-                    need_recalc = True
-        except Exception:
-            pass
-
-        if need_recalc:
-            # Volledige reset kan duur zijn; alternatief is recalc vanaf match_timestamp.
-            # Kies recalc vanaf die timestamp voor efficiency.
-            recalculate_elo_from_match(match_timestamp)
-
         clear_all_caches()
         set_offline_mode(False)
         return True
