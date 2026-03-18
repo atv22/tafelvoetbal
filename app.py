@@ -29,7 +29,7 @@ st.caption("Versie 2.2")
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "1.5" 
+CACHE_VERSION = "1.6" 
 
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
 def load_all_data(version):

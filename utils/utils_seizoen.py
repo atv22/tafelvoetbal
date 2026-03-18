@@ -57,7 +57,7 @@ def generate_prinsjesdag_seasons(matches_df):
             s1_start = m15
             s1_end = p_day - timedelta(seconds=1)
             prinsjesdag_seasons.append({
-                'seizoen_naam': f"CJ {year} Zomerseizoen ({s1_start.strftime('%d %b')} - {s1_end.strftime('%d %b %Y')})",
+                'seizoen_naam': f"CJ {year} Zomerseizoen",
                 'start_datum': s1_start,
                 'eind_datum': s1_end,
                 'prinsjesdag': p_day,
@@ -68,7 +68,7 @@ def generate_prinsjesdag_seasons(matches_df):
             s2_start = p_day
             s2_end = next_m15 - timedelta(seconds=1)
             prinsjesdag_seasons.append({
-                'seizoen_naam': f"CJ {year} Winterseizoen ({s2_start.strftime('%d %b')} - {s2_end.strftime('%d %b %Y')})",
+                'seizoen_naam': f"CJ {year} Winterseizoen",
                 'start_datum': s2_start,
                 'eind_datum': s2_end,
                 'prinsjesdag': p_day,

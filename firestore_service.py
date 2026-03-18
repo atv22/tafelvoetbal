@@ -672,7 +672,7 @@ def get_seasons():
             # Seizoen 1 van Controlejaar 'year': 15 maart tot Prinsjesdag
             start_1 = m15
             end_1 = p_day - timedelta(seconds=1)
-            seizoen_naam_1 = f"CJ {year} Zomerseizoen ({start_1.strftime('%d %b')} - {end_1.strftime('%d %b %Y')})"
+            seizoen_naam_1 = f"CJ {year} Zomerseizoen"
             mask_1 = (df['timestamp'] >= start_1) & (df['timestamp'] <= end_1)
             seizoenen.append({
                 'start_datum': start_1,
@@ -685,7 +685,7 @@ def get_seasons():
             # Seizoen 2 van Controlejaar 'year': Prinsjesdag tot 15 maart volgende jaar
             start_2 = p_day
             end_2 = next_m15 - timedelta(seconds=1)
-            seizoen_naam_2 = f"CJ {year} Winterseizoen ({start_2.strftime('%d %b')} - {end_2.strftime('%d %b %Y')})"
+            seizoen_naam_2 = f"CJ {year} Winterseizoen"
             mask_2 = (df['timestamp'] >= start_2) & (df['timestamp'] <= end_2)
             seizoenen.append({
                 'start_datum': start_2,
