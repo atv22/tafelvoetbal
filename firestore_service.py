@@ -675,8 +675,8 @@ def get_seasons():
             seizoen_naam_1 = f"Seizoen CJ {year} ({start_1.strftime('%d %b %Y')} - {end_1.strftime('%d %b %Y')})"
             mask_1 = (df['timestamp'] >= start_1) & (df['timestamp'] <= end_1)
             seizoenen.append({
-                'startdatum': start_1,
-                'einddatum': end_1,
+                'start_datum': start_1,
+                'eind_datum': end_1,
                 'jaar': year,
                 'seizoen_naam': seizoen_naam_1,
                 'aantal_wedstrijden': int(mask_1.sum())
@@ -688,20 +688,20 @@ def get_seasons():
             seizoen_naam_2 = f"Seizoen CJ {year} ({start_2.strftime('%d %b %Y')} - {end_2.strftime('%d %b %Y')})"
             mask_2 = (df['timestamp'] >= start_2) & (df['timestamp'] <= end_2)
             seizoenen.append({
-                'startdatum': start_2,
-                'einddatum': end_2,
+                'start_datum': start_2,
+                'eind_datum': end_2,
                 'jaar': year,
                 'seizoen_naam': seizoen_naam_2,
                 'aantal_wedstrijden': int(mask_2.sum())
             })
     
     # Filter weg seizoenen zonder wedstrijden, tenzij het huidige (includerend vandaag)
-    seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['startdatum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['einddatum'])]
+    seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['start_datum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['eind_datum'])]
 
-    seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['startdatum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['einddatum'])]
+    seizoenen = [s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['start_datum'] <= datetime.combine(date.today(), datetime.min.time()) <= s['eind_datum'])]
     df_seizoenen = pd.DataFrame(seizoenen)
     if not df_seizoenen.empty:
-        df_seizoenen = df_seizoenen.sort_values('startdatum').reset_index(drop=True)
+        df_seizoenen = df_seizoenen.sort_values('start_datum').reset_index(drop=True)
     # Deze functie kan beide bronnen gebruiken; laat offline staan zoals gezet
     return df_seizoenen
 

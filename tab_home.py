@@ -134,6 +134,7 @@ def render_home_tab(players_df, matches_df, seasons_df=None):
     huidig_seizoen = get_current_season(seasons_df)
 
     if huidig_seizoen is not None:
+        # Ondersteun beide formaten voor robuustheid
         start_dt = pd.to_datetime(huidig_seizoen.get('start_datum', huidig_seizoen.get('startdatum')))
         end_dt = pd.to_datetime(huidig_seizoen.get('eind_datum', huidig_seizoen.get('einddatum')))
         
@@ -160,9 +161,16 @@ def render_home_tab(players_df, matches_df, seasons_df=None):
                         st.metric(f"Positie {i+1}", naam, f"{int(elo)} ELO")
     else:
         st.warning("Geen actief Controlejaar gevonden voor de huidige datum.")
-        if not seasons_df.empty:
+        if seasons_df is not None and not seasons_df.empty:
             st.write("Beschikbare seizoenen:")
-            st.dataframe(seasons_df[['seizoen_naam', 'start_datum', 'eind_datum']])
+            # Bepaal welke kolommen beschikbaar zijn voor weergave
+            cols_to_show = ['seizoen_naam']
+            if 'start_datum' in seasons_df.columns: cols_to_show.append('start_datum')
+            elif 'startdatum' in seasons_df.columns: cols_to_show.append('startdatum')
+            if 'eind_datum' in seasons_df.columns: cols_to_show.append('eind_datum')
+            elif 'einddatum' in seasons_df.columns: cols_to_show.append('einddatum')
+            
+            st.dataframe(seasons_df[cols_to_show])
 
 def show_elo_history_selector(players_df, matches_df=None):
     """Toon speler selectie voor ELO geschiedenis."""
