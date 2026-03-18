@@ -46,16 +46,16 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
         history_df = elo_df[elo_df['speler_naam'] == selected_player].copy()
         
         if not history_df.empty:
-            history_df['timestamp'] = pd.to_datetime(history_df['timestamp'])
+            history_df['timestamp'] = pd.to_datetime(history_df['timestamp'], utc=True)
             
             # Filter op huidig seizoen indien gevraagd
             if period_option == "Huidig seizoen":
                 curr_season = get_current_season(seasons_df)
                 if curr_season is not None:
-                    start = pd.to_datetime(curr_season.get('start_datum', curr_season.get('startdatum'))).tz_localize(None)
-                    # Normaliseer history naar naive voor vergelijking
-                    ts_naive = history_df['timestamp'].dt.tz_localize(None) if history_df['timestamp'].dt.tz is not None else history_df['timestamp']
-                    history_df = history_df[ts_naive >= start]
+                    # Normaliseer alles naar naive UTC voor vergelijking
+                    start = pd.to_datetime(curr_season.get('start_datum', curr_season.get('startdatum')), utc=True).tz_localize(None)
+                    history_df['ts_naive'] = history_df['timestamp'].dt.tz_localize(None)
+                    history_df = history_df[history_df['ts_naive'] >= start]
 
             if not history_df.empty:
                 history_df = history_df.sort_values('timestamp')
