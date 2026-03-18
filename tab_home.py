@@ -62,25 +62,26 @@ def calculate_stats(players, matches):
 
 @st.cache_data
 def calculate_elo_trends(elo_df):
-    """Bereken het verschil in ELO per speler op basis van de laatste 2 metingen"""
+    """Bereken het verschil in ELO per speler op basis van de laatste 2 verschillende wedstrijden"""
     if elo_df is None or elo_df.empty:
         return {}
     
     trends = {}
-    # Defensieve kopie en type-conversie om sorteringsfouten te voorkomen
     df = elo_df.copy()
     df['speler_naam'] = df['speler_naam'].astype(str)
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     
-    # Sorteer op speler en timestamp
-    elo_sorted = df.sort_values(['speler_naam', 'timestamp'], ascending=[True, True])
+    # Sorteer stabiel: op tijd en dan op de index (volgorde van creatie in DB)
+    df = df.sort_values(['timestamp', 'speler_naam'], ascending=[True, True])
     
-    for speler, group in elo_sorted.groupby('speler_naam'):
+    for speler, group in df.groupby('speler_naam'):
+        # Pak de unieke ratings in chronologische volgorde
+        # We willen het verschil tussen de allerlaatste rating en de rating NA de vorige wedstrijd
         if len(group) >= 2:
-            last_elo = group.iloc[-1]['rating']
-            prev_elo = group.iloc[-2]['rating']
-            diff = int(last_elo - prev_elo)
-            trends[speler] = diff
+            ratings = group['rating'].tolist()
+            last_elo = ratings[-1]
+            prev_elo = ratings[-2]
+            trends[speler] = int(last_elo - prev_elo)
         else:
             trends[speler] = 0
             
