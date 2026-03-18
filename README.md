@@ -26,24 +26,37 @@ Ontwikkeld door:
 
 - 📊 Automatische ELO score berekening
 - 🔄 ELO herberekening na wijzigingen
+- 📉 **Trendindicatoren:** Direct inzicht in recente stijgingen of dalingen via gekleurde pijltjes (↑/↓)
 - 📈 Real-time rankings
 - 🎯 Team-gebaseerde ELO updates
 
 #### Uitleg ELO Berekening
 
-Het ELO-systeem in deze app is aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
+Het ELO-systeem in deze app is aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten aan het begin van een seizoen. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
 
 - Het verwachte resultaat (op basis van de ELO van beide teams)
 - Het daadwerkelijke scoreverschil
 - Het aantal eerder gespeelde wedstrijden (K-factor daalt bij meer ervaring)
 
-De berekening is geïnspireerd op [dit artikel](https://towardsdatascience.com/developing-an-elo-based-data-driven-ranking-system-for-2v2-multiplayer-games-7689f7d42a53) en houdt rekening met teamdynamiek en scoreverschillen. Zo ontstaat een eerlijke en dynamische ranglijst.
+De berekening is geïnspireerd op [dit artikel](https://towardsdatascience.com/developing-an-elo-based-data-driven-ranking-system-for-2v2-multiplayer-games-7689f7d42a53) en houdt rekening met teamdynamiek en scoreverschillen.
 
-### Data Beheer
+### Controlejaar (CJ) & Seizoenen
+
+De competitie volgt de deadlines van de **Auditdienst Rijk (ADR)**. Een controlejaar (CJ) loopt van 15 maart tot 15 maart het jaar daarop. Elk controlejaar is opgedeeld in twee seizoenen:
+
+1.  **Zomerseizoen**: Van 15 maart tot Prinsjesdag (derde dinsdag van september).
+2.  **Winterseizoen**: Van Prinsjesdag tot 15 maart (deadline ADR-rapport).
+
+Aan het begin van elk nieuw seizoen worden de ELO-scores gereset naar de basiswaarde van 1000 punten om een frisse start te garanderen.
+
+### Data Beheer & Performance
 
 - 📁 CSV import voor historische data
+- ⚡ **Geoptimaliseerde Analytics:** Gebruik van vectorized Pandas operaties voor razendsnelle berekeningen, zelfs bij duizenden wedstrijden.
+- 💾 **Caching:** Slimme data-loading met Streamlit caching (10 min TTL) voor een soepele gebruikerservaring.
+- 🔄 **Refresh:** Handmatige "Refresh Data" optie in de zijbalk om de nieuwste Firestore-data op te halen.
 - 👥 Speler beheer en registratie
-- 📅 Seizoen organisatie
+- 📅 Automatische seizoen organisatie op basis van CJ-systematiek
 - 🗑️ Bulk delete functionaliteit
 - ⚙️ Database maintenance tools
 
