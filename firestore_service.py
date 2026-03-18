@@ -665,32 +665,32 @@ def get_seasons():
     if min_year is not None and max_year is not None:
         # Ruimer bereik om ook huidige/toekomstige seizoenen te vangen
         for year in range(min_year - 1, max_year + 2):
-            p_start = get_prinsjesdag(year)
-            p_end = get_prinsjesdag(year + 1)
-            m15 = get_march15(year + 1)
+            p_day = get_prinsjesdag(year)
+            next_m15 = get_march15(year + 1)
+            m15 = get_march15(year)
 
-            # Seizoen: Prinsjesdag tot 15 maart (exclusief 15 maart 00:00)
-            start_1 = p_start.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_1 = m15 - timedelta(seconds=1)
-            seizoen_naam_1 = f"Seizoen {year}/{year+1} (P→15 mrt)"
+            # Seizoen 1 van Controlejaar 'year': 15 maart tot Prinsjesdag
+            start_1 = m15
+            end_1 = p_day - timedelta(seconds=1)
+            seizoen_naam_1 = f"Seizoen CJ {year} ({start_1.strftime('%d %b %Y')} - {end_1.strftime('%d %b %Y')})"
             mask_1 = (df['timestamp'] >= start_1) & (df['timestamp'] <= end_1)
             seizoenen.append({
                 'startdatum': start_1,
                 'einddatum': end_1,
-                'jaar': year + 1,
+                'jaar': year,
                 'seizoen_naam': seizoen_naam_1,
                 'aantal_wedstrijden': int(mask_1.sum())
             })
 
-            # Seizoen: 15 maart tot volgende Prinsjesdag
-            start_2 = m15
-            end_2 = p_end - timedelta(seconds=1)
-            seizoen_naam_2 = f"Seizoen {year}/{year+1} (15 mrt→P)"
+            # Seizoen 2 van Controlejaar 'year': Prinsjesdag tot 15 maart volgende jaar
+            start_2 = p_day
+            end_2 = next_m15 - timedelta(seconds=1)
+            seizoen_naam_2 = f"Seizoen CJ {year} ({start_2.strftime('%d %b %Y')} - {end_2.strftime('%d %b %Y')})"
             mask_2 = (df['timestamp'] >= start_2) & (df['timestamp'] <= end_2)
             seizoenen.append({
                 'startdatum': start_2,
                 'einddatum': end_2,
-                'jaar': year + 1,
+                'jaar': year,
                 'seizoen_naam': seizoen_naam_2,
                 'aantal_wedstrijden': int(mask_2.sum())
             })

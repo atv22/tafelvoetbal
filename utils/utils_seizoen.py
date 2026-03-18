@@ -25,7 +25,7 @@ def get_march15(year):
 
 
 def generate_prinsjesdag_seasons(matches_df):
-    """Genereer automatische seizoenen op basis van Prinsjesdag + 15 maart split"""
+    """Genereer automatische seizoenen op basis van Prinsjesdag + 15 maart split (CJ systematiek)"""
     prinsjesdag_seasons = []
 
     try:
@@ -39,8 +39,10 @@ def generate_prinsjesdag_seasons(matches_df):
                 date_series = pd.to_datetime(matches_df['datum'], errors='coerce')
             else:
                 return pd.DataFrame()
-
-            min_year = max(2020, date_series.min().year - 1)
+            
+            # Normaliseer naar tz-naive voor jaar extractie
+            dt_naive = date_series.dt.tz_localize(None) if hasattr(date_series.dt, 'tz') and date_series.dt.tz is not None else date_series
+            min_year = max(2020, dt_naive.min().year - 1)
             max_year = current_year + 1
         else:
             min_year = 2020
@@ -48,26 +50,29 @@ def generate_prinsjesdag_seasons(matches_df):
 
         for year in range(min_year, max_year + 1):
             p_day = get_prinsjesdag(year)
-            next_p_day = get_prinsjesdag(year + 1)
-            m15 = get_march15(year + 1)
+            next_m15 = get_march15(year + 1)
+            m15 = get_march15(year)
 
-            # Seizoen 1: Prinsjesdag tot 15 maart (exclusief 15 maart 00:00)
-            # Dus t/m 14 maart 23:59:59
+            # Seizoen 1 van Controlejaar 'year': 15 maart tot Prinsjesdag
+            s1_start = m15
+            s1_end = p_day - timedelta(seconds=1)
             prinsjesdag_seasons.append({
-                'seizoen_naam': f"Seizoen {year}/{year + 1} (P→15 mrt)",
-                'start_datum': p_day,
-                'eind_datum': m15 - timedelta(seconds=1),
+                'seizoen_naam': f"Seizoen CJ {year} ({s1_start.strftime('%d %b %Y')} - {s1_end.strftime('%d %b %Y')})",
+                'start_datum': s1_start,
+                'eind_datum': s1_end,
                 'prinsjesdag': p_day,
-                'seizoen_jaar': year + 1
+                'seizoen_jaar': year
             })
 
-            # Seizoen 2: 15 maart tot volgende Prinsjesdag
+            # Seizoen 2 van Controlejaar 'year': Prinsjesdag tot 15 maart volgende jaar
+            s2_start = p_day
+            s2_end = next_m15 - timedelta(seconds=1)
             prinsjesdag_seasons.append({
-                'seizoen_naam': f"Seizoen {year}/{year + 1} (15 mrt→P)",
-                'start_datum': m15,
-                'eind_datum': next_p_day - timedelta(seconds=1),
+                'seizoen_naam': f"Seizoen CJ {year} ({s2_start.strftime('%d %b %Y')} - {s2_end.strftime('%d %b %Y')})",
+                'start_datum': s2_start,
+                'eind_datum': s2_end,
                 'prinsjesdag': p_day,
-                'seizoen_jaar': year + 1
+                'seizoen_jaar': year
             })
 
         seasons_df = pd.DataFrame(prinsjesdag_seasons)
