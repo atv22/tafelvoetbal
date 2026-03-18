@@ -60,7 +60,35 @@ def calculate_stats(players, matches):
     return pd.DataFrame(stats_list)
 
 
-def show_elo_rankings(players_df, matches_df, current_season=None):
+@st.cache_data
+def calculate_elo_trends(elo_df):
+    """Bereken de trend per speler op basis van de laatste 2 ELO wijzigingen"""
+    if elo_df is None or elo_df.empty:
+        return {}
+    
+    trends = {}
+    # Sorteer op speler en timestamp
+    elo_sorted = elo_df.sort_values(['speler_naam', 'timestamp'], ascending=[True, True])
+    
+    for speler, group in elo_sorted.groupby('speler_naam'):
+        if len(group) >= 2:
+            last_elo = group.iloc[-1]['rating']
+            prev_elo = group.iloc[-2]['rating']
+            diff = last_elo - prev_elo
+            
+            if diff > 0:
+                trends[speler] = "🟢 ↑"
+            elif diff < 0:
+                trends[speler] = "🔴 ↓"
+            else:
+                trends[speler] = "⚪ ="
+        else:
+            trends[speler] = "⚪ ="
+            
+    return trends
+
+
+def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     """Toon de huidige ELO rankings tabel"""
     import pandas as pd
 
@@ -92,6 +120,10 @@ def show_elo_rankings(players_df, matches_df, current_season=None):
         st.info("Geen spelers hebben dit seizoen een wedstrijd gespeeld.")
         return
         
+    # Trend berekenen
+    trends = calculate_elo_trends(elo_df)
+    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, "⚪ ="))
+        
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
     import numpy as np
     display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
@@ -108,9 +140,14 @@ def show_elo_rankings(players_df, matches_df, current_season=None):
         else:
             return [''] * len(row)
             
-    styled = display_df[['Speler', 'ELO', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']]
+    # Kolomvolgorde aanpassen: Trend naast ELO
+    cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']
+    styled = display_df[cols]
     styled = styled.style.apply(highlight_top3_lightgreen, axis=1)
-    styled = styled.format({'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) and not pd.isna(x) else '-', 'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) and not pd.isna(x) else '-'})
+    styled = styled.format({
+        'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) and not pd.isna(x) else '-', 
+        'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) and not pd.isna(x) else '-'
+    })
     
     st.dataframe(
         styled,
@@ -119,7 +156,7 @@ def show_elo_rankings(players_df, matches_df, current_season=None):
     )
 
 
-def render_home_tab(players_df, matches_df, seasons_df=None):
+def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
     """Render de complete Home tab"""
     st.header("🏆 ELO Ranglijst")
 
@@ -145,14 +182,15 @@ def render_home_tab(players_df, matches_df, seasons_df=None):
         season_matches = matches_df[(match_dates >= start_dt) & (match_dates <= end_dt)]
         
         # Ranglijst tonen
-        show_elo_rankings(players_df, matches_df, huidig_seizoen)
+        show_elo_rankings(players_df, matches_df, elo_df, huidig_seizoen)
         
         # Top 3
         if not season_matches.empty:
             from analytics import get_season_top3_elo
-            from firestore_service import get_elo_logs
-            elo_logs = get_elo_logs()
-            top3 = get_season_top3_elo(elo_logs, season_matches)
+            if elo_df is None:
+                from firestore_service import get_elo_logs
+                elo_df = get_elo_logs()
+            top3 = get_season_top3_elo(elo_df, season_matches)
             if top3:
                 cols = st.columns(len(top3))
                 for i, (naam, elo) in enumerate(top3):

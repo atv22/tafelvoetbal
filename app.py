@@ -79,7 +79,7 @@ with tab1:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    render_home_tab(players_df, matches_df, seasons_df)
+    render_home_tab(players_df, matches_df, seasons_df, elo_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab HOME rendered in {t1-t0:.3f}s")
 
