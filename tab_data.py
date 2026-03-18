@@ -7,21 +7,6 @@ def render_data_tab():
 
 
     try:
-        # --- Spelers ---
-        st.subheader("👤 Spelers")
-        df_players = db.get_players()
-        if not df_players.empty:
-            st.download_button(
-                label="💾 Download Spelers",
-                data=df_players.to_csv(index=False).encode('utf-8'),
-                file_name=get_download_filename('Tafelvoetbal_Spelers', 'csv'),
-                mime='text/csv',
-                key='download-spelers'
-            )
-            st.dataframe(df_players, width='stretch')
-        else:
-            st.info("Geen spelers gevonden in Firestore.")
-
         # --- Uitslagen (Wedstrijden) ---
         st.subheader("🏆 Uitslagen (Wedstrijden)")
         matches_df = db.get_matches()
@@ -48,7 +33,24 @@ def render_data_tab():
                 mime='text/csv',
                 key='download-elo'
             )
-        st.dataframe(df_elo, width='stretch')
+            st.dataframe(df_elo, width='stretch')
+        else:
+            st.info("Geen ELO geschiedenis gevonden.")
+
+        # --- Spelers ---
+        st.subheader("👤 Spelers")
+        df_players = db.get_players()
+        if not df_players.empty:
+            st.download_button(
+                label="💾 Download Spelers",
+                data=df_players.to_csv(index=False).encode('utf-8'),
+                file_name=get_download_filename('Tafelvoetbal_Spelers', 'csv'),
+                mime='text/csv',
+                key='download-spelers'
+            )
+            st.dataframe(df_players, width='stretch')
+        else:
+            st.info("Geen spelers gevonden in Firestore.")
 
         # --- Beheer Logging ---
         st.subheader("📝 Beheer Logging (Admin acties)")
