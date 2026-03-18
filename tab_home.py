@@ -121,7 +121,7 @@ def show_elo_rankings(players_df, matches_df, current_season=None):
 
 def render_home_tab(players_df, matches_df, seasons_df=None):
     """Render de complete Home tab"""
-    st.header(":crown: ELO Rating :crown:")
+    st.header("🏆 ELO Ranglijst")
 
     if players_df is None or players_df.empty:
         st.info("Nog geen spelers geregistreerd. Ga naar 'Spelers' om spelers toe te voegen.")
@@ -138,14 +138,13 @@ def render_home_tab(players_df, matches_df, seasons_df=None):
         start_dt = pd.to_datetime(huidig_seizoen.get('start_datum', huidig_seizoen.get('startdatum')))
         end_dt = pd.to_datetime(huidig_seizoen.get('eind_datum', huidig_seizoen.get('einddatum')))
         
-        st.info(f"📅 **Huidig Seizoen:** {huidig_seizoen['seizoen_naam']}\n\nPeriod: {start_dt.strftime('%d-%m-%Y')} t/m {end_dt.strftime('%d-%m-%Y')}")
+        st.info(f"📅 **Huidig Seizoen:** {huidig_seizoen['seizoen_naam']} ({start_dt.strftime('%d-%m-%Y')} t/m {end_dt.strftime('%d-%m-%Y')})")
         
         # Filter matches voor weergave van Top 3
         match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
         season_matches = matches_df[(match_dates >= start_dt) & (match_dates <= end_dt)]
         
         # Ranglijst tonen
-        st.subheader("Huidige ELO ranglijst")
         show_elo_rankings(players_df, matches_df, huidig_seizoen)
         
         # Top 3
