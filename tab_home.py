@@ -62,7 +62,7 @@ def calculate_stats(players, matches):
 
 @st.cache_data
 def calculate_elo_trends(elo_df):
-    """Bereken de trend per speler op basis van de laatste 2 ELO wijzigingen"""
+    """Bereken het verschil in ELO per speler op basis van de laatste 2 metingen"""
     if elo_df is None or elo_df.empty:
         return {}
     
@@ -79,16 +79,10 @@ def calculate_elo_trends(elo_df):
         if len(group) >= 2:
             last_elo = group.iloc[-1]['rating']
             prev_elo = group.iloc[-2]['rating']
-            diff = last_elo - prev_elo
-            
-            if diff > 0:
-                trends[speler] = "↑"
-            elif diff < 0:
-                trends[speler] = "↓"
-            else:
-                trends[speler] = "−"
+            diff = int(last_elo - prev_elo)
+            trends[speler] = diff
         else:
-            trends[speler] = "−"
+            trends[speler] = 0
             
     return trends
 
@@ -125,9 +119,9 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         st.info("Geen spelers hebben dit seizoen een wedstrijd gespeeld.")
         return
         
-    # Trend berekenen
+    # Trend berekenen (numeriek)
     trends = calculate_elo_trends(elo_df)
-    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, "−"))
+    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, 0))
         
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
     import numpy as np
@@ -146,15 +140,27 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             return [''] * len(row)
 
     def color_trend(val):
-        if val == "↑": return 'color: #28a745; font-weight: bold;' # Groen
-        if val == "↓": return 'color: #dc3545; font-weight: bold;' # Rood
+        try:
+            v = int(val)
+            if v > 0: return 'color: #28a745; font-weight: bold;' # Groen
+            if v < 0: return 'color: #dc3545; font-weight: bold;' # Rood
+        except: pass
         return 'color: #6c757d;' # Grijs
+
+    def format_trend(val):
+        try:
+            v = int(val)
+            if v > 0: return f"+{v}"
+            if v < 0: return f"{v}"
+            return "0"
+        except: return "-"
             
     # Kolomvolgorde aanpassen: Trend naast ELO
     cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']
     styled = display_df[cols].style.apply(highlight_top3_lightgreen, axis=1).map(color_trend, subset=['Trend'])
     
     styled = styled.format({
+        'Trend': format_trend,
         'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) and not pd.isna(x) else '-', 
         'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) and not pd.isna(x) else '-'
     })
