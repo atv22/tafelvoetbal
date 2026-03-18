@@ -194,18 +194,31 @@ def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
         # Ranglijst tonen
         show_elo_rankings(players_df, matches_df, elo_df, huidig_seizoen)
         
-        # Top 3
-        if not season_matches.empty:
-            from analytics import get_season_top3_elo
-            if elo_df is None:
-                from firestore_service import get_elo_logs
-                elo_df = get_elo_logs()
-            top3 = get_season_top3_elo(elo_df, season_matches)
-            if top3:
-                cols = st.columns(len(top3))
-                for i, (naam, elo) in enumerate(top3):
-                    with cols[i]:
-                        st.metric(f"Positie {i+1}", naam, f"{int(elo)} ELO")
+        # Laatste 10 uitslagen
+        if not matches_df.empty:
+            st.subheader("🕒 Laatste 10 uitslagen")
+            
+            # Selecteer en formatteer data
+            recent_matches = matches_df.head(10).copy()
+            
+            # Formatteer timestamp voor weergave
+            if 'timestamp' in recent_matches.columns:
+                recent_matches['timestamp'] = pd.to_datetime(recent_matches['timestamp']).dt.strftime('%d-%m-%Y %H:%M')
+            
+            # Kolomvolgorde forceren (timestamp eerst)
+            display_cols = [
+                'timestamp', 'thuis_1', 'thuis_2', 'uit_1', 'uit_2', 
+                'thuis_score', 'uit_score', 
+                'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2'
+            ]
+            # Alleen kolommen tonen die daadwerkelijk bestaan
+            cols_to_show = [c for c in display_cols if c in recent_matches.columns]
+            
+            st.dataframe(
+                recent_matches[cols_to_show],
+                hide_index=True,
+                use_container_width=True
+            )
     else:
         st.warning("Geen actief Controlejaar gevonden voor de huidige datum.")
         if seasons_df is not None and not seasons_df.empty:

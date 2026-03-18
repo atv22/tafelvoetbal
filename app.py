@@ -25,11 +25,11 @@ from tab_colofon import render_colofon_tab
 setup_page()
 
 st.title("Tafelvoetbal Competitie ⚽")
-st.caption("Versie 2.3")
+st.caption("Versie 2.4")
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "1.7" 
+CACHE_VERSION = "1.8" 
 
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
 def load_all_data(version):

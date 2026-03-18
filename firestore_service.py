@@ -498,10 +498,11 @@ def get_matches(start_ts=None, end_ts=None):
                 if col in df.columns:
                     df = df.drop(columns=col)
             desired_columns = [
+                'timestamp',
                 'thuis_1', 'thuis_2', 'uit_1', 'uit_2',
                 'thuis_score', 'uit_score',
                 'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2',
-                'timestamp', 'match_id'
+                'match_id'
             ]
             available_columns = [col for col in desired_columns if col in df.columns]
             other_columns = [col for col in df.columns if col not in available_columns]
