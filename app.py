@@ -25,18 +25,21 @@ from tab_colofon import render_colofon_tab
 setup_page()
 
 st.title("Tafelvoetbal Competitie ⚽")
-st.caption("Versie 2.1")
+st.caption("Versie 2.2")
 
 # --- Data Loading (Cached) ---
+# Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
+CACHE_VERSION = "1.4" 
+
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
-def load_all_data():
+def load_all_data(version):
     load_start = time.perf_counter()
     p = db.get_players()
     m = db.get_matches()
     s = db.get_seasons()
     e = db.get_elo_logs()
     load_end = time.perf_counter()
-    print(f"[TIMING] data load 1: players={len(p) if p is not None else 0}, matches={len(m) if m is not None else 0}, seasons={len(s) if s is not None else 0}, elo={len(e) if e is not None else 0} in {load_end-load_start:.3f}s")
+    print(f"[TIMING] data load (v{version}): players={len(p) if p is not None else 0}, matches={len(m) if m is not None else 0}, seasons={len(s) if s is not None else 0}, elo={len(e) if e is not None else 0} in {load_end-load_start:.3f}s")
     return p, m, s, e
 
 # --- Sidebar met Refresh optie ---
@@ -47,7 +50,7 @@ with st.sidebar:
     st.divider()
 
 # --- Initialize data ---
-players_df, matches_df, seasons_df, elo_df = load_all_data()
+players_df, matches_df, seasons_df, elo_df = load_all_data(CACHE_VERSION)
 
 # --- Timing (server logs) ---
 app_start = time.perf_counter()
@@ -62,7 +65,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🏠 Home", 
     "📝 Invullen", 
     "👥 Spelers", 
-    "� Analytics",
+    "📈 Analytics",
     "📊 Ruwe Data", 
     "⚙️ Beheer", 
     "💬 Verzoeken",
@@ -76,7 +79,7 @@ with tab1:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — CSV-backup actief")
-    render_home_tab(players_df, matches_df)
+    render_home_tab(players_df, matches_df, seasons_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab HOME rendered in {t1-t0:.3f}s")
 
