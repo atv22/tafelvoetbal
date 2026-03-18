@@ -155,7 +155,7 @@ def show_unique_players_bar_chart(season_matches):
     st.plotly_chart(fig_players, use_container_width=True, key="unique_players_bar_chart")
 
 
-def show_winrate_bar_chart(season_matches, min_matches=10):
+def show_winrate_bar_chart(season_matches, min_matches=3):
     """Toon winpercentage bar chart voor een specifiek seizoen"""
     stats = get_vectorized_player_stats(season_matches)
     if stats is None or stats.empty:
@@ -183,7 +183,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
     if stats is None or stats.empty:
         return
         
-    scatter_df = stats[stats['Matches'] >= 10].copy()
+    scatter_df = stats[stats['Matches'] >= 3].copy()
     
     if not scatter_df.empty:
         fig_scatter = px.scatter(
@@ -194,7 +194,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
             color='Wins',
             color_continuous_scale='Blues',
             text='Speler',
-            title="Activiteit vs Winpercentage (min. 10 wedstrijden)",
+            title="Activiteit vs Winpercentage (min. 3 wedstrijden)",
             labels={'Matches': 'Aantal Wedstrijden', 'Winrate': 'Winpercentage (%)'},
             hover_data=['Speler', 'Matches', 'Winrate', 'Goals', 'Wins']
         )

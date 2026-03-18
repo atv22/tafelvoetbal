@@ -126,8 +126,8 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
     import numpy as np
-    display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
-    display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 10 else np.nan, axis=1)
+    display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
+    display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
     
     def highlight_top3_lightgreen(row):
         idx = row.name
