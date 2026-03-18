@@ -82,13 +82,13 @@ def calculate_elo_trends(elo_df):
             diff = last_elo - prev_elo
             
             if diff > 0:
-                trends[speler] = "🟢 ↑"
+                trends[speler] = "↑"
             elif diff < 0:
-                trends[speler] = "🔴 ↓"
+                trends[speler] = "↓"
             else:
-                trends[speler] = "⚪ ="
+                trends[speler] = "−"
         else:
-            trends[speler] = "⚪ ="
+            trends[speler] = "−"
             
     return trends
 
@@ -127,7 +127,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         
     # Trend berekenen
     trends = calculate_elo_trends(elo_df)
-    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, "⚪ ="))
+    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, "−"))
         
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
     import numpy as np
@@ -144,11 +144,16 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             return ['background-color: #f4fbf7'] * len(row)
         else:
             return [''] * len(row)
+
+    def color_trend(val):
+        if val == "↑": return 'color: #28a745; font-weight: bold;' # Groen
+        if val == "↓": return 'color: #dc3545; font-weight: bold;' # Rood
+        return 'color: #6c757d;' # Grijs
             
     # Kolomvolgorde aanpassen: Trend naast ELO
     cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']
-    styled = display_df[cols]
-    styled = styled.style.apply(highlight_top3_lightgreen, axis=1)
+    styled = display_df[cols].style.apply(highlight_top3_lightgreen, axis=1).map(color_trend, subset=['Trend'])
+    
     styled = styled.format({
         'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) and not pd.isna(x) else '-', 
         'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) and not pd.isna(x) else '-'
