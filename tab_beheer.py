@@ -48,26 +48,7 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
     if elo_delete_option == "⚠️ Alleen verwijderen (geen ELO update)":
         st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het verwijderen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
     auto_recalc_delete = elo_delete_option.startswith("🔄")
-    if not auto_recalc_delete:
-        st.warning(
-            "⚠️ **Let op:** Verwijderen zonder ELO herberekening kan leiden tot inconsistenties in de ratings."
-        )
-        matches_display_df = matches_df.copy()
-        # Detect home/away columns
-        if not matches_display_df.empty:
-            match_row = matches_display_df.iloc[0]
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
-        matches_display_df["display"] = matches_display_df.apply(
-            lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
-            f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
-            f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
-            axis=1,
-        )
-
+    
     matches_display_df = matches_df.copy()
     # Detect home/away columns
     if not matches_display_df.empty:
@@ -77,6 +58,7 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
     else:
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
+    
     matches_display_df["display"] = matches_display_df.apply(
         lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
         f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
@@ -176,31 +158,12 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
             "🔄 Automatisch herberekenen (aanbevolen)",
             "⚠️ Alleen wedstrijd aanpassen (geen ELO update)",
         ],
-        help="Automatische herberekening zorgt voor correcte ELO scores maar duurt langer.",
+        help="Automatische herberekening zorgt for correcte ELO scores maar duurt langer.",
     )
     if elo_option == "⚠️ Alleen wedstrijd aanpassen (geen ELO update)":
         st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het aanpassen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
     auto_recalculate = elo_option.startswith("🔄")
-    if not auto_recalculate:
-        st.warning(
-            "⚠️ **Let op:** Het bewerken van wedstrijden zonder ELO herberekening kan leiden tot inconsistenties in de ratings."
-        )
-        matches_display_df = matches_df.copy()
-        # Detect home/away columns
-        if not matches_display_df.empty:
-            match_row = matches_display_df.iloc[0]
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
-        else:
-            home_cols = ['thuis_1', 'thuis_2']
-            away_cols = ['uit_1', 'uit_2']
-        matches_display_df["display"] = matches_display_df.apply(
-            lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
-            f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
-            f"{row.get('thuis_score', 'N/A')}-{row.get('uit_score', 'N/A')}",
-            axis=1,
-        )
-
+    
     if players_df.empty:
         st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
         return
@@ -559,7 +522,7 @@ def _render_uploads(db, players_df: pd.DataFrame):
                     return
                 st.success("✅ Alle spelergegevens zijn geldig!")
                 st.info(
-                    f"📊 Upload samenvatting: {len(players_upload_df)} spelers klaar voor import"
+                    f"📊 Upload samenvatting: {len(players_upload_df)} spelers klaar for import"
                 )
                 if st.button("🚀 Import Spelers", type="primary"):
                     with st.spinner(
@@ -758,19 +721,6 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
             st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
             db.clear_all_caches()
             st.rerun()
-                from google.cloud.firestore_v1.base_query import FieldFilter
-                import json
-                # Voeg alias toe als extra veld in speler document
-                speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-                for doc in speler_docs:
-                    speler_dict = doc.to_dict() or {}
-                    aliassen = speler_dict.get('aliassen', [])
-                    if isinstance(aliassen, str):
-                        aliassen = json.loads(aliassen)
-                    aliassen.append(alias_naam)
-                    doc.reference.update({'aliassen': aliassen})
-                st.success(f"Alias '{alias_naam}' toegevoegd aan '{speler_select}'.")
-                st.rerun()
 
     with tab_upload:
         st.header("📁 Upload")
