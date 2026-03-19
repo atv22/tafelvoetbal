@@ -16,10 +16,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     if elo_df is None:
         elo_df = get_elo_logs()
 
-    # Cross-seizoen analyses direct bovenaan
-    st.subheader("📊 Cross-Seizoen Analyses")
-
-    # Toon seizoenen tabel bovenaan
+    # 1. Toon seizoenen tabel direct bovenaan
     if not seasons_df.empty:
         st.subheader("Seizoenen overzicht")
         
@@ -62,10 +59,31 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         metrics_df = pd.DataFrame(extra_metrics)
         seasons_display = pd.concat([seasons_display.reset_index(drop=True), metrics_df], axis=1)
         
-        # Formattering
+        # Voeg TOTAAL regel toe
+        total_matches = int(seasons_display['aantal_wedstrijden'].sum())
+        total_goals_all = int(seasons_display['Totaal goals'].sum())
+        
+        # Unieke spelers over alle seizoenen
+        p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
+        existing_p_cols = [c for c in p_cols if c in matches_df.columns]
+        u_players_all = pd.unique(matches_df[existing_p_cols].values.ravel())
+        u_players_all_count = len([p for p in u_players_all if p and not pd.isna(p)])
+
+        total_row = pd.DataFrame([{
+            'seizoen_naam': 'TOTAAL (Alle seizoenen)',
+            'aantal_wedstrijden': total_matches,
+            'Totaal goals': total_goals_all,
+            'Unieke spelers': u_players_all_count,
+            'Winnaar': '-', '2e plaats': '-', '3e plaats': '-'
+        }])
+        
+        seasons_final = pd.concat([seasons_display, total_row], ignore_index=True)
+
+        # Formattering van datums (behalve voor de totaal regel)
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
-            if col in seasons_display.columns:
-                seasons_display[col] = pd.to_datetime(seasons_display[col]).dt.strftime('%d-%m-%Y %H:%M')
+            if col in seasons_final.columns:
+                seasons_final[col] = pd.to_datetime(seasons_final[col]).dt.strftime('%d-%m-%Y %H:%M')
+                seasons_final.loc[seasons_final['seizoen_naam'] == 'TOTAAL (Alle seizoenen)', col] = ''
                 
         col_map = {
             'startdatum': 'Startdatum', 'einddatum': 'Einddatum',
@@ -73,66 +91,69 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             'seizoen_naam': 'Seizoen', 'seizoen': 'Seizoen',
             'aantal_wedstrijden': 'Aantal wedstrijden'
         }
-        seasons_display = seasons_display.rename(columns=col_map)
+        seasons_final = seasons_final.rename(columns=col_map)
         kolommen = ['Seizoen', 'Startdatum', 'Einddatum', 'Aantal wedstrijden', 'Totaal goals', 'Unieke spelers', 'Winnaar', '2e plaats', '3e plaats']
-        st.dataframe(seasons_display[[k for k in kolommen if k in seasons_display.columns]], hide_index=True, use_container_width=True)
+        
+        st.dataframe(
+            seasons_final[[k for k in kolommen if k in seasons_final.columns]], 
+            hide_index=True, 
+            use_container_width=True
+        )
 
+    st.divider()
 
-    # All-time ranglijsten direct onder seizoenen tabel
-    player_stats = create_all_time_leaderboards(matches_df)
-    show_all_time_leaderboards(player_stats)
-
-    # Extra analyses: timeline, activiteit vs winpercentage (all-time)
-    # Geen extra subheaders, want de grafieken hebben titels
-    show_timeline_chart(matches_df)
-    show_activity_vs_winrate_scatter(matches_df, key_suffix="seizoenen")
-
-    # Toon cross-seizoen analyses altijd (zonder extra subheader)
-    show_cross_season_charts(matches_df, seasons_df)
-
-    # Seizoenselectie: alle of specifiek seizoen (nu na algemene grafieken)
+    # 2. Seizoenselectie: filtert de rest van de pagina
     season_options = ["Alle seizoenen"]
     if not seasons_df.empty:
         for _, row in seasons_df.iterrows():
             season_name = row.get('seizoen_naam') or row.get('seizoen') or str(row.get('jaar', 'Onbekend'))
             season_options.append(season_name)
-        from datetime import date
-        today = date.today()
-        default_idx = 0
-        for i, row in seasons_df.iterrows():
-            start_col = 'start_datum' if 'start_datum' in row else 'startdatum'
-            end_col = 'eind_datum' if 'eind_datum' in row else 'einddatum'
-            season_start = pd.to_datetime(row[start_col]).date()
-            season_end = pd.to_datetime(row[end_col]).date()
-            if season_start <= today <= season_end:
-                default_idx = i + 1
-                break
-        selected = st.selectbox("Selecteer seizoen:", season_options, index=default_idx)
-    else:
-        selected = season_options[0]
+        
+    selected = st.selectbox("Selecteer periode voor onderstaande analyses:", season_options, index=0)
 
-    # Toon analyses voor geselecteerd seizoen of alle seizoenen
-    if selected == "Alle seizoenen":
-        st.subheader("Analyse: Alle seizoenen")
-        show_individual_season_analysis({'seizoen_naam': 'Alle seizoenen'}, matches_df)
-    elif not seasons_df.empty:
+    # 3. Filter data op basis van selectie
+    filtered_matches = matches_df.copy()
+    current_season_info = {'seizoen_naam': 'Alle seizoenen'}
+
+    if selected != "Alle seizoenen" and not seasons_df.empty:
         season_row = None
         for _, row in seasons_df.iterrows():
             season_name = row.get('seizoen_naam') or row.get('seizoen') or str(row.get('jaar', 'Onbekend'))
             if season_name == selected:
                 season_row = row
                 break
+        
         if season_row is not None:
+            current_season_info = season_row
             start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
             season_start = pd.to_datetime(season_row[start_col])
             season_end = pd.to_datetime(season_row[end_col])
-            # Normaliseer seizoensgrenzen
+            
+            # Normaliseer
             season_start = normalize_timestamp_series(pd.Series([season_start])).iloc[0]
             season_end = normalize_timestamp_series(pd.Series([season_end])).iloc[0]
-            ts = matches_df['timestamp']
+            
+            ts = filtered_matches['timestamp']
             if hasattr(ts.dt, 'tz') and ts.dt.tz is not None:
-                matches_df = matches_df.copy()
-                matches_df['timestamp'] = normalize_timestamp_series(ts)
-            season_matches = matches_df[(matches_df['timestamp'] >= season_start) & (matches_df['timestamp'] <= season_end)]
-            show_individual_season_analysis(season_row, season_matches)
+                filtered_matches['timestamp'] = normalize_timestamp_series(ts)
+            
+            filtered_matches = filtered_matches[(filtered_matches['timestamp'] >= season_start) & (filtered_matches['timestamp'] <= season_end)]
+
+    # 4. Toon analyses op basis van GEFILTERDE data
+    st.subheader(f"Analyse resultaten: {selected}")
+
+    # Ranglijsten (Gefilterd)
+    player_stats = create_all_time_leaderboards(filtered_matches)
+    show_all_time_leaderboards(player_stats)
+
+    # Grafieken (Gefilterd)
+    show_timeline_chart(filtered_matches)
+    show_activity_vs_winrate_scatter(filtered_matches, key_suffix=f"filtered_{selected}")
+
+    # Cross-seizoen trend (alleen tonen bij 'Alle seizoenen')
+    if selected == "Alle seizoenen":
+        show_cross_season_charts(matches_df, seasons_df)
+    else:
+        # Toon seizoenspecifieke analyse (reeds gefilterd)
+        show_individual_season_analysis(current_season_info, filtered_matches)
