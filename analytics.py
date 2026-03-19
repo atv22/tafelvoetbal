@@ -205,45 +205,14 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
 
 
 def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
-    """Toon cross-seizoen analyse charts, incl. top 3 ELO per seizoen."""
+    """Toon cross-seizoen analyse charts."""
     if all_matches is None or all_matches.empty or seasons_df is None or seasons_df.empty:
         return
-    st.subheader("📊 Individueel Seizoen Analyses")
-
-    # Toon per seizoen de top 3 ELO
-    if elo_df is None:
-        from firestore_service import get_elo_logs
-        elo_df = get_elo_logs()
-        
-    st.markdown("**Top 3 ELO per seizoen (op basis van laatst bekende ELO):**")
-    top3_table = []
     
-    # Vectorized filtering for seasons
-    all_matches_proc = all_matches.copy()
-    all_matches_proc['ts_naive'] = all_matches_proc['timestamp'].dt.tz_localize(None)
-    
-    for _, season in seasons_df.iterrows():
-        start_col = 'start_datum' if 'start_datum' in season else 'startdatum'
-        end_col = 'eind_datum' if 'eind_datum' in season else 'einddatum'
-        season_name = season.get('seizoen_naam') or season.get('seizoen') or str(season.get('jaar', 'Onbekend'))
-        
-        season_start = pd.to_datetime(season[start_col]).replace(tzinfo=None)
-        season_end = pd.to_datetime(season[end_col]).replace(tzinfo=None)
-        
-        seizoen_matches = all_matches_proc[(all_matches_proc['ts_naive'] >= season_start) & (all_matches_proc['ts_naive'] <= season_end)]
-        top3 = get_season_top3_elo(elo_df, seizoen_matches)
-        
-        row = {'Seizoen': season_name}
-        for i, (naam, elo) in enumerate(top3):
-            row[f'#{i+1}'] = f"{naam} ({int(elo)})"
-        top3_table.append(row)
-        
-    if top3_table:
-        st.dataframe(pd.DataFrame(top3_table), hide_index=True, use_container_width=True)
-
     # Gemiddelde goals trend
     if len(seasons_df) > 1:
         if 'gemiddelde_goals' in seasons_df.columns and seasons_df['gemiddelde_goals'].sum() > 0:
+            st.subheader("📈 Trends over seizoenen")
             fig_season_goals = px.line(
                 seasons_df,
                 x='seizoen_naam' if 'seizoen_naam' in seasons_df.columns else seasons_df.columns[0],
