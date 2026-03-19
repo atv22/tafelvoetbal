@@ -8,7 +8,11 @@ from analytics import (
     show_all_time_leaderboards,
     get_season_top3_elo,
     show_timeline_chart,
-    show_activity_vs_winrate_scatter
+    show_activity_vs_winrate_scatter,
+    show_goals_bar_chart_season,
+    show_unique_players_bar_chart,
+    show_winrate_bar_chart,
+    get_vectorized_player_stats
 )
 
 def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
@@ -113,8 +117,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
 
     # 3. Filter data op basis van selectie
     filtered_matches = matches_df.copy()
-    current_season_info = {'seizoen_naam': 'Alle seizoenen'}
-
+    
     if selected != "Alle seizoenen" and not seasons_df.empty:
         season_row = None
         for _, row in seasons_df.iterrows():
@@ -124,7 +127,6 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
                 break
         
         if season_row is not None:
-            current_season_info = season_row
             start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
             season_start = pd.to_datetime(season_row[start_col])
@@ -141,19 +143,60 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             filtered_matches = filtered_matches[(filtered_matches['timestamp'] >= season_start) & (filtered_matches['timestamp'] <= season_end)]
 
     # 4. Toon analyses op basis van GEFILTERDE data
-    st.subheader(f"Analyse resultaten: {selected}")
+    st.subheader(f"📊 Analyse resultaten: {selected}")
+    
+    if filtered_matches.empty:
+        st.info("Geen wedstrijden gevonden voor de geselecteerde periode.")
+        return
+
+    # Statistieken samenvatting (Metrics)
+    total_m = len(filtered_matches)
+    total_g = int(filtered_matches['thuis_score'].sum() + filtered_matches['uit_score'].sum())
+    avg_g = total_g / total_m if total_m > 0 else 0
+    
+    p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
+    existing_p_cols = [c for c in p_cols if c in filtered_matches.columns]
+    u_players = len([p for p in pd.unique(filtered_matches[existing_p_cols].values.ravel()) if p and not pd.isna(p)])
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Wedstrijden", total_m)
+    m2.metric("Totaal Goals", total_g)
+    m3.metric("Gem. Goals", f"{avg_g:.1f}")
+    m4.metric("Spelers", u_players)
 
     # Ranglijsten (Gefilterd)
     player_stats = create_all_time_leaderboards(filtered_matches)
     show_all_time_leaderboards(player_stats)
 
-    # Grafieken (Gefilterd)
-    show_timeline_chart(filtered_matches)
+    # Visualisaties (Gefilterd)
+    st.subheader("📈 Visualisaties")
+    
+    # Scatter plot bovenaan
     show_activity_vs_winrate_scatter(filtered_matches, key_suffix=f"filtered_{selected}")
+    
+    # 2x2 Layout voor overige grafieken
+    r1 = st.columns(2)
+    r2 = st.columns(2)
+    
+    with r1[0]:
+        show_goals_bar_chart_season(filtered_matches)
+    with r1[1]:
+        show_unique_players_bar_chart(filtered_matches)
+    with r2[0]:
+        show_winrate_bar_chart(filtered_matches)
+    with r2[1]:
+        # Klinkers chart (Vectorized)
+        stats = get_vectorized_player_stats(filtered_matches)
+        if stats is not None and not stats.empty and stats['Klinkers'].sum() > 0:
+            import plotly.express as px
+            k_df = stats.sort_values('Klinkers', ascending=False).head(10)
+            fig_k = px.bar(k_df, x='Speler', y='Klinkers', title="Top 10 Klinkers", color='Klinkers', color_continuous_scale='OrRd')
+            st.plotly_chart(fig_k, use_container_width=True, key=f"k_chart_filtered_{selected}")
+
+    # Timeline grafiek onderaan
+    show_timeline_chart(filtered_matches)
 
     # Cross-seizoen trend (alleen tonen bij 'Alle seizoenen')
     if selected == "Alle seizoenen":
+        st.divider()
         show_cross_season_charts(matches_df, seasons_df)
-    else:
-        # Toon seizoenspecifieke analyse (reeds gefilterd)
-        show_individual_season_analysis(current_season_info, filtered_matches)
