@@ -373,7 +373,7 @@ def _get_custom_css():
             radial-gradient(circle at 25% 85%, {COLORS['blue_sparkle']} 1.1px, transparent 1.1px),
             radial-gradient(circle at 75% 55%, {COLORS['silver_sparkle']} 0.9px, transparent 0.9px);
         background-size: 120px 120px, 180px 180px, 100px 100px, 150px 150px, 90px 90px, 130px 130px;
-        animation: gentleFloat 20s linear infinite;
+        animation: gentleFloat 8s linear infinite;
         opacity: 0.7;
         pointer-events: none;
         z-index: 0;
