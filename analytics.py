@@ -321,17 +321,17 @@ def show_all_time_leaderboards(player_stats_df):
     else:
         player_stats_df['ELO'] = 1000
 
-    # Diverse ranglijsten
-    df_elo = get_top_5(player_stats_df, 'ELO', 'ELO')
-    df_scorers = get_top_5(player_stats_df, 'Goals', 'Goals')
-    df_active = get_top_5(player_stats_df, 'Matches', 'Wedstrijden')
-    df_wins = get_top_5(player_stats_df, 'Wins', 'Overwinningen')
-    
-    # Tweede rij
-    df_klinkers = get_top_5(player_stats_df, 'Klinkers', 'Klinkers')
-    
     # Gefilterde ranglijsten (min 3 matches)
     f3 = player_stats_df[player_stats_df['Matches'] >= 3]
+    
+    df_elo = get_top_5(f3, 'ELO', 'ELO')
+    df_scorers = get_top_5(f3, 'Goals', 'Goals')
+    df_active = get_top_5(f3, 'Matches', 'Wedstrijden')
+    df_wins = get_top_5(f3, 'Wins', 'Overwinningen')
+    
+    # Tweede rij
+    df_klinkers = get_top_5(player_stats_df, 'Klinkers', 'Klinkers') # Geen drempel voor klinkers
+    
     df_win_pct = get_top_5(f3, 'Winrate', 'Win%', '{:.1f}%')
     df_gpm = get_top_5(f3, 'Goals_Per_Match', 'Goals/W', '{:.2f}')
     df_avg_goals = get_top_5(f3, 'Goals_Per_Match', 'Gem. Goals', '{:.2f}')
@@ -341,16 +341,16 @@ def show_all_time_leaderboards(player_stats_df):
     row2 = st.columns(4)
     
     tables_r1 = [
-        (row1[0], "🥇 Top 5 ELO", df_elo),
-        (row1[1], "🥅 Top 5 Topscorers", df_scorers),
-        (row1[2], "⚽ Top 5 Meest Actief", df_active),
-        (row1[3], "🏅 Top 5 Overwinningen", df_wins)
+        (row1[0], "🥇 Top 5 ELO (min. 3)", df_elo),
+        (row1[1], "🥅 Top 5 Topscorers (min. 3)", df_scorers),
+        (row1[2], "⚽ Top 5 Meest Actief (min. 3)", df_active),
+        (row1[3], "🏅 Top 5 Overwinningen (min. 3)", df_wins)
     ]
     
     tables_r2 = [
         (row2[0], "🎯 Top 5 Klinker Masters", df_klinkers),
         (row2[1], "📈 Top Win% (min. 3)", df_win_pct),
-        (row2[2], "🚀 Goals per Wedstrijd", df_gpm),
+        (row2[2], "🚀 Goals per Wedstrijd (min. 3)", df_gpm),
         (row2[3], "⚖️ Gem. Goals (min. 3)", df_avg_goals)
     ]
 
