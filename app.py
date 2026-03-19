@@ -62,8 +62,9 @@ app_start = time.perf_counter()
 
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
-    st.error("Firestore is offline. Back-up CSV data wordt gebruikt en kan achterlopen.")
-    st.caption("Ingevoerde gegevens worden in de wachtrij geplaatst en later gesynchroniseerd.")
+    st.error("⚠️ De database is momenteel offline (waarschijnlijk door het overschrijden van de dagelijkse quota ivm het opschonen van data).")
+    st.info("📝 **Geen zorgen:** Je kunt nog steeds wedstrijden invullen! Deze worden lokaal opgeslagen en automatisch gesynchroniseerd zodra de database weer online is.")
+    st.caption("De ranglijst en analytics hieronder gebruiken de laatste back-up data en kunnen iets achterlopen.")
 
 # --- Tab navigatie ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
