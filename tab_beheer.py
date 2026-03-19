@@ -730,84 +730,34 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         _render_match_edit(db, matches_df, players_df)
 
         st.markdown("---")
-        st.subheader("Spelerslijst bewerken / mergen / aliassen")
+        st.subheader("Spelerslijst namen corrigeren")
         spelers_df = players_df.copy()
         st.dataframe(spelers_df[['speler_naam', 'rating']], width='stretch')
 
-        st.info("Hier kun je dubbele spelers samenvoegen, namen corrigeren, of aliassen instellen. Alle scores, grafieken en historie worden aangepast.")
+        st.info("Hier kun je namen corrigeren. Voor het samenvoegen van dubbele spelers (merge), gebruik het admin-script 'admin/merge_players.py'.")
 
-        edit_mode = st.radio("Kies bewerking:", ["Naam aanpassen", "Spelers mergen", "Alias instellen"], key="speler_edit_mode")
-
-        if edit_mode == "Naam aanpassen":
-            speler_select = st.selectbox("Selecteer speler om naam aan te passen", spelers_df['speler_naam'].tolist())
-            nieuwe_naam = st.text_input("Nieuwe naam", value=speler_select)
-            if st.button("Pas naam aan"):
-                from firestore_service import players_ref, elo_ref, matches_ref
-                from google.cloud.firestore_v1.base_query import FieldFilter
-                # Update naam in spelers, elo, uitslag
-                # 1. Speler document
-                speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-                for doc in speler_docs:
-                    doc.reference.update({'speler_naam': nieuwe_naam})
-                # 2. ELO documenten
-                elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-                for doc in elo_docs:
-                    doc.reference.update({'speler_naam': nieuwe_naam})
-                # 3. Wedstrijden
-                for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                    match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler_select)).stream())
-                    for doc in match_docs:
-                        doc.reference.update({field: nieuwe_naam})
-                st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
-                st.rerun()
-
-        elif edit_mode == "Spelers mergen":
-            merge_spelers = st.multiselect("Selecteer spelers om te mergen (minimaal 2)", spelers_df['speler_naam'].tolist())
-            hoofd_naam = st.text_input("Hoofdnaam voor merge", value=merge_spelers[0] if merge_spelers else "")
-            if st.button("Merge spelers") and len(merge_spelers) >= 2 and hoofd_naam:
-                from firestore_service import players_ref, elo_ref, matches_ref
-                from google.cloud.firestore_v1.base_query import FieldFilter
-                import json
-                # Update alle spelers, elo, uitslag naar hoofdnaam
-                for speler in merge_spelers:
-                    # Speler document
-                    speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler)).stream())
-                    for doc in speler_docs:
-                        doc.reference.update({'speler_naam': hoofd_naam})
-                    # ELO documenten
-                    elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler)).stream())
-                    for doc in elo_docs:
-                        doc.reference.update({'speler_naam': hoofd_naam})
-                    # Wedstrijden
-                    for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                        match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler)).stream())
-                        for doc in match_docs:
-                            doc.reference.update({field: hoofd_naam})
-                # Verwijder alle speler-documenten met hoofdnaam behalve één
-                hoofd_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', hoofd_naam)).stream())
-                if hoofd_docs:
-                    # Bewaar de eerste, verwijder de rest
-                    hoofd_doc = hoofd_docs[0]
-                    hoofd_doc_dict = hoofd_doc.to_dict() or {}
-                    aliassen = hoofd_doc_dict.get('aliassen', [])
-                    if isinstance(aliassen, str):
-                        import json
-                        aliassen = json.loads(aliassen)
-                    # Voeg alle samengevoegde namen als alias toe
-                    for naam in merge_spelers:
-                        if naam != hoofd_naam and naam not in aliassen:
-                            aliassen.append(naam)
-                    hoofd_doc.reference.update({'aliassen': aliassen})
-                    for doc in hoofd_docs[1:]:
-                        doc.reference.delete()
-                st.success(f"Spelers {', '.join(merge_spelers)} gemerged naar '{hoofd_naam}'. Dubbele spelers zijn verwijderd en aliassen toegevoegd.")
-                st.rerun()
-
-        elif edit_mode == "Alias instellen":
-            speler_select = st.selectbox("Selecteer hoofdspeler", spelers_df['speler_naam'].tolist())
-            alias_naam = st.text_input("Alias naam (variant)")
-            if st.button("Alias toevoegen") and alias_naam:
-                from firestore_service import players_ref
+        speler_select = st.selectbox("Selecteer speler om naam aan te passen", sorted(spelers_df['speler_naam'].tolist()))
+        nieuwe_naam = st.text_input("Nieuwe naam", value=speler_select)
+        if st.button("Pas naam aan"):
+            from firestore_service import players_ref, elo_ref, matches_ref
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            # Update naam in spelers, elo, uitslag
+            # 1. Speler document
+            speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
+            for doc in speler_docs:
+                doc.reference.update({'speler_naam': nieuwe_naam})
+            # 2. ELO documenten
+            elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
+            for doc in elo_docs:
+                doc.reference.update({'speler_naam': nieuwe_naam})
+            # 3. Wedstrijden
+            for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler_select)).stream())
+                for doc in match_docs:
+                    doc.reference.update({field: nieuwe_naam})
+            st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
+            db.clear_all_caches()
+            st.rerun()
                 from google.cloud.firestore_v1.base_query import FieldFilter
                 import json
                 # Voeg alias toe als extra veld in speler document
