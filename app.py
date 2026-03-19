@@ -29,10 +29,15 @@ st.caption("Versie 2.5")
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "1.9" 
+CACHE_VERSION = "2.0" 
 
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
 def load_all_data(version):
+    # Bij een nieuwe versie, leeg de cache volledig
+    if 'cache_version' not in st.session_state or st.session_state.cache_version != version:
+        st.cache_data.clear()
+        st.session_state.cache_version = version
+        
     load_start = time.perf_counter()
     p = db.get_players()
     m = db.get_matches()
