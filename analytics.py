@@ -281,8 +281,8 @@ def create_all_time_leaderboards(all_matches):
 
 
 def show_all_time_leaderboards(player_stats_df):
-    """Toon alle all-time leaderboards met geoptimaliseerde DataFrame operations"""
-    st.subheader("🏆 All-time Ranglijsten")
+    """Toon alle ranglijsten met geoptimaliseerde DataFrame operations"""
+    st.subheader("🏆 Ranglijsten")
 
     if player_stats_df is None or player_stats_df.empty:
         st.info("Geen data beschikbaar voor ranglijsten.")
@@ -297,36 +297,52 @@ def show_all_time_leaderboards(player_stats_df):
             top5[display_name] = top5[display_name].map(lambda x: format_str.format(x))
         return top5[['#', 'Speler', display_name]]
 
+    # ELO toevoegen indien aanwezig (uit globale players_df of laatst bekende uit elo_df)
+    # Voor nu gebruiken we de kolommen die we hebben. 
+    # NB: player_stats_df in analytics komt uit get_vectorized_player_stats, die heeft nog geen ELO.
+    # We halen de ELO uit de firestore spelerslijst voor de meest actuele stand.
+    from firestore_service import get_players
+    p_df = get_players()
+    if not p_df.empty:
+        elo_map = dict(zip(p_df['speler_naam'], p_df['rating']))
+        player_stats_df['ELO'] = player_stats_df['Speler'].map(lambda x: elo_map.get(x, 1000))
+    else:
+        player_stats_df['ELO'] = 1000
+
     # Diverse ranglijsten
+    df_elo = get_top_5(player_stats_df, 'ELO', 'ELO')
     df_scorers = get_top_5(player_stats_df, 'Goals', 'Goals')
     df_active = get_top_5(player_stats_df, 'Matches', 'Wedstrijden')
     df_wins = get_top_5(player_stats_df, 'Wins', 'Overwinningen')
+    
+    # Tweede rij
     df_klinkers = get_top_5(player_stats_df, 'Klinkers', 'Klinkers')
     
-    # Gefilterde ranglijsten (min 20 matches)
-    f20 = player_stats_df[player_stats_df['Matches'] >= 20]
-    df_win_pct = get_top_5(f20, 'Winrate', 'Win%', '{:.1f}%')
-    df_gpm = get_top_5(f20, 'Goals_Per_Match', 'Goals/W', '{:.2f}')
-    
-    # Gefilterde ranglijsten (min 10 matches)
-    f10 = player_stats_df[player_stats_df['Matches'] >= 10]
-    df_avg_goals = get_top_5(f10, 'Goals_Per_Match', 'Gem. Goals', '{:.2f}')
+    # Gefilterde ranglijsten (min 3 matches)
+    f3 = player_stats_df[player_stats_df['Matches'] >= 3]
+    df_win_pct = get_top_5(f3, 'Winrate', 'Win%', '{:.1f}%')
+    df_gpm = get_top_5(f3, 'Goals_Per_Match', 'Goals/W', '{:.2f}')
+    df_avg_goals = get_top_5(f3, 'Goals_Per_Match', 'Gem. Goals', '{:.2f}')
 
-    # Toon acht tabellen in 2 rijen
+    # Toon acht tabellen in 2 rijen van 4
     row1 = st.columns(4)
     row2 = st.columns(4)
     
-    tables = [
-        (row1[0], "🥅 Top 5 Topscorers", df_scorers),
-        (row1[1], "⚽ Top 5 Meest Actief", df_active),
-        (row1[2], "🏅 Top 5 Overwinningen", df_wins),
-        (row1[3], "🎯 Top 5 Klinker Masters", df_klinkers),
-        (row2[0], "📈 Top Win% (min. 20)", df_win_pct),
-        (row2[1], "🚀 Goals per Wedstrijd (min. 20)", df_gpm),
-        (row2[2], "⚖️ Gem. Goals (min. 10)", df_avg_goals)
+    tables_r1 = [
+        (row1[0], "🥇 Top 5 ELO", df_elo),
+        (row1[1], "🥅 Top 5 Topscorers", df_scorers),
+        (row1[2], "⚽ Top 5 Meest Actief", df_active),
+        (row1[3], "🏅 Top 5 Overwinningen", df_wins)
+    ]
+    
+    tables_r2 = [
+        (row2[0], "🎯 Top 5 Klinker Masters", df_klinkers),
+        (row2[1], "📈 Top Win% (min. 3)", df_win_pct),
+        (row2[2], "🚀 Goals per Wedstrijd", df_gpm),
+        (row2[3], "⚖️ Gem. Goals (min. 3)", df_avg_goals)
     ]
 
-    for col, title, df in tables:
+    for col, title, df in tables_r1 + tables_r2:
         with col:
             st.write(f"**{title}:**")
             st.dataframe(df, hide_index=True, use_container_width=True)
