@@ -120,6 +120,14 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         st.info("Geen spelers hebben dit seizoen een wedstrijd gespeeld.")
         return
         
+    # Filter 'Niemand' spelers uit - Case-insensitive
+    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
+    stats_df = stats_df[~stats_df['Speler'].str.lower().str.strip().isin(niemand_base)]
+    
+    if stats_df.empty:
+        st.info("Geen geldige spelers gevonden in dit seizoen.")
+        return
+
     # Trend berekenen (numeriek)
     trends = calculate_elo_trends(elo_df)
     stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, 0))

@@ -20,11 +20,19 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.subheader("📈 ELO Ontwikkeling")
     
     # 1. Bepaal standaard speler (Nummer 1 van de ranglijst)
-    top_player_name = players_df.sort_values('rating', ascending=False).iloc[0]['speler_naam']
+    # Filter eerst 'Niemand' spelers uit - Case-insensitive
+    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
+    valid_players = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
+    
+    if valid_players.empty:
+        st.info("Geen geldige spelers gevonden.")
+        return
+
+    top_player_name = valid_players.sort_values('rating', ascending=False).iloc[0]['speler_naam']
     
     col1, col2 = st.columns(2)
     with col1:
-        player_names = sorted(players_df['speler_naam'].tolist())
+        player_names = sorted(valid_players['speler_naam'].tolist())
         selected_player = st.selectbox(
             "Selecteer speler:", 
             player_names, 

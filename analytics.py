@@ -65,6 +65,10 @@ def get_vectorized_player_stats(matches_df):
     # Combineer alles
     all_player_events = pd.concat(home_list + away_list).dropna(subset=['Speler'])
     
+    # Filter 'Niemand' spelers uit (gebruikt bij 1v1) - Case-insensitive
+    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
+    all_player_events = all_player_events[~all_player_events['Speler'].str.lower().str.strip().isin(niemand_base)]
+    
     # Groepeer op speler
     stats = all_player_events.groupby('Speler').agg(
         Matches=('Speler', 'count'),
@@ -137,6 +141,11 @@ def get_season_top3_elo(elo_df, seizoen_matches):
     
     # Filter ELO-logs op matches in seizoen
     elo_season = elo_df[elo_df['match_id'].isin(match_ids_in_season)].copy()
+    
+    # Filter 'Niemand' spelers uit
+    niemand_variations = ['NiemandIn', 'NiemandUit', 'Niemand', 'None', '', ' ']
+    elo_season = elo_season[~elo_season['speler_naam'].isin(niemand_variations)]
+    
     if elo_season.empty:
         return []
     
