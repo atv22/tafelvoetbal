@@ -26,6 +26,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         
         # Voorbereiden extra metrics (Vectorized)
         all_matches_proc = matches_df.copy()
+        # Gebruik utc=True bij pd.to_datetime om FutureWarning te voorkomen
+        all_matches_proc['timestamp'] = pd.to_datetime(all_matches_proc['timestamp'], utc=True)
         all_matches_proc['ts_naive'] = all_matches_proc['timestamp'].dt.tz_localize(None)
         
         seasons_display = seasons_df.copy()
@@ -34,8 +36,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         for _, row in seasons_display.iterrows():
             start_col = 'start_datum' if 'start_datum' in row else 'startdatum'
             end_col = 'eind_datum' if 'eind_datum' in row else 'einddatum'
-            start = pd.to_datetime(row[start_col]).replace(tzinfo=None)
-            end = pd.to_datetime(row[end_col]).replace(tzinfo=None)
+            start = pd.to_datetime(row[start_col], utc=True).replace(tzinfo=None)
+            end = pd.to_datetime(row[end_col], utc=True).replace(tzinfo=None)
             
             s_matches = all_matches_proc[(all_matches_proc['ts_naive'] >= start) & (all_matches_proc['ts_naive'] <= end)]
             
@@ -74,7 +76,6 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         u_players_all_count = len([p for p in u_players_all if p and not pd.isna(p)])
 
         # Absolute winnaars (Hoogste ELO ooit bereikt)
-        from analytics import get_season_top3_elo
         abs_top3 = get_season_top3_elo(elo_df, matches_df)
         aw = f"{abs_top3[0][0]} ({int(abs_top3[0][1])})" if len(abs_top3) > 0 else "-"
         a2 = f"{abs_top3[1][0]} ({int(abs_top3[1][1])})" if len(abs_top3) > 1 else "-"
@@ -95,7 +96,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         # Formattering van datums
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
             if col in seasons_final.columns:
-                seasons_final[col] = pd.to_datetime(seasons_final[col]).dt.strftime('%d-%m-%Y %H:%M')
+                seasons_final[col] = pd.to_datetime(seasons_final[col], utc=True).dt.strftime('%d-%m-%Y %H:%M')
                 
         col_map = {
             'startdatum': 'Startdatum', 'einddatum': 'Einddatum',
@@ -109,7 +110,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         st.dataframe(
             seasons_final[[k for k in kolommen if k in seasons_final.columns]], 
             hide_index=True, 
-            use_container_width=True
+            width='stretch'
         )
 
     st.divider()
@@ -137,8 +138,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         if season_row is not None:
             start_col = 'start_datum' if 'start_datum' in season_row else 'startdatum'
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
-            season_start = pd.to_datetime(season_row[start_col])
-            season_end = pd.to_datetime(season_row[end_col])
+            season_start = pd.to_datetime(season_row[start_col], utc=True)
+            season_end = pd.to_datetime(season_row[end_col], utc=True)
             
             # Normaliseer
             season_start = normalize_timestamp_series(pd.Series([season_start])).iloc[0]
@@ -154,7 +155,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     st.subheader(f"📊 Analyse resultaten: {selected}")
     
     if filtered_matches.empty:
-        st.info("Geen wedstrijden gevonden voor de geselecteerde periode.")
+        st.info("Geen wedstrijden gevonden for de geselecteerde periode.")
         return
 
     # Statistieken samenvatting (Metrics)
@@ -199,7 +200,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             import plotly.express as px
             k_df = stats.sort_values('Klinkers', ascending=False).head(10)
             fig_k = px.bar(k_df, x='Speler', y='Klinkers', title="Top 10 Klinkers", color='Klinkers', color_continuous_scale='OrRd')
-            st.plotly_chart(fig_k, use_container_width=True, key=f"k_chart_filtered_{selected}")
+            st.plotly_chart(fig_k, width='stretch', key=f"k_chart_filtered_{selected}")
 
     # Timeline grafiek onderaan
     show_timeline_chart(filtered_matches)
