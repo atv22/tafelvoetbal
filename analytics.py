@@ -122,7 +122,7 @@ def get_absolute_top3_elo(elo_df):
     abs_top = winners_df.sort_values('rating', ascending=False).drop_duplicates('speler_naam').head(3)
     
     return list(zip(abs_top['speler_naam'], abs_top['rating']))
-Applied fuzzy match at line 101-106.
+
 
 @st.cache_data
 def get_season_top3_elo(elo_df, seizoen_matches):
