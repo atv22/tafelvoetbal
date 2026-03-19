@@ -82,6 +82,20 @@ def get_vectorized_player_stats(matches_df):
 
 # --- Herbruikbare ELO-winnaar/top 3 logica per seizoen ---
 @st.cache_data
+def get_absolute_top3_elo(elo_df):
+    """
+    Bepaal de top 3 spelers met de hoogste ELO ooit bereikt in de gehele historie.
+    """
+    if elo_df is None or elo_df.empty:
+        return []
+    
+    # Groepeer op speler en pak de maximale rating ooit
+    peak_elo = elo_df.groupby('speler_naam')['rating'].max().reset_index()
+    top3 = peak_elo.sort_values('rating', ascending=False).head(3)
+    return list(zip(top3['speler_naam'], top3['rating']))
+
+
+@st.cache_data
 def get_season_top3_elo(elo_df, seizoen_matches):
     """
     Bepaal de top 3 spelers met hoogste laatst bekende ELO aan het einde van het seizoen.

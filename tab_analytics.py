@@ -74,12 +74,13 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         existing_p_cols = [c for c in p_cols if c in matches_df.columns]
         u_players_all = pd.unique(matches_df[existing_p_cols].values.ravel())
         u_players_all_count = len([p for p in u_players_all if p and not pd.isna(p)])
+# Absolute winnaars (Hoogste ELO ooit bereikt)
+from analytics import get_absolute_top3_elo
+abs_top3 = get_absolute_top3_elo(elo_df)
+aw = f"{abs_top3[0][0]} ({int(abs_top3[0][1])})" if len(abs_top3) > 0 else "-"
+a2 = f"{abs_top3[1][0]} ({int(abs_top3[1][1])})" if len(abs_top3) > 1 else "-"
+a3 = f"{abs_top3[2][0]} ({int(abs_top3[2][1])})" if len(abs_top3) > 2 else "-"
 
-        # Absolute winnaars (Hoogste ELO ooit bereikt)
-        abs_top3 = get_season_top3_elo(elo_df, matches_df)
-        aw = f"{abs_top3[0][0]} ({int(abs_top3[0][1])})" if len(abs_top3) > 0 else "-"
-        a2 = f"{abs_top3[1][0]} ({int(abs_top3[1][1])})" if len(abs_top3) > 1 else "-"
-        a3 = f"{abs_top3[2][0]} ({int(abs_top3[2][1])})" if len(abs_top3) > 2 else "-"
 
         total_row = pd.DataFrame([{
             'seizoen_naam': 'TOTAAL (Alle seizoenen)',
