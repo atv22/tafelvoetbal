@@ -64,6 +64,14 @@ def _read_gsheet_fallback(sheet_name):
         df = pd.DataFrame(values[1:], columns=values[0])
         
         if not df.empty:
+            # Type conversies: GSheet geeft alles als string, Firestore geeft types
+            numeric_cols = ['rating', 'thuis_score', 'uit_score', 
+                            'klinkers_thuis_1', 'klinkers_thuis_2', 
+                            'klinkers_uit_1', 'klinkers_uit_2']
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
             print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
             set_offline_mode(True)
         return df
