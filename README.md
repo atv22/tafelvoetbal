@@ -2,220 +2,46 @@
 
 Een webapplicatie voor het beheren van tafelvoetbal competities, ontwikkeld tijdens de **Hackatron van oktober 2025**. 
 
-## 👥 Team
-
-Ontwikkeld door:
-
-- **Rick**
-- **Bernd**
-- **Dewi**
-- **Isis**
-- **Johannes**
-- **Arthur**
-
 ## 🚀 Features
 
 ### Wedstrijd Beheer
-
 - ✅ Wedstrijden invoeren en bewerken
 - ✅ Real-time score updates
-- ✅ Wedstrijden verwijderen (individueel of bulk)
 - ✅ Automatische timestamp registratie
+- 🏆 **Recordhouders:** Prominente weergave van peak ELO prestaties.
 
 ### ELO Rating Systeem
+- 📊 Automatische ELO score berekening op basis van teamsterkte en scoreverschil.
+- 🔄 ELO herberekening na wijzigingen of verwijderingen.
+- 📉 **Trendindicatoren:** Direct inzicht in recente stijgingen of dalingen via gekleurde pijltjes (↑/↓).
+- 📈 Real-time rankings per seizoen en all-time.
 
-- 📊 Automatische ELO score berekening
-- 🔄 ELO herberekening na wijzigingen
-- 📉 **Trendindicatoren:** Direct inzicht in recente stijgingen of dalingen via gekleurde pijltjes (↑/↓)
-- 📈 Real-time rankings
-- 🎯 Team-gebaseerde ELO updates
-
-#### Uitleg ELO Berekening
-
-Het ELO-systeem in deze app is aangepast voor 2v2 tafelvoetbal. Elke speler start met 1000 punten aan het begin van een seizoen. Na elke wedstrijd wordt de ELO van alle vier de spelers aangepast op basis van:
-
-- Het verwachte resultaat (op basis van de ELO van beide teams)
-- Het daadwerkelijke scoreverschil
-- Het aantal eerder gespeelde wedstrijden (K-factor daalt bij meer ervaring)
-
-De berekening is geïnspireerd op [dit artikel](https://towardsdatascience.com/developing-an-elo-based-data-driven-ranking-system-for-2v2-multiplayer-games-7689f7d42a53) en houdt rekening met teamdynamiek en scoreverschillen.
+### Data Beheer & Backup (Nieuw!)
+- 📊 **Google Sheets Sync:** Automatische backup van alle Firestore data naar een [Google Sheet](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Dit dient als live backup en biedt de mogelijkheid voor eigen analyses buiten de app.
+- ⚡ **Performance:** Vectorized Pandas operaties voor razendsnelle berekeningen.
+- 💾 **Caching:** Streamlit caching (10 min TTL) voor een soepele ervaring.
+- ⚙️ **Beheer:** Tools voor ELO resets, database cleanup en spelerbeheer.
 
 ### Controlejaar (CJ) & Seizoenen
-
-De competitie volgt de deadlines van de **Auditdienst Rijk (ADR)**. Een controlejaar (CJ) loopt van 15 maart tot 15 maart het jaar daarop. Elk controlejaar is opgedeeld in twee seizoenen:
-
-1.  **Zomerseizoen**: Van 15 maart tot Prinsjesdag (derde dinsdag van september).
-2.  **Winterseizoen**: Van Prinsjesdag tot 15 maart (deadline ADR-rapport).
-
-Aan het begin van elk nieuw seizoen worden de ELO-scores gereset naar de basiswaarde van 1000 punten om een frisse start te garanderen.
-
-### Data Beheer & Performance
-
-- 📁 CSV import voor historische data
-- ⚡ **Geoptimaliseerde Analytics:** Gebruik van vectorized Pandas operaties voor razendsnelle berekeningen, zelfs bij duizenden wedstrijden.
-- 💾 **Caching:** Slimme data-loading met Streamlit caching (10 min TTL) voor een soepele gebruikerservaring.
-- 🔄 **Refresh:** Handmatige "Refresh Data" optie in de zijbalk om de nieuwste Firestore-data op te halen.
-- 👥 Speler beheer en registratie
-- 📅 Automatische seizoen organisatie op basis van CJ-systematiek
-- 🗑️ Bulk delete functionaliteit
-- ⚙️ Database maintenance tools
-
-### User Interface
-
-- 📱 Responsive Streamlit interface
-- 🎨 Georganiseerde tab structuur
-- 📊 Interactieve dataframes
-- ⚡ Real-time updates
-
-## 🛠️ Technische Stack
-
-- **Frontend:** Streamlit
-- **Backend:** Python
-- **Database:** Google Firestore
-- **Data Processing:** Pandas
-- **Deployment:** Streamlit Cloud
+De competitie volgt de ADR-systematiek (15 maart - 15 maart).
+1. **Zomerseizoen**: 15 maart tot Prinsjesdag.
+2. **Winterseizoen**: Prinsjesdag tot 15 maart.
+*Bij de start van elk seizoen worden de ELO's gereset naar 1000 voor een eerlijke start.*
 
 ## 🔧 Installatie & Setup
 
 ### Lokale Ontwikkeling
+1. **Clone repository:** `git clone https://github.com/atv22/tafelvoetbal.git`
+2. **Dependencies:** `pip install -r requirements.txt`
+3. **Google Auth:** Plaats `firestore-key.json` in de root. Zorg dat het service account rechten heeft op zowel Firestore als de Google Sheet.
+4. **Run:** `streamlit run app.py`
 
-1. **Clone de repository:**
-
-```bash
-git clone https://github.com/atv22/tafelvoetbal.git
-cd tafelvoetbal
-```
-
-**Installeer dependencies:**
-
-```bash
-pip install -r requirements.txt
-```
-
-**Firestore configuratie:**
-
-- Plaats je `firestore-key.json` in de project root
-- Dit bestand staat in `.gitignore` voor security
-
-**Start de applicatie:**
-
-```bash
-streamlit run app.py
-```
-
-### Streamlit Cloud Deployment
-
-#### Firestore Credentials Configuratie
-
-Voor Streamlit Cloud configureer de credentials in de app secrets:
-
-1. **Ga naar je Streamlit Cloud app dashboard**
-2. **Klik op "Manage app"**
-3. **Ga naar de "Secrets" tab**
-4. **Voeg toe:**
-
-```toml
-[firestore_credentials]
-type = "service_account"
-project_id = "jouw-project-id"
-private_key_id = "jouw-private-key-id"
-private_key = "-----BEGIN PRIVATE KEY-----\njouw-private-key\n-----END PRIVATE KEY-----\n"
-client_email = "jouw-service-account@jouw-project.iam.gserviceaccount.com"
-client_id = "jouw-client-id"
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
-auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/jouw-service-account%40jouw-project.iam.gserviceaccount.com"
-```
-
-## 📊 Database Schema & Veldnamen
-
-### Collections (Firestore)
-
-- **spelers:** Speler informatie en ELO scores
-- **uitslag:** Wedstrijd resultaten en timestamps  
-- **elo:** ELO score historie
-- **requests:** Tijdelijke data opslag
-- **seizoenen:** Seizoen definities (afgeleid, niet als losse collectie)
-
-> **Let op:** In de code en app wordt soms de Engelse term 'matches' gebruikt als alias voor de Firestore-collectie 'uitslag'. In Firestore zelf heet de collectie altijd **uitslag**.
-
-### Veldnamen: Firestore vs. DataFrame/app
-
-- Sommige velden bestaan **alleen in de app of in DataFrames** en niet als veld in Firestore. Dit zijn zogeheten "afgeleide velden" (bijv. `match_id`, `speler_id`).
-- Firestore-documenten hebben standaard een automatisch ID (`doc.id`), dat in de app als `match_id` of `speler_id` wordt toegevoegd aan DataFrames voor makkelijke verwerking.
-- Verwacht dus **niet** dat deze velden als veld in Firestore-documenten staan; ze worden alleen in de app toegevoegd.
-
-#### Overzicht per collectie
-
-| Collectie   | Vereiste velden (Firestore) | Optioneel | Alleen in app/DataFrame |
-|-------------|----------------------------|-----------|------------------------|
-| spelers     | speler_naam                |           | speler_id              |
-| elo         | speler_naam, rating, timestamp |       |                        |
-| uitslag     | thuis_1, thuis_2, uit_1, uit_2, thuis_score, uit_score, timestamp | klinkers_thuis_1, klinkers_thuis_2, klinkers_uit_1, klinkers_uit_2 | match_id |
-| requests    | Verzoek, Timestamp         |           |                        |
-
-#### CSV Import Formaten
-
-**Wedstrijden:**
-
-```csv
-datum,thuisteam_id,thuisteam_naam,uitteam_id,uitteam_naam,thuisteam_score,uitteam_score,timestamp
-2025-01-15,1,Rick,2,Arthur,3,2,2025-01-15 14:30:00
-```
-
-**Spelers:**
-
-```csv
-speler_id,speler_naam,elo_score
-1,Rick,1050
-2,Arthur,980
-```
-
-#### Naming Conventies
-
-- Gebruik in code en documentatie consequent de naam **uitslag** voor de Firestore-collectie met wedstrijden.
-- Gebruik **match_id** en **speler_id** alleen als DataFrame/app-veld, niet als Firestore-veld.
-- Controleer bij import/export altijd of deze velden wel/niet in de brondata staan.
-
-#### Mogelijke valkuilen
-
-- Externe tools of scripts die direct Firestore-data exporteren/importeren missen deze afgeleide velden. Voeg ze toe in de app of bij verwerking in pandas.
-- Bugs kunnen ontstaan als code verwacht dat `match_id` of `speler_id` altijd als veld aanwezig is. Controleer altijd op aanwezigheid of voeg ze toe via `doc.id`.
-
-## 🎯 Gebruik
-
-### 1. **Home Tab**
-
-- Overzicht van recente wedstrijden
-- Quick stats en rankings
-
-### 2. **Invullen Tab**
-
-- Nieuwe wedstrijden registreren
-- Speler selectie en score invoer
-
-### 3. **Spelers Tab**
-
-- ELO rankings bekijken
-- Speler statistieken
-
-### 4. **Ruwe Data Tab**
-
-- Alle wedstrijden in tabelvorm
-- Exporteer mogelijkheden
-
-### 5. **Beheer Tab**
-
-- **Verwijderen:** Wedstrijden/spelers verwijderen
-- **Bewerken:** Wedstrijden aanpassen
-- **Data Upload:** CSV imports
-- **Systeem Beheer:** ELO reset, database cleanup
+## 🛠️ Technische Stack
+- **Frontend:** Streamlit
+- **Backend:** Python
+- **Database:** Google Firestore (Cloud)
+- **Backup:** Google Sheets API
+- **Onderhoud:** Gemini CLI
 
 ## 🏆 Hackatron 2025
-
-Deze app werd ontwikkeld tijdens de Hackatron van oktober 2025 als een teamproject. Het combineert moderne web development met praktische functionaliteit voor competitie beheer.
-
-## 📝 Licentie
-
-Ontwikkeld door het Hackatron 2025 team. Alle rechten voorbehouden.
+Ontwikkeld door Rick, Bernd, Dewi, Isis, Johannes & Arthur.

@@ -17,10 +17,10 @@ def render_colofon_tab():
     
     **Technische Details:**
     - 🐍 **Python** met Streamlit framework
-    - 🔥 **Firestore** database voor data opslag
-    - 🤖 **AI-assistentie** van ChatGPT, Gemini, Copilot en Perplexity voor ontwikkeling
-    - 📊 **ELO rating systeem** voor speler rankings
-    - 📁 **CSV import/export** functionaliteit
+    - 🔥 **Firestore** database voor cloud data opslag
+    - 📊 **Google Sheets** automatische backup & live inzicht
+    - 🤖 **AI-assistentie** van Gemini (via Gemini CLI) voor ontwikkeling en onderhoud
+    - 📈 **ELO rating systeem** voor speler rankings
     
     **Features:**
     - Wedstrijd registratie en beheer

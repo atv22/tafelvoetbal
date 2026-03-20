@@ -161,12 +161,7 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
         st.success("Uitslag en nieuwe ELO ratings succesvol opgeslagen!")
         # Offline pop-up/notice wanneer Firestore niet beschikbaar is
         if hasattr(db, 'is_offline') and db.is_offline():
-            st.warning("Firestore is momenteel offline. Je uitslag is opgeslagen in de CSV-wachtrij en wordt later automatisch toegevoegd.")
-            try:
-                # Streamlit toast als extra duidelijke melding (indien beschikbaar)
-                st.toast("Offline modus: uitslag in wachtrij geplaatst.", icon="⚠️")
-            except Exception:
-                pass
+            st.warning("De database is momenteel offline. De uitslag kon niet direct naar Firestore worden geschreven. Raadpleeg de beheerder of bekijk de Google Sheet backup.")
         if (home_score == 10 and away_score == 0) or (home_score == 0 and away_score == 10):
             st.balloons()
         time.sleep(1)

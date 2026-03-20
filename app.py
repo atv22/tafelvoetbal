@@ -62,8 +62,8 @@ app_start = time.perf_counter()
 
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
-    st.error("⚠️ De database is momenteel offline (waarschijnlijk door het overschrijden van de dagelijkse quota ivm het opschonen van data).")
-    st.info("📝 **Geen zorgen:** Je kunt nog steeds wedstrijden invullen! Deze worden lokaal opgeslagen en automatisch gesynchroniseerd zodra de database weer online is.")
+    st.error("⚠️ De database is momenteel offline (waarschijnlijk door het overschrijden van de dagelijkse quota).")
+    st.info(f"📊 **Backup beschikbaar:** De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is tijdelijk beperkt.")
 
 # --- Tab navigatie ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
@@ -83,7 +83,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 with tab1:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_home_tab(players_df, matches_df, seasons_df, elo_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab HOME rendered in {t1-t0:.3f}s")
@@ -102,7 +102,7 @@ with tab2:
 with tab3:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_players_tab(players_df, matches_df, seasons_df, elo_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab SPELERS rendered in {t1-t0:.3f}s")
@@ -111,7 +111,7 @@ with tab3:
 with tab4:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab ANALYTICS rendered in {t1-t0:.3f}s")
@@ -122,7 +122,7 @@ with tab4:
 with tab5:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_data_tab()
     t1 = time.perf_counter()
     print(f"[TIMING] tab RUWE DATA rendered in {t1-t0:.3f}s")
@@ -140,7 +140,7 @@ with tab6:
 with tab7:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_verzoeken_tab(matches_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab VERZOEKEN rendered in {t1-t0:.3f}s")
@@ -149,7 +149,7 @@ with tab7:
 with tab8:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.caption("🔴 Offline modus — CSV-backup actief")
+        st.caption("🔴 Offline modus — Google Sheet backup actief")
     render_colofon_tab()
     t1 = time.perf_counter()
     print(f"[TIMING] tab COLOFON rendered in {t1-t0:.3f}s")
