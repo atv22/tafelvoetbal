@@ -68,6 +68,7 @@ def get_google_creds(scopes=None):
     
     return None
 
+@st.cache_data(ttl=3600) # Cache GSheet fallback voor 1 uur
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
     global LAST_FALLBACK_ERROR
