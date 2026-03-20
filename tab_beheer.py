@@ -646,6 +646,20 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     if not _ensure_authentication():
         return
 
+    # --- Synchronisatie Sectie ---
+    st.subheader("🔄 Synchronisatie")
+    st.info("Synchroniseer data tussen de Google Sheet backup en de Firestore database. Gebruik dit om offline ingevoerde data te herstellen.")
+    if st.button("🚀 Start Synchronisatie"):
+        with st.spinner("Bezig met synchroniseren... dit kan even duren bij veel data."):
+            try:
+                db.reconcile_data_sources()
+                st.success("Synchronisatie voltooid!")
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Synchronisatie mislukt: {e}")
+    st.divider()
+
     # Hoofd tabs in beheer
     tab_verwijderen, tab_bewerken, tab_upload = st.tabs([
         "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload"])

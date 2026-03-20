@@ -37,12 +37,12 @@ def load_all_data(version):
     if 'cache_version' not in st.session_state or st.session_state.cache_version != version:
         st.cache_data.clear()
         st.session_state.cache_version = version
-        
+
     load_start = time.perf_counter()
-    
-    # Voer reconciliatie uit (sync GSheet <-> Firestore)
-    db.reconcile_data_sources()
-    
+
+    # Automatische sync bij boot verwijderd wegens vertraging. 
+    # Gebruik de sync-knop in het beheerpaneel.
+
     p = db.get_players()
     m = db.get_matches()
     s = db.get_seasons()
@@ -50,6 +50,10 @@ def load_all_data(version):
     load_end = time.perf_counter()
     print(f"[TIMING] data load (v{version}): players={len(p) if p is not None else 0}, matches={len(m) if m is not None else 0}, seasons={len(s) if s is not None else 0}, elo={len(e) if e is not None else 0} in {load_end-load_start:.3f}s")
     return p, m, s, e
+
+
+
+
 
 # --- Sidebar met Refresh optie ---
 with st.sidebar:
@@ -80,7 +84,7 @@ app_start = time.perf_counter()
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
     st.error("⚠️ De database is momenteel offline (waarschijnlijk door het overschrijden van de dagelijkse quota).")
-    st.info(f"📊 De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is nog steed mogelijk.")
+    st.info(f"📊 De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is nog steeds mogelijk.")
 
 # --- Tab navigatie ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
