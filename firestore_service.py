@@ -5,8 +5,13 @@ import google.cloud.firestore
 from google.oauth2 import service_account
 import json
 import pandas as pd
+import gspread
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+
+# Google Sheet ID voor fallback
+SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
+GS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 class FirestoreUnavailable(Exception):
     def __init__(self, message, details=None):
@@ -36,6 +41,30 @@ def set_offline_mode(value: bool):
 
 def is_offline():
     return OFFLINE_MODE
+
+def _read_gsheet_fallback(sheet_name):
+    """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
+    try:
+        # Haal credentials op (hergebruik bestaande logica)
+        if hasattr(st, 'secrets') and 'firestore_credentials' in st.secrets:
+            key_dict = dict(st.secrets["firestore_credentials"])
+            creds = service_account.Credentials.from_service_account_info(key_dict, scopes=GS_SCOPES)
+        else:
+            creds = service_account.Credentials.from_service_account_file("firestore-key.json", scopes=GS_SCOPES)
+        
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(SHEET_ID)
+        worksheet = sh.worksheet(sheet_name)
+        data = worksheet.get_all_records()
+        df = pd.DataFrame(data)
+        
+        if not df.empty:
+            print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
+            set_offline_mode(True)
+        return df
+    except Exception as e:
+        print(f"[GSHEET FALLBACK] Fout bij lezen van {sheet_name}: {e}")
+        return pd.DataFrame()
 
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches():
@@ -131,13 +160,12 @@ def get_players():
             players_list.append(d)
         
         if not players_list:
-            return pd.DataFrame()
+            return _read_gsheet_fallback("Spelers")
             
         set_offline_mode(False)
         return pd.DataFrame(players_list)
     except Exception:
-        set_offline_mode(True)
-        return pd.DataFrame()
+        return _read_gsheet_fallback("Spelers")
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -155,16 +183,23 @@ def get_matches(start_ts=None, end_ts=None):
             d['match_id'] = doc.id
             matches.append(d)
         
-        df = pd.DataFrame(matches)
+        if not matches:
+             df = _read_gsheet_fallback("Wedstrijden")
+        else:
+            df = pd.DataFrame(matches)
+
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
         
-        set_offline_mode(False)
+        if matches: # Alleen reset als Firestore daadwerkelijk data gaf
+            set_offline_mode(False)
         return df
     except Exception:
-        set_offline_mode(True)
-        return pd.DataFrame()
+        df = _read_gsheet_fallback("Wedstrijden")
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -173,15 +208,24 @@ def get_elo_logs():
     try:
         elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
         elos = [doc.to_dict() for doc in elo_docs]
-        df = pd.DataFrame(elos)
+        
+        if not elos:
+            df = _read_gsheet_fallback("ELO_Logs")
+        else:
+            df = pd.DataFrame(elos)
+
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        set_offline_mode(False)
+        
+        if elos:
+            set_offline_mode(False)
         return df
     except Exception:
-        set_offline_mode(True)
-        return pd.DataFrame()
+        df = _read_gsheet_fallback("ELO_Logs")
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -189,12 +233,14 @@ def get_requests():
     """Haalt verzoeken op."""
     try:
         docs = requests_ref.order_by("Timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        df = pd.DataFrame([doc.to_dict() for doc in docs])
+        req_list = [doc.to_dict() for doc in docs]
+        if not req_list:
+            return _read_gsheet_fallback("Verzoeken")
+        
         set_offline_mode(False)
-        return df
+        return pd.DataFrame(req_list)
     except Exception:
-        set_offline_mode(True)
-        return pd.DataFrame()
+        return _read_gsheet_fallback("Verzoeken")
 
 @handle_firestore_exceptions
 @st.cache_data
@@ -221,11 +267,21 @@ def get_elo_history(_ttl, speler_naam):
         elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING)
         history_docs = elo_query.stream()
         history = [doc.to_dict() for doc in history_docs]
-        df = pd.DataFrame(history)
+        
+        if not history:
+            # Fallback op de volledige sheet en filteren
+            df = _read_gsheet_fallback("ELO_Logs")
+            if not df.empty and 'speler_naam' in df.columns:
+                df = df[df['speler_naam'] == speler_naam]
+        else:
+            df = pd.DataFrame(history)
+
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        set_offline_mode(False)
+        
+        if history:
+            set_offline_mode(False)
         return df
     except Exception:
         set_offline_mode(True)
@@ -308,7 +364,7 @@ def add_match_and_update_elo(match_data, elo_updates):
         print(f"Batch error: {e}")
         return False
 
-# Beheer functies (vereenvoudigd)
+# Beheer functies
 def delete_match_by_id(mid):
     try:
         matches_ref.document(mid).delete()
@@ -345,24 +401,16 @@ def recalculate_elos_for_season(start_date, end_date):
     """Herberekent alle ELO scores voor een seizoen."""
     try:
         from utils.utils_new_elo import calculate_new_elo
-        # Zorg voor naive date/timestamp
         if isinstance(start_date, pd.Timestamp): start_date = start_date.date()
         if isinstance(end_date, pd.Timestamp): end_date = end_date.date()
         
-        # Haal alle data op
         all_matches = get_matches().sort_values('timestamp', ascending=True)
         players_df = get_players()
-        
-        # Filter op seizoen
         mask = (all_matches['timestamp'].dt.date >= start_date) & (all_matches['timestamp'].dt.date <= end_date)
         season_matches = all_matches[mask]
         
-        # Start ELOs op 1000 aan begin seizoen
         player_elos = {name: 1000 for name in players_df['speler_naam']}
-        
-        # Batch updates
         batch = db.batch()
-        # Verwijder oude ELO logs voor dit seizoen
         old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(start_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(end_date))).stream()
         for doc in old_elos: batch.delete(doc.reference)
         batch.commit()
@@ -375,10 +423,8 @@ def recalculate_elos_for_season(start_date, end_date):
                 "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
                 "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score']
             }
-            # Unieke spelers in match
             m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
             all_ratings = {p: [player_elos.get(p, 1000)] for p in m_players}
-            
             new_df = calculate_new_elo(m_dict, all_ratings)
             for _, row in new_df.iterrows():
                 p, r = row['Speler'], row['ELO']
@@ -403,8 +449,6 @@ def delete_match_with_elo_recalculation(match_id):
         if not doc.exists: return True
         ts = doc.to_dict().get('timestamp')
         matches_ref.document(match_id).delete()
-        
-        # Bepaal seizoen
         seasons = get_seasons()
         s_row = seasons[(seasons['start_datum'] <= ts) & (seasons['eind_datum'] >= ts)]
         if not s_row.empty:
