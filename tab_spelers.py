@@ -67,14 +67,16 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
 
             if not history_df.empty:
                 history_df = history_df.sort_values('timestamp')
+                history_df['rating_rounded'] = history_df['rating'].round(0).astype(int)
                 
                 fig = px.line(
                     history_df,
                     x='timestamp',
-                    y='rating',
+                    y='rating_rounded',
                     title=f"ELO verloop van {selected_player}",
-                    labels={'timestamp': 'Datum', 'rating': 'ELO Rating'},
-                    markers=True
+                    labels={'timestamp': 'Datum', 'rating_rounded': 'ELO Rating'},
+                    markers=True,
+                    hover_data={'rating_rounded': True}
                 )
                 fig.update_layout(xaxis_title="Datum", yaxis_title="ELO Rating")
                 st.plotly_chart(fig, width='stretch')

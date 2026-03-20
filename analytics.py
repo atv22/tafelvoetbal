@@ -200,7 +200,8 @@ def show_winrate_bar_chart(season_matches, min_matches=3):
             title=f"Top 10 Win% (min. {min_matches})",
             color='Winrate',
             color_continuous_scale='RdYlGn',
-            labels={'Winrate': 'Winpercentage (%)'}
+            labels={'Winrate': 'Winpercentage (%)'},
+            hover_data={'Winrate': ':.1f'}
         )
         fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
         st.plotly_chart(fig_winrate, width='stretch', key="winrate_bar_chart")
@@ -267,7 +268,8 @@ def show_goals_bar_chart_season(season_matches):
             y='Goals',
             title="Top 10 Topscorers",
             color='Goals',
-            color_continuous_scale='Blues'
+            color_continuous_scale='Blues',
+            hover_data={'Goals': True}
         )
         fig_goals.update_layout(xaxis_title="Speler", yaxis_title="Goals")
         st.plotly_chart(fig_goals, width='stretch', key="goals_bar_chart_season")
@@ -383,7 +385,7 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Totaal Wedstrijden", total_matches)
     col2.metric("Totaal Goals", int(total_goals))
-    col3.metric("Gem. Goals/Wedstrijd", f"{avg_goals:.1f}")
+    col3.metric("Gem. Goals/Wedstrijd", f"{avg_goals:.2f}")
     col4.metric("Actieve Spelers", unique_players_count)
     
     st.subheader("📊 Seizoen Visualisaties")
@@ -409,6 +411,7 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     # ELO ratings
     if season_elo is not None and not season_elo.empty:
         st.subheader("🏆 ELO Rankings")
-        elo_top = season_elo.sort_values('rating', ascending=False).head(10)
-        fig_elo = px.bar(elo_top, x='speler_naam', y='rating', title="Top 10 ELO Ratings", color='rating', color_continuous_scale='Viridis')
+        elo_top = season_elo.sort_values('rating', ascending=False).head(10).copy()
+        elo_top['rating'] = elo_top['rating'].round(0).astype(int)
+        fig_elo = px.bar(elo_top, x='speler_naam', y='rating', title="Top 10 ELO Ratings", color='rating', color_continuous_scale='Viridis', hover_data={'rating': True})
         st.plotly_chart(fig_elo, width='stretch', key=f"elo_chart_{seizoen_naam}")

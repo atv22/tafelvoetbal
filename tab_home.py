@@ -130,9 +130,10 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
 
     # Trend berekenen (numeriek)
     trends = calculate_elo_trends(elo_df)
-    stats_df['Trend'] = stats_df['Speler'].map(lambda x: trends.get(x, 0))
+    stats_df['Trend'] = stats_df['Speler'].map(lambda x: int(round(trends.get(x, 0))))
         
     display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
+    display_df['ELO'] = display_df['ELO'].round(0).astype(int)
     import numpy as np
     display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
     display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
