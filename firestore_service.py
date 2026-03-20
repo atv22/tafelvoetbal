@@ -5,6 +5,7 @@ import google.cloud.firestore
 from google.oauth2 import service_account
 import json
 import pandas as pd
+import gspread
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
@@ -41,37 +42,84 @@ def set_offline_mode(value: bool):
 def is_offline():
     return OFFLINE_MODE
 
+def get_google_creds(scopes=None):
+    """Centrale functie om Google credentials op te halen uit secrets of lokaal bestand."""
+    # 1. Probeer Streamlit Secrets (Cloud)
+    try:
+        # Check of we in een streamlit context zitten en of de key bestaat
+        # Gebruik get() om KeyErrors te voorkomen die de 'dictionary update' bug triggeren
+        if hasattr(st, 'secrets'):
+            creds_data = st.secrets.get("firestore_credentials")
+            if creds_data:
+                # Zet om naar dict indien nodig (Streamlit secrets zijn soms wrapper objects)
+                key_dict = json.loads(json.dumps(dict(creds_data)))
+                if scopes:
+                    return service_account.Credentials.from_service_account_info(key_dict, scopes=scopes)
+                return service_account.Credentials.from_service_account_info(key_dict)
+    except Exception:
+        pass
+
+    # 2. Probeer lokaal bestand (Dev)
+    key_path = "firestore-key.json"
+    if os.path.exists(key_path):
+        if scopes:
+            return service_account.Credentials.from_service_account_file(key_path, scopes=scopes)
+        return service_account.Credentials.from_service_account_file(key_path)
+    
+    return None
+
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
     try:
-        # Haal credentials op (hergebruik bestaande logica)
-        if hasattr(st, 'secrets') and 'firestore_credentials' in st.secrets:
-            key_dict = dict(st.secrets["firestore_credentials"])
-            creds = service_account.Credentials.from_service_account_info(key_dict, scopes=GS_SCOPES)
-        else:
-            creds = service_account.Credentials.from_service_account_file("firestore-key.json", scopes=GS_SCOPES)
+        creds = get_google_creds(scopes=GS_SCOPES)
+        if not creds:
+            print(f"[GSHEET FALLBACK] Geen credentials gevonden voor {sheet_name}")
+            return pd.DataFrame()
         
         gc = gspread.authorize(creds)
         sh = gc.open_by_key(SHEET_ID)
         worksheet = sh.worksheet(sheet_name)
         
-        # Gebruik get_all_values() in plaats van get_all_records() voor meer robuustheid
-        values = worksheet.get_all_values()
-        if not values or len(values) < 2:
+        # Gebruik get_all_values() en bouw handmatig de dicts om rare dict-errors te voorkomen
+        all_values = worksheet.get_all_values()
+        if not all_values or len(all_values) < 1:
             return pd.DataFrame()
             
-        # Eerste rij is de header, de rest is data
-        df = pd.DataFrame(values[1:], columns=values[0])
+        headers = [h.strip() for h in all_values[0]]
+        if len(all_values) < 2:
+            return pd.DataFrame(columns=headers)
+            
+        rows = all_values[1:]
+        
+        # Filter lege rijen
+        data_dicts = []
+        for row in rows:
+            if not any(row): continue # skip volledig lege rijen
+            # Vul aan of kap af als rij-lengte niet matcht met header
+            if len(row) < len(headers):
+                row.extend([''] * (len(headers) - len(row)))
+            elif len(row) > len(headers):
+                row = row[:len(headers)]
+            data_dicts.append(dict(zip(headers, row)))
+            
+        df = pd.DataFrame(data_dicts)
         
         if not df.empty:
-            # Type conversies: GSheet geeft alles als string, Firestore geeft types
+            # Type conversies
             numeric_cols = ['rating', 'thuis_score', 'uit_score', 
                             'klinkers_thuis_1', 'klinkers_thuis_2', 
-                            'klinkers_uit_1', 'klinkers_uit_2']
+                            'klinkers_uit_1', 'klinkers_uit_2',
+                            'Score Thuis', 'Score Uit']
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
+            # Datum conversie
+            ts_cols = ['timestamp', 'Timestamp']
+            for col in ts_cols:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+
             print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
             set_offline_mode(True)
         return df
@@ -89,65 +137,34 @@ def clear_all_caches():
 
 # --- HULPFUNCTIE: Timestamp normalisatie ---
 def normalize_timestamp_series(ts_series):
-    """
-    Zet een pandas Series met timestamps om naar tz-naive UTC (indien mogelijk).
-    Werkt veilig voor zowel tz-aware als tz-naive series.
-    """
+    """Zet een pandas Series met timestamps om naar tz-naive UTC."""
     import pandas as pd
     if not pd.api.types.is_datetime64_any_dtype(ts_series):
         return ts_series
     try:
-        # Als tz-aware, eerst naar UTC, dan tz-naive
         if hasattr(ts_series.dt, 'tz') and ts_series.dt.tz is not None:
             return ts_series.dt.tz_convert('UTC').dt.tz_localize(None)
         else:
-            # Als al tz-naive, return as-is (of forceer zonder exceptie)
             return ts_series.dt.tz_localize(None)
     except (TypeError, ValueError):
-        # Als al tz-naive, return as-is
         return ts_series
 
 # FIRESTORE INITIALISATIE
 @st.cache_resource
 def initialize_firestore():
-    """
-    Maakt verbinding met Firestore.
-    Gebruikt Streamlit secrets in de cloud, anders lokaal serviceaccountbestand.
-    """
-    project_id = None
-    
-    # Probeer eerst Streamlit secrets (voor cloud deployment)
-    try:
-        if hasattr(st, 'secrets') and 'firestore_credentials' in st.secrets:
-            secret_val = st.secrets["firestore_credentials"]
-            if isinstance(secret_val, str):
-                key_dict = json.loads(secret_val)
-            elif isinstance(secret_val, dict):
-                key_dict = secret_val
-            else:
-                key_dict = dict(secret_val)
+    """Maakt verbinding met Firestore."""
+    creds = get_google_creds()
+    if not creds:
+        # We laten dit falen zodat de app weet dat er geen DB is
+        raise ValueError("Geen Google credentials gevonden (firestore-key.json of st.secrets)")
 
-            project_id = key_dict.get("project_id")
-            creds = service_account.Credentials.from_service_account_info(key_dict)
-            print("Firestore credentials geladen vanuit Streamlit secrets")
-        else:
-            raise KeyError("Geen firestore_credentials gevonden in secrets")
-    except Exception as e:
-        print(f"Streamlit secrets niet beschikbaar of ongeldig ({e}), probeer lokaal bestand...")
-        try:
-            with open("firestore-key.json") as f:
-                key_dict = json.load(f)
-                project_id = key_dict.get("project_id")
-            creds = service_account.Credentials.from_service_account_file("firestore-key.json")
-            print("Firestore credentials geladen vanuit lokaal bestand")
-        except Exception as e2:
-            print(f"Fout bij laden van lokale credentials: {e2}")
-            raise
-            
-    if not project_id:
-        raise ValueError("Project ID kon niet worden gevonden in de credentials.")
-
-    db = google.cloud.firestore.Client(credentials=creds, project=project_id)
+    # Haal project_id uit de credentials zelf
+    project_id = getattr(creds, 'project_id', None)
+    if not project_id and hasattr(creds, '_service_account_email'):
+        # Fallback voor sommige credential types
+        pass 
+        
+    db = google.cloud.firestore.Client(credentials=creds)
     return db
 
 db = initialize_firestore()
@@ -205,7 +222,7 @@ def get_matches(start_ts=None, end_ts=None):
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
         
-        if matches: # Alleen reset als Firestore daadwerkelijk data gaf
+        if matches:
             set_offline_mode(False)
         return df
     except Exception:
@@ -261,8 +278,7 @@ def get_beheer_log():
     """Haalt alle beheer-log entries op uit Firestore."""
     try:
         beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        beheer_logs = [doc.to_dict() for doc in beheer_docs]
-        df = pd.DataFrame(beheer_logs)
+        df = pd.DataFrame([doc.to_dict() for doc in beheer_docs])
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
@@ -282,7 +298,6 @@ def get_elo_history(_ttl, speler_naam):
         history = [doc.to_dict() for doc in history_docs]
         
         if not history:
-            # Fallback op de volledige sheet en filteren
             df = _read_gsheet_fallback("ELO_Logs")
             if not df.empty and 'speler_naam' in df.columns:
                 df = df[df['speler_naam'] == speler_naam]
