@@ -198,6 +198,41 @@ def get_requests():
 
 @handle_firestore_exceptions
 @st.cache_data
+def get_beheer_log():
+    """Haalt alle beheer-log entries op uit Firestore."""
+    try:
+        beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
+        beheer_logs = [doc.to_dict() for doc in beheer_docs]
+        df = pd.DataFrame(beheer_logs)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        set_offline_mode(False)
+        return df
+    except Exception:
+        set_offline_mode(True)
+        return pd.DataFrame()
+
+@handle_firestore_exceptions
+@st.cache_data
+def get_elo_history(_ttl, speler_naam):
+    """Haalt de ELO geschiedenis voor een specifieke speler op."""
+    try:
+        elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING)
+        history_docs = elo_query.stream()
+        history = [doc.to_dict() for doc in history_docs]
+        df = pd.DataFrame(history)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        set_offline_mode(False)
+        return df
+    except Exception:
+        set_offline_mode(True)
+        return pd.DataFrame()
+
+@handle_firestore_exceptions
+@st.cache_data
 def get_seasons():
     """Bepaalt seizoenen automatisch op basis van de data."""
     matches_df = get_matches()
@@ -284,6 +319,96 @@ def delete_match_by_id(mid):
 def update_match(mid, data):
     try:
         matches_ref.document(mid).update(data)
+        clear_all_caches()
+        return True
+    except: return False
+
+def delete_player_by_id(player_id):
+    """Verwijdert een speler en al zijn ELO-geschiedenis."""
+    batch = db.batch()
+    try:
+        player_doc = players_ref.document(player_id).get()
+        if not player_doc.exists: return True
+        player_name = player_doc.to_dict().get('speler_naam')
+        batch.delete(players_ref.document(player_id))
+        if player_name:
+            elo_docs = elo_ref.where(filter=FieldFilter('speler_naam', '==', player_name)).stream()
+            for doc in elo_docs: batch.delete(doc.reference)
+        batch.commit()
+        clear_all_caches()
+        return True
+    except Exception as e:
+        print(f"Fout bij verwijderen: {e}")
+        return False
+
+def recalculate_elos_for_season(start_date, end_date):
+    """Herberekent alle ELO scores voor een seizoen."""
+    try:
+        from utils.utils_new_elo import calculate_new_elo
+        # Zorg voor naive date/timestamp
+        if isinstance(start_date, pd.Timestamp): start_date = start_date.date()
+        if isinstance(end_date, pd.Timestamp): end_date = end_date.date()
+        
+        # Haal alle data op
+        all_matches = get_matches().sort_values('timestamp', ascending=True)
+        players_df = get_players()
+        
+        # Filter op seizoen
+        mask = (all_matches['timestamp'].dt.date >= start_date) & (all_matches['timestamp'].dt.date <= end_date)
+        season_matches = all_matches[mask]
+        
+        # Start ELOs op 1000 aan begin seizoen
+        player_elos = {name: 1000 for name in players_df['speler_naam']}
+        
+        # Batch updates
+        batch = db.batch()
+        # Verwijder oude ELO logs voor dit seizoen
+        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(start_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(end_date))).stream()
+        for doc in old_elos: batch.delete(doc.reference)
+        batch.commit()
+        
+        batch = db.batch()
+        c = 0
+        for _, match in season_matches.iterrows():
+            m_dict = {
+                "Thuis_1": match['thuis_1'], "Thuis_2": match['thuis_2'],
+                "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
+                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score']
+            }
+            # Unieke spelers in match
+            m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
+            all_ratings = {p: [player_elos.get(p, 1000)] for p in m_players}
+            
+            new_df = calculate_new_elo(m_dict, all_ratings)
+            for _, row in new_df.iterrows():
+                p, r = row['Speler'], row['ELO']
+                player_elos[p] = r
+                batch.set(elo_ref.document(), {'speler_naam': p, 'rating': r, 'timestamp': match['timestamp'], 'match_id': match['match_id']})
+                c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+        if c > 0: batch.commit()
+        clear_all_caches()
+        return True
+    except Exception as e:
+        print(f"Recalc error: {e}")
+        return False
+
+def delete_match_with_elo_recalculation(match_id):
+    """Verwijdert match en herbereken seizoen."""
+    try:
+        doc = matches_ref.document(match_id).get()
+        if not doc.exists: return True
+        ts = doc.to_dict().get('timestamp')
+        matches_ref.document(match_id).delete()
+        
+        # Bepaal seizoen
+        seasons = get_seasons()
+        s_row = seasons[(seasons['start_datum'] <= ts) & (seasons['eind_datum'] >= ts)]
+        if not s_row.empty:
+            recalculate_elos_for_season(s_row.iloc[0]['start_datum'], s_row.iloc[0]['eind_datum'])
         clear_all_caches()
         return True
     except: return False
