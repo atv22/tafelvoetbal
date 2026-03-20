@@ -61,7 +61,12 @@ players_df, matches_df, seasons_df, elo_df = load_all_data(CACHE_VERSION)
 if (players_df is None or players_df.empty) and (matches_df is None or matches_df.empty):
     st.warning("⚠️ Geen data kunnen laden uit Firestore of Google Sheets.")
     if hasattr(db, 'is_offline') and db.is_offline():
-        st.info("De app staat momenteel in OFFLINE modus. Controleer of de Google Sheet data bevat en of de API-rechten goed staan.")
+        st.info("De app staat momenteel in OFFLINE modus.")
+        fallback_error = db.get_last_fallback_error()
+        if fallback_error:
+            st.error(f"Specifieke GSheet fout: `{fallback_error}`")
+        else:
+            st.info("De Google Sheet fallback gaf geen fout, maar ook geen data. Controleer de tabbladen in de Sheet.")
     else:
         st.info("De app denkt dat Firestore ONLINE is, maar krijgt geen records terug. Controleer de database-verbinding.")
 

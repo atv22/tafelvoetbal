@@ -31,8 +31,9 @@ def handle_firestore_exceptions(func):
             raise FirestoreUnavailable("Database niet bereikbaar.", details=str(e))
     return functools.wraps(func)(wrapper)
 
-# --- OFFLINE STATUS ---
+# --- OFFLINE STATUS & DIAGNOSTICS ---
 OFFLINE_MODE = False
+LAST_FALLBACK_ERROR = None
 
 def set_offline_mode(value: bool):
     global OFFLINE_MODE
@@ -41,16 +42,16 @@ def set_offline_mode(value: bool):
 def is_offline():
     return OFFLINE_MODE
 
+def get_last_fallback_error():
+    return LAST_FALLBACK_ERROR
+
 def get_google_creds(scopes=None):
     """Centrale functie om Google credentials op te halen uit secrets of lokaal bestand."""
     # 1. Probeer Streamlit Secrets (Cloud)
     try:
-        # Check of we in een streamlit context zitten en of de key bestaat
-        # Gebruik get() om KeyErrors te voorkomen die de 'dictionary update' bug triggeren
         if hasattr(st, 'secrets'):
             creds_data = st.secrets.get("firestore_credentials")
             if creds_data:
-                # Zet om naar dict indien nodig (Streamlit secrets zijn soms wrapper objects)
                 key_dict = json.loads(json.dumps(dict(creds_data)))
                 if scopes:
                     return service_account.Credentials.from_service_account_info(key_dict, scopes=scopes)
@@ -69,18 +70,18 @@ def get_google_creds(scopes=None):
 
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
+    global LAST_FALLBACK_ERROR
     try:
         import gspread
         creds = get_google_creds(scopes=GS_SCOPES)
         if not creds:
-            print(f"[GSHEET FALLBACK] Geen credentials gevonden voor {sheet_name}")
+            LAST_FALLBACK_ERROR = "Geen Google credentials gevonden voor GSheet fallback."
             return pd.DataFrame()
         
         gc = gspread.authorize(creds)
         sh = gc.open_by_key(SHEET_ID)
         worksheet = sh.worksheet(sheet_name)
         
-        # Gebruik get_all_values() en bouw handmatig de dicts om rare dict-errors te voorkomen
         all_values = worksheet.get_all_values()
         if not all_values or len(all_values) < 1:
             return pd.DataFrame()
@@ -90,12 +91,9 @@ def _read_gsheet_fallback(sheet_name):
             return pd.DataFrame(columns=headers)
             
         rows = all_values[1:]
-        
-        # Filter lege rijen
         data_dicts = []
         for row in rows:
-            if not any(row): continue # skip volledig lege rijen
-            # Vul aan of kap af als rij-lengte niet matcht met header
+            if not any(row): continue
             if len(row) < len(headers):
                 row.extend([''] * (len(headers) - len(row)))
             elif len(row) > len(headers):
@@ -105,7 +103,6 @@ def _read_gsheet_fallback(sheet_name):
         df = pd.DataFrame(data_dicts)
         
         if not df.empty:
-            # Type conversies
             numeric_cols = ['rating', 'thuis_score', 'uit_score', 
                             'klinkers_thuis_1', 'klinkers_thuis_2', 
                             'klinkers_uit_1', 'klinkers_uit_2',
@@ -114,7 +111,6 @@ def _read_gsheet_fallback(sheet_name):
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-            # Datum conversie
             ts_cols = ['timestamp', 'Timestamp']
             for col in ts_cols:
                 if col in df.columns:
@@ -122,8 +118,10 @@ def _read_gsheet_fallback(sheet_name):
 
             print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
             set_offline_mode(True)
+            LAST_FALLBACK_ERROR = None # Reset error bij succes
         return df
     except Exception as e:
+        LAST_FALLBACK_ERROR = str(e)
         print(f"[GSHEET FALLBACK] Fout bij lezen van {sheet_name}: {e}")
         return pd.DataFrame()
 
@@ -155,15 +153,7 @@ def initialize_firestore():
     """Maakt verbinding met Firestore."""
     creds = get_google_creds()
     if not creds:
-        # We laten dit falen zodat de app weet dat er geen DB is
         raise ValueError("Geen Google credentials gevonden (firestore-key.json of st.secrets)")
-
-    # Haal project_id uit de credentials zelf
-    project_id = getattr(creds, 'project_id', None)
-    if not project_id and hasattr(creds, '_service_account_email'):
-        # Fallback voor sommige credential types
-        pass 
-        
     db = google.cloud.firestore.Client(credentials=creds)
     return db
 
@@ -337,11 +327,9 @@ def get_seasons():
 
     seizoenen = []
     for y in range(min_year - 1, max_year + 2):
-        # Zomer
         s1, e1 = get_march15(y), get_prinsjesdag(y) - timedelta(seconds=1)
         m1 = (matches_df['timestamp'] >= s1) & (matches_df['timestamp'] <= e1)
         seizoenen.append({'seizoen_naam': f"CJ {y} Zomer", 'start_datum': s1, 'eind_datum': e1, 'aantal_wedstrijden': int(m1.sum())})
-        # Winter
         s2, e2 = get_prinsjesdag(y), get_march15(y+1) - timedelta(seconds=1)
         m2 = (matches_df['timestamp'] >= s2) & (matches_df['timestamp'] <= e2)
         seizoenen.append({'seizoen_naam': f"CJ {y} Winter", 'start_datum': s2, 'eind_datum': e2, 'aantal_wedstrijden': int(m2.sum())})
