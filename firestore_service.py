@@ -54,8 +54,14 @@ def _read_gsheet_fallback(sheet_name):
         gc = gspread.authorize(creds)
         sh = gc.open_by_key(SHEET_ID)
         worksheet = sh.worksheet(sheet_name)
-        data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
+        
+        # Gebruik get_all_values() in plaats van get_all_records() voor meer robuustheid
+        values = worksheet.get_all_values()
+        if not values or len(values) < 2:
+            return pd.DataFrame()
+            
+        # Eerste rij is de header, de rest is data
+        df = pd.DataFrame(values[1:], columns=values[0])
         
         if not df.empty:
             print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
