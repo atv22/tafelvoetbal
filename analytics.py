@@ -151,7 +151,7 @@ def show_timeline_chart(matches_df):
         yaxis_title="Aantal wedstrijden",
         showlegend=False
     )
-    st.plotly_chart(fig_timeline, use_container_width=True, key="timeline_chart")
+    st.plotly_chart(fig_timeline, width='stretch', key="timeline_chart")
 
 
 def show_unique_players_bar_chart(season_matches):
@@ -181,7 +181,7 @@ def show_unique_players_bar_chart(season_matches):
         color_discrete_sequence=['#ff7f0e']
     )
     fig_players.update_layout(xaxis_title="Datum", yaxis_title="Unieke spelers")
-    st.plotly_chart(fig_players, use_container_width=True, key="unique_players_bar_chart")
+    st.plotly_chart(fig_players, width='stretch', key="unique_players_bar_chart")
 
 
 def show_winrate_bar_chart(season_matches, min_matches=3):
@@ -203,7 +203,7 @@ def show_winrate_bar_chart(season_matches, min_matches=3):
             labels={'Winrate': 'Winpercentage (%)'}
         )
         fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
-        st.plotly_chart(fig_winrate, use_container_width=True, key="winrate_bar_chart")
+        st.plotly_chart(fig_winrate, width='stretch', key="winrate_bar_chart")
 
 
 def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
@@ -230,7 +230,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
         fig_scatter.update_traces(textposition="top center")
         fig_scatter.update_layout(xaxis_title="Aantal Wedstrijden", yaxis_title="Winpercentage (%)")
         chart_key = f"activity_vs_winrate_scatter_{key_suffix}" if key_suffix else "activity_vs_winrate_scatter"
-        st.plotly_chart(fig_scatter, use_container_width=True, key=chart_key)
+        st.plotly_chart(fig_scatter, width='stretch', key=chart_key)
 
 
 def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
@@ -249,7 +249,7 @@ def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
                 title="Gemiddelde Goals per Seizoen",
                 markers=True
             )
-            st.plotly_chart(fig_season_goals, use_container_width=True, key="cross_season_goals_chart")
+            st.plotly_chart(fig_season_goals, width='stretch', key="cross_season_goals_chart")
 
 
 def show_goals_bar_chart_season(season_matches):
@@ -270,7 +270,7 @@ def show_goals_bar_chart_season(season_matches):
             color_continuous_scale='Blues'
         )
         fig_goals.update_layout(xaxis_title="Speler", yaxis_title="Goals")
-        st.plotly_chart(fig_goals, use_container_width=True, key="goals_bar_chart_season")
+        st.plotly_chart(fig_goals, width='stretch', key="goals_bar_chart_season")
 
 
 def create_all_time_leaderboards(all_matches):
@@ -343,7 +343,7 @@ def show_all_time_leaderboards(player_stats_df):
     for col, title, df in tables_r1 + tables_r2:
         with col:
             st.write(f"**{title}:**")
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(df, hide_index=True, width='stretch')
 
 
 def show_individual_season_analysis(season_info, season_matches, season_elo=None):
@@ -391,11 +391,11 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
         if stats is not None and not stats.empty and stats['Klinkers'].sum() > 0:
             k_df = stats.sort_values('Klinkers', ascending=False).head(10)
             fig_k = px.bar(k_df, x='Speler', y='Klinkers', title="Top 10 Klinkers", color='Klinkers', color_continuous_scale='OrRd')
-            st.plotly_chart(fig_k, use_container_width=True, key=f"k_chart_{seizoen_naam}")
+            st.plotly_chart(fig_k, width='stretch', key=f"k_chart_{seizoen_naam}")
 
     # ELO ratings
     if season_elo is not None and not season_elo.empty:
         st.subheader("🏆 ELO Rankings")
         elo_top = season_elo.sort_values('rating', ascending=False).head(10)
         fig_elo = px.bar(elo_top, x='speler_naam', y='rating', title="Top 10 ELO Ratings", color='rating', color_continuous_scale='Viridis')
-        st.plotly_chart(fig_elo, use_container_width=True, key=f"elo_chart_{seizoen_naam}")
+        st.plotly_chart(fig_elo, width='stretch', key=f"elo_chart_{seizoen_naam}")

@@ -632,7 +632,7 @@ def _render_system_management(db, players_df: pd.DataFrame):
 
                     if act.get("examples"):
                         st.write("Voorbeelden (max 5):")
-                        st.dataframe(pd.DataFrame(act["examples"]))
+                        st.dataframe(pd.DataFrame(act["examples"]), width='stretch')
                     st.markdown("---")
             except Exception as e:
                 st.error(f"Schema inspectie mislukt: {e}")

@@ -176,7 +176,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     
     st.dataframe(
         styled,
-        use_container_width=True,
+        width='stretch',
         height=max(400, 35 * len(display_df) + 100)
     )
 
@@ -232,7 +232,7 @@ def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
             st.dataframe(
                 recent_matches[cols_to_show],
                 hide_index=True,
-                use_container_width=True
+                width='stretch'
             )
     else:
         st.warning("Geen actief Controlejaar gevonden voor de huidige datum.")
@@ -245,7 +245,7 @@ def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
             if 'eind_datum' in seasons_df.columns: cols_to_show.append('eind_datum')
             elif 'einddatum' in seasons_df.columns: cols_to_show.append('einddatum')
             
-            st.dataframe(seasons_df[cols_to_show])
+            st.dataframe(seasons_df[cols_to_show], width='stretch')
 
 def show_elo_history_selector(players_df, matches_df=None):
     """Toon speler selectie voor ELO geschiedenis."""
@@ -258,6 +258,6 @@ def show_elo_history_selector(players_df, matches_df=None):
         if history_df is not None and not history_df.empty:
             history_df = history_df.sort_values('timestamp')
             history_df['Match #'] = range(1, len(history_df) + 1)
-            st.line_chart(history_df, x='Match #', y='rating')
+            st.line_chart(history_df, x='Match #', y='rating', width='stretch')
         else:
             st.caption(f"Geen geschiedenis gevonden voor {selected_player}")

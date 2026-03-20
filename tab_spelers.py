@@ -77,7 +77,7 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
                     markers=True
                 )
                 fig.update_layout(xaxis_title="Datum", yaxis_title="ELO Rating")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.info(f"Geen ELO-historie gevonden voor {selected_player} in het huidige seizoen.")
         else:
@@ -96,7 +96,7 @@ def render_player_list_and_management(players_df):
     st.write("**Geregistreerde spelers:**")
     display_df = players_df[['speler_naam', 'rating']].sort_values('speler_naam').copy()
     display_df.columns = ['Naam', 'Huidige ELO']
-    st.dataframe(display_df, hide_index=True, use_container_width=True)
+    st.dataframe(display_df, hide_index=True, width='stretch')
 
     col_add, col_del = st.columns(2)
     

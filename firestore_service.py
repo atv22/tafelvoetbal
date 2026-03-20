@@ -269,15 +269,18 @@ def get_beheer_log():
     """Haalt alle beheer-log entries op uit Firestore."""
     try:
         beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        df = pd.DataFrame([doc.to_dict() for doc in beheer_docs])
+        log_list = [doc.to_dict() for doc in beheer_docs]
+        if not log_list:
+            return _read_gsheet_fallback("Beheer_Log")
+        
+        df = pd.DataFrame(log_list)
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
         set_offline_mode(False)
         return df
     except Exception:
-        set_offline_mode(True)
-        return pd.DataFrame()
+        return _read_gsheet_fallback("Beheer_Log")
 
 @handle_firestore_exceptions
 @st.cache_data

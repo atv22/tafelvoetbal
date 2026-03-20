@@ -58,7 +58,8 @@ def sync_to_sheets():
         ("Spelers", db_service.get_players),
         ("Wedstrijden", db_service.get_matches),
         ("ELO_Logs", db_service.get_elo_logs),
-        ("Verzoeken", db_service.get_requests)
+        ("Verzoeken", db_service.get_requests),
+        ("Beheer_Log", db_service.get_beheer_log)
     ]
 
     for sheet_name, fetch_func in mappings:
