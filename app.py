@@ -58,8 +58,24 @@ with st.sidebar:
 players_df, matches_df, seasons_df, elo_df = load_all_data(CACHE_VERSION)
 
 # --- Diagnostics ---
+import sys
+import os
+
 if (players_df is None or players_df.empty) and (matches_df is None or matches_df.empty):
     st.warning("⚠️ Geen data kunnen laden uit Firestore of Google Sheets.")
+    
+    # Environment Debugging
+    with st.expander("🔍 Omgevingsdetails (Debug)"):
+        st.write(f"Python Executable: `{sys.executable}`")
+        st.write(f"Huidige map: `{os.getcwd()}`")
+        try:
+            import gspread
+            st.success("✅ `gspread` is succesvol geïmporteerd via debug check.")
+        except ImportError as e:
+            st.error(f"❌ `gspread` import mislukt in debug check: `{e}`")
+            st.write("Zoekpaden (sys.path):")
+            st.json(sys.path)
+
     if hasattr(db, 'is_offline') and db.is_offline():
         st.info("De app staat momenteel in OFFLINE modus.")
         fallback_error = db.get_last_fallback_error()
