@@ -151,7 +151,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
 
     # Ranglijsten
     player_stats = create_all_time_leaderboards(filtered_matches)
-    show_all_time_leaderboards(player_stats)
+    show_all_time_leaderboards(player_stats, elo_df=elo_df)
 
     # Visualisaties
     st.subheader("📈 Visualisaties")

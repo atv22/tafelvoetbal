@@ -278,7 +278,7 @@ def create_all_time_leaderboards(all_matches):
     return get_vectorized_player_stats(all_matches)
 
 
-def show_all_time_leaderboards(player_stats_df):
+def show_all_time_leaderboards(player_stats_df, elo_df=None):
     """Toon alle ranglijsten met geoptimaliseerde DataFrame operations"""
     st.subheader("🏆 Ranglijsten")
 
@@ -293,24 +293,37 @@ def show_all_time_leaderboards(player_stats_df):
         top5 = top5.reset_index().rename(columns={'index': '#', sort_col: display_name})
         if format_str:
             top5[display_name] = top5[display_name].map(lambda x: format_str.format(x))
+        else:
+            # Als het een getal is, rond af op 0 decimalen voor schone weergave
+            if pd.api.types.is_numeric_dtype(top5[display_name]):
+                top5[display_name] = top5[display_name].round(0).astype(int)
         return top5[['#', 'Speler', display_name]]
 
-    # ELO toevoegen indien aanwezig (uit globale players_df of laatst bekende uit elo_df)
-    # Voor nu gebruiken we de kolommen die we hebben. 
-    # NB: player_stats_df in analytics komt uit get_vectorized_player_stats, die heeft nog geen ELO.
-    # We halen de ELO uit de firestore spelerslijst voor de meest actuele stand.
-    from firestore_service import get_players
-    p_df = get_players()
-    if not p_df.empty:
-        elo_map = dict(zip(p_df['speler_naam'], p_df['rating']))
-        player_stats_df['ELO'] = player_stats_df['Speler'].map(lambda x: elo_map.get(x, 1000))
+    # ELO toevoegen: Gebruik Peak ELO uit elo_df indien beschikbaar, anders huidige stand
+    if elo_df is not None and not elo_df.empty:
+        # Filter 'Niemand' spelers uit
+        niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
+        df_clean = elo_df[~elo_df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
+        
+        # Pak de maximale rating per speler die voorkomt in de huidige player_stats_df
+        peak_elos = df_clean.groupby('speler_naam')['rating'].max().to_dict()
+        player_stats_df['ELO'] = player_stats_df['Speler'].map(lambda x: peak_elos.get(x, 1000))
+        elo_label = "Peak ELO"
     else:
-        player_stats_df['ELO'] = 1000
+        # Fallback naar huidige stand
+        from firestore_service import get_players
+        p_df = get_players()
+        if not p_df.empty:
+            elo_map = dict(zip(p_df['speler_naam'], p_df['rating']))
+            player_stats_df['ELO'] = player_stats_df['Speler'].map(lambda x: elo_map.get(x, 1000))
+        else:
+            player_stats_df['ELO'] = 1000
+        elo_label = "ELO"
 
     # Gefilterde ranglijsten (min 3 matches)
     f3 = player_stats_df[player_stats_df['Matches'] >= 3]
     
-    df_elo = get_top_5(f3, 'ELO', 'ELO')
+    df_elo = get_top_5(f3, 'ELO', elo_label)
     df_scorers = get_top_5(f3, 'Goals', 'Goals')
     df_active = get_top_5(f3, 'Matches', 'Wedstrijden')
     df_wins = get_top_5(f3, 'Wins', 'Overwinningen')
@@ -327,7 +340,7 @@ def show_all_time_leaderboards(player_stats_df):
     row2 = st.columns(4)
     
     tables_r1 = [
-        (row1[0], "🥇 Top 5 ELO (min. 3)", df_elo),
+        (row1[0], f"🥇 Top 5 {elo_label} (min. 3)", df_elo),
         (row1[1], "🥅 Top 5 Topscorers (min. 3)", df_scorers),
         (row1[2], "⚽ Top 5 Meest Actief (min. 3)", df_active),
         (row1[3], "🏅 Top 5 Overwinningen (min. 3)", df_wins)
