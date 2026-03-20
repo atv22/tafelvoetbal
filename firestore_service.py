@@ -5,7 +5,6 @@ import google.cloud.firestore
 from google.oauth2 import service_account
 import json
 import pandas as pd
-import gspread
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
@@ -71,6 +70,7 @@ def get_google_creds(scopes=None):
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
     try:
+        import gspread
         creds = get_google_creds(scopes=GS_SCOPES)
         if not creds:
             print(f"[GSHEET FALLBACK] Geen credentials gevonden voor {sheet_name}")
