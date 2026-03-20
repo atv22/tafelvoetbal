@@ -29,7 +29,7 @@ st.caption("Versie 2.5")
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "2.0" 
+CACHE_VERSION = "2.1" 
 
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
 def load_all_data(version):
@@ -56,6 +56,14 @@ with st.sidebar:
 
 # --- Initialize data ---
 players_df, matches_df, seasons_df, elo_df = load_all_data(CACHE_VERSION)
+
+# --- Diagnostics ---
+if (players_df is None or players_df.empty) and (matches_df is None or matches_df.empty):
+    st.warning("⚠️ Geen data kunnen laden uit Firestore of Google Sheets.")
+    if hasattr(db, 'is_offline') and db.is_offline():
+        st.info("De app staat momenteel in OFFLINE modus. Controleer of de Google Sheet data bevat en of de API-rechten goed staan.")
+    else:
+        st.info("De app denkt dat Firestore ONLINE is, maar krijgt geen records terug. Controleer de database-verbinding.")
 
 # --- Timing (server logs) ---
 app_start = time.perf_counter()
