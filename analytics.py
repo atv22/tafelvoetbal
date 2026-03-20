@@ -88,44 +88,21 @@ def get_vectorized_player_stats(matches_df):
 @st.cache_data
 def get_absolute_top3_elo(elo_df):
     """
-    Bepaal de top 3 spelers met de hoogste seizoens-eindstand ooit.
+    Bepaal de top 3 spelers met de hoogste ELO ooit bereikt op enig moment.
     """
     if elo_df is None or elo_df.empty:
         return []
     
-    # We hebben de seizoensgrenzen nodig om eindstanden te bepalen
-    from firestore_service import get_seasons
-    seasons = get_seasons()
-    if seasons.empty:
-        return []
-        
+    # Filter 'Niemand' spelers uit voor de zekerheid
     df = elo_df.copy()
-    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)
+    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
+    df = df[~df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
     
-    season_winners = []
-    for _, s in seasons.iterrows():
-        start = pd.to_datetime(s['start_datum']).replace(tzinfo=None)
-        end = pd.to_datetime(s['eind_datum']).replace(tzinfo=None)
-        
-        # Filter ELO logs voor dit seizoen
-        mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
-        season_elo = df[mask]
-        
-        if not season_elo.empty:
-            # Pak de LAATSTE rating per speler IN dit seizoen
-            last_elo = season_elo.sort_values('timestamp').groupby('speler_naam').last().reset_index()
-            # De nummer 1 van dit seizoen
-            top_player = last_elo.sort_values('rating', ascending=False).iloc[0]
-            season_winners.append((top_player['speler_naam'], top_player['rating']))
-            
-    if not season_winners:
-        return []
-        
-    # Maak een lijst van unieke winnaars met hun hoogste winnende score
-    winners_df = pd.DataFrame(season_winners, columns=['speler_naam', 'rating'])
-    abs_top = winners_df.sort_values('rating', ascending=False).drop_duplicates('speler_naam').head(3)
+    # Pak de maximale rating per speler over de hele historie
+    peak_elos = df.groupby('speler_naam')['rating'].max().reset_index()
+    top3 = peak_elos.sort_values('rating', ascending=False).head(3)
     
-    return list(zip(abs_top['speler_naam'], abs_top['rating']))
+    return list(zip(top3['speler_naam'], top3['rating']))
 
 
 @st.cache_data

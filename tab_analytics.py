@@ -21,13 +21,22 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     if elo_df is None:
         elo_df = get_elo_logs()
 
-    # 1. Toon seizoenen tabel direct bovenaan
+    # --- 1. All-time Recordhouders (Prominent bovenaan) ---
+    st.subheader("🏆 All-time Recordhouders")
+    abs_top3 = get_absolute_top3_elo(elo_df)
+    if abs_top3:
+        cols = st.columns(len(abs_top3))
+        for i, (naam, elo) in enumerate(abs_top3):
+            with cols[i]:
+                st.metric(f"Recordhouder {i+1} (Peak ELO)", naam, f"{int(elo)} pts")
+    st.divider()
+
+    # --- 2. Seizoenen overzicht ---
     if not seasons_df.empty:
         st.subheader("Seizoenen overzicht")
         
         # Voorbereiden extra metrics (Vectorized)
         all_matches_proc = matches_df.copy()
-        # Gebruik utc=True bij pd.to_datetime om FutureWarning te voorkomen
         all_matches_proc['timestamp'] = pd.to_datetime(all_matches_proc['timestamp'], utc=True)
         all_matches_proc['ts_naive'] = all_matches_proc['timestamp'].dt.tz_localize(None)
         
@@ -64,36 +73,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             })
             
         metrics_df = pd.DataFrame(extra_metrics)
-        seasons_display = pd.concat([seasons_display.reset_index(drop=True), metrics_df], axis=1)
+        seasons_final = pd.concat([seasons_display.reset_index(drop=True), metrics_df], axis=1)
         
-        # Voeg TOTAAL regel toe
-        total_matches = int(seasons_display['aantal_wedstrijden'].sum())
-        total_goals_all = int(seasons_display['Totaal goals'].sum())
-        
-        # Unieke spelers over alle seizoenen
-        p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
-        existing_p_cols = [c for c in p_cols if c in matches_df.columns]
-        u_players_all = pd.unique(matches_df[existing_p_cols].values.ravel())
-        u_players_all_count = len([p for p in u_players_all if p and not pd.isna(p)])
-
-        # Absolute winnaars (Hoogste ELO ooit bereikt)
-        abs_top3 = get_absolute_top3_elo(elo_df)
-        aw = f"{abs_top3[0][0]} ({int(abs_top3[0][1])})" if len(abs_top3) > 0 else "-"
-        a2 = f"{abs_top3[1][0]} ({int(abs_top3[1][1])})" if len(abs_top3) > 1 else "-"
-        a3 = f"{abs_top3[2][0]} ({int(abs_top3[2][1])})" if len(abs_top3) > 2 else "-"
-
-        total_row = pd.DataFrame([{
-            'seizoen_naam': 'TOTAAL (Alle seizoenen)',
-            'start_datum': all_matches_proc['timestamp'].min(),
-            'eind_datum': all_matches_proc['timestamp'].max(),
-            'aantal_wedstrijden': total_matches,
-            'Totaal goals': total_goals_all,
-            'Unieke spelers': u_players_all_count,
-            'Winnaar': aw, '2e plaats': a2, '3e plaats': a3
-        }])
-        
-        seasons_final = pd.concat([seasons_display, total_row], ignore_index=True)
-
         # Formattering van datums
         for col in ['startdatum', 'einddatum', 'start_datum', 'eind_datum']:
             if col in seasons_final.columns:
@@ -116,7 +97,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
 
     st.divider()
 
-    # 2. Seizoenselectie: filtert de rest van de pagina
+    # --- 3. Seizoenselectie: filtert de rest van de pagina ---
     season_options = ["Alle seizoenen"]
     if not seasons_df.empty:
         for _, row in seasons_df.iterrows():
@@ -125,9 +106,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
         
     selected = st.selectbox("Selecteer periode voor onderstaande analyses:", season_options, index=0)
 
-    # 3. Filter data op basis van selectie
+    # Filter data
     filtered_matches = matches_df.copy()
-    
     if selected != "Alle seizoenen" and not seasons_df.empty:
         season_row = None
         for _, row in seasons_df.iterrows():
@@ -141,29 +121,24 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             end_col = 'eind_datum' if 'eind_datum' in season_row else 'einddatum'
             season_start = pd.to_datetime(season_row[start_col], utc=True)
             season_end = pd.to_datetime(season_row[end_col], utc=True)
-            
-            # Normaliseer
             season_start = normalize_timestamp_series(pd.Series([season_start])).iloc[0]
             season_end = normalize_timestamp_series(pd.Series([season_end])).iloc[0]
-            
             ts = filtered_matches['timestamp']
             if hasattr(ts.dt, 'tz') and ts.dt.tz is not None:
                 filtered_matches['timestamp'] = normalize_timestamp_series(ts)
-            
             filtered_matches = filtered_matches[(filtered_matches['timestamp'] >= season_start) & (filtered_matches['timestamp'] <= season_end)]
 
-    # 4. Toon analyses op basis van GEFILTERDE data
+    # --- 4. Analyse resultaten ---
     st.subheader(f"📊 Analyse resultaten: {selected}")
     
     if filtered_matches.empty:
-        st.info("Geen wedstrijden gevonden for de geselecteerde periode.")
+        st.info("Geen wedstrijden gevonden voor de geselecteerde periode.")
         return
 
-    # Statistieken samenvatting (Metrics)
+    # Metrics
     total_m = len(filtered_matches)
     total_g = int(filtered_matches['thuis_score'].sum() + filtered_matches['uit_score'].sum())
     avg_g = total_g / total_m if total_m > 0 else 0
-    
     p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
     existing_p_cols = [c for c in p_cols if c in filtered_matches.columns]
     u_players = len([p for p in pd.unique(filtered_matches[existing_p_cols].values.ravel()) if p and not pd.isna(p)])
@@ -174,28 +149,20 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     m3.metric("Gem. Goals", f"{avg_g:.1f}")
     m4.metric("Spelers", u_players)
 
-    # Ranglijsten (Gefilterd)
+    # Ranglijsten
     player_stats = create_all_time_leaderboards(filtered_matches)
     show_all_time_leaderboards(player_stats)
 
-    # Visualisaties (Gefilterd)
+    # Visualisaties
     st.subheader("📈 Visualisaties")
-    
-    # Scatter plot bovenaan
     show_activity_vs_winrate_scatter(filtered_matches, key_suffix=f"filtered_{selected}")
     
-    # 2x2 Layout voor overige grafieken
     r1 = st.columns(2)
     r2 = st.columns(2)
-    
-    with r1[0]:
-        show_goals_bar_chart_season(filtered_matches)
-    with r1[1]:
-        show_unique_players_bar_chart(filtered_matches)
-    with r2[0]:
-        show_winrate_bar_chart(filtered_matches)
+    with r1[0]: show_goals_bar_chart_season(filtered_matches)
+    with r1[1]: show_unique_players_bar_chart(filtered_matches)
+    with r2[0]: show_winrate_bar_chart(filtered_matches)
     with r2[1]:
-        # Klinkers chart (Vectorized)
         stats = get_vectorized_player_stats(filtered_matches)
         if stats is not None and not stats.empty and stats['Klinkers'].sum() > 0:
             import plotly.express as px
@@ -203,10 +170,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             fig_k = px.bar(k_df, x='Speler', y='Klinkers', title="Top 10 Klinkers", color='Klinkers', color_continuous_scale='OrRd')
             st.plotly_chart(fig_k, width='stretch', key=f"k_chart_filtered_{selected}")
 
-    # Timeline grafiek onderaan
     show_timeline_chart(filtered_matches)
 
-    # Cross-seizoen trend (alleen tonen bij 'Alle seizoenen')
     if selected == "Alle seizoenen":
         st.divider()
         show_cross_season_charts(matches_df, seasons_df)
