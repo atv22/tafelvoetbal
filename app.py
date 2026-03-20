@@ -39,6 +39,10 @@ def load_all_data(version):
         st.session_state.cache_version = version
         
     load_start = time.perf_counter()
+    
+    # Voer reconciliatie uit (sync GSheet <-> Firestore)
+    db.reconcile_data_sources()
+    
     p = db.get_players()
     m = db.get_matches()
     s = db.get_seasons()
@@ -76,7 +80,7 @@ app_start = time.perf_counter()
 # --- Offline alert ---
 if hasattr(db, 'is_offline') and db.is_offline():
     st.error("⚠️ De database is momenteel offline (waarschijnlijk door het overschrijden van de dagelijkse quota).")
-    st.info(f"📊 **Backup beschikbaar:** De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is tijdelijk beperkt.")
+    st.info(f"📊 De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is nog steed mogelijk.")
 
 # --- Tab navigatie ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([

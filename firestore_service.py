@@ -5,6 +5,8 @@ import google.cloud.firestore
 from google.oauth2 import service_account
 import json
 import pandas as pd
+import uuid
+from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
@@ -119,12 +121,94 @@ def _read_gsheet_fallback(sheet_name):
 
             print(f"[GSHEET FALLBACK] Succesvol {len(df)} rijen gelezen uit tab '{sheet_name}'")
             set_offline_mode(True)
-            LAST_FALLBACK_ERROR = None # Reset error bij succes
+            LAST_FALLBACK_ERROR = None
         return df
     except Exception as e:
         LAST_FALLBACK_ERROR = str(e)
         print(f"[GSHEET FALLBACK] Fout bij lezen van {sheet_name}: {e}")
         return pd.DataFrame()
+
+def _write_gsheet_record(sheet_name, data_dict):
+    """Schrijft een record naar Google Sheets als Firestore offline is of voor sync."""
+    try:
+        import gspread
+        creds = get_google_creds(scopes=GS_SCOPES)
+        if not creds: return False
+        
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(SHEET_ID)
+        worksheet = sh.worksheet(sheet_name)
+        
+        # Haal headers op om kolomvolgorde te bepalen
+        headers = worksheet.row_values(1)
+        row = []
+        for h in headers:
+            val = data_dict.get(h, "")
+            if isinstance(val, (pd.Timestamp, datetime)):
+                val = val.strftime('%Y-%m-%d %H:%M:%S')
+            row.append(val)
+        
+        worksheet.append_row(row)
+        return True
+    except Exception as e:
+        print(f"[GSHEET WRITE] Fout bij schrijven naar {sheet_name}: {e}")
+        return False
+
+def reconcile_data_sources():
+    """Synchroniseert data tussen Firestore en Google Sheets."""
+    print("[SYNC] Start synchronisatie check...")
+    try:
+        # Check of we in een sessie zitten die al gesynced heeft
+        if st.session_state.get('last_sync_success'):
+            # Maximaal eens per 15 minuten syncen om snelheid te behouden
+            if (datetime.now() - st.session_state.last_sync_success).total_seconds() < 900:
+                return
+
+        # Haal match IDs op uit Firestore
+        try:
+            fs_matches = list(matches_ref.select(['match_id']).stream())
+            fs_ids = {doc.to_dict().get('match_id') for doc in fs_matches if doc.to_dict().get('match_id')}
+        except Exception:
+            print("[SYNC] Firestore niet bereikbaar voor sync.")
+            return
+
+        # Haal matches uit GSheet (zonder cache voor sync)
+        gs_df = _read_gsheet_fallback.__wrapped__("Wedstrijden") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("Wedstrijden")
+        if gs_df.empty:
+            gs_ids = set()
+        else:
+            gs_ids = set(gs_df['match_id'].dropna().unique())
+
+        # 1. GSheet -> Firestore (Recovery)
+        missing_in_fs = gs_ids - fs_ids
+        if missing_in_fs:
+            print(f"[SYNC] {len(missing_in_fs)} nieuwe wedstrijden gevonden in GSheet. Herstellen naar Firestore...")
+            for mid in missing_in_fs:
+                match_row = gs_df[gs_df['match_id'] == mid].iloc[0].to_dict()
+                matches_ref.document(mid).set(match_row)
+                # ELO logs ook syncen
+                elo_gs = _read_gsheet_fallback.__wrapped__("ELO_Logs") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("ELO_Logs")
+                match_elos = elo_gs[elo_gs['match_id'] == mid]
+                for _, erow in match_elos.iterrows():
+                    elo_ref.document().set(erow.to_dict())
+            print(f"[SYNC] {len(missing_in_fs)} wedstrijden hersteld.")
+
+        # 2. Firestore -> GSheet (Backup)
+        missing_in_gs = fs_ids - gs_ids
+        if missing_in_gs:
+            print(f"[SYNC] {len(missing_in_gs)} nieuwe wedstrijden in Firestore. Updaten naar GSheet backup...")
+            for mid in missing_in_gs:
+                mdata = matches_ref.document(mid).get().to_dict()
+                _write_gsheet_record("Wedstrijden", mdata)
+                elos = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
+                for edoc in elos:
+                    _write_gsheet_record("ELO_Logs", edoc.to_dict())
+            print(f"[SYNC] Backup bijgewerkt.")
+
+        st.session_state.last_sync_success = datetime.now()
+        print("[SYNC] Synchronisatie voltooid.")
+    except Exception as e:
+        print(f"[SYNC] Fout tijdens reconciliatie: {e}")
 
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches():
@@ -352,22 +436,31 @@ def add_player(name, start_elo):
         batch.commit()
         clear_all_caches()
         return "Success"
-    except Exception as e:
-        return f"Error: {e}"
+    except Exception:
+        # Fallback naar GSheet
+        res = _write_gsheet_record("Spelers", {'speler_naam': name, 'rating': start_elo, 'speler_id': f"OFFLINE_{uuid.uuid4().hex[:8]}"})
+        if res:
+            clear_all_caches()
+            return "Success"
+        return "Error: Database offline en GSheet schrijven mislukt."
 
 def add_request(text):
     try:
         requests_ref.add({'Verzoek': text, 'Timestamp': SERVER_TIMESTAMP})
         clear_all_caches()
         return "Success"
-    except Exception as e:
-        return f"Error: {e}"
+    except Exception:
+        res = _write_gsheet_record("Verzoeken", {'Verzoek': text, 'Timestamp': pd.Timestamp.now()})
+        if res:
+            clear_all_caches()
+            return "Success"
+        return "Error: Database offline en GSheet schrijven mislukt."
 
 @handle_firestore_exceptions
 def add_match_and_update_elo(match_data, elo_updates):
-    batch = db.batch()
+    ts = match_data.get('timestamp') or pd.Timestamp.now()
     try:
-        ts = match_data.get('timestamp') or pd.Timestamp.now()
+        batch = db.batch()
         new_match_ref = matches_ref.document()
         match_id = new_match_ref.id
         batch.set(new_match_ref, {**match_data, 'timestamp': ts, 'match_id': match_id})
@@ -380,8 +473,16 @@ def add_match_and_update_elo(match_data, elo_updates):
         batch.commit()
         clear_all_caches()
         return True
-    except Exception as e:
-        print(f"Batch error: {e}")
+    except Exception:
+        # Fallback naar GSheet
+        match_id = f"OFFLINE_{uuid.uuid4().hex[:10]}"
+        m_success = _write_gsheet_record("Wedstrijden", {**match_data, 'timestamp': ts, 'match_id': match_id})
+        if m_success:
+            for naam, elo in elo_updates:
+                _write_gsheet_record("ELO_Logs", {'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id})
+                # Optioneel: Update Spelers sheet (is traag dus beperken we tot essentie)
+            clear_all_caches()
+            return True
         return False
 
 # Beheer functies
