@@ -5,7 +5,6 @@ import google.cloud.firestore
 from google.oauth2 import service_account
 import json
 import pandas as pd
-import gspread
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
