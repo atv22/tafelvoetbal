@@ -14,6 +14,11 @@ from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
 GS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
+# Seizoen Configuratie
+SEASON_TRANSITION_MONTH = 3
+SEASON_TRANSITION_DAY = 15
+PRINSJESDAG_OFFSET_DAYS = 14 # Prinsjesdag is 3e dinsdag van september (7 + 14 = 21 max)
+
 class FirestoreUnavailable(Exception):
     def __init__(self, message, details=None):
         super().__init__(message)
@@ -287,12 +292,26 @@ def reconcile_data_sources():
         print(f"[SYNC] Fout tijdens synchronisatie: {e}")
 
 # --- HULPFUNCTIE: Cache volledig legen ---
-def clear_all_caches():
-    """Leeg alle relevante Streamlit caches na mutaties."""
+def clear_all_caches(only_players=False, only_matches=False, only_elo=False, only_requests=False):
+    """Leeg specifieke of alle Streamlit caches na mutaties."""
     try:
-        st.cache_data.clear()
-    except Exception:
-        pass
+        if only_players:
+            get_players.clear()
+        elif only_matches:
+            get_matches.clear()
+            get_seasons.clear()
+        elif only_elo:
+            get_players.clear()
+            get_elo_logs.clear()
+            get_elo_history.clear()
+        elif only_requests:
+            get_requests.clear()
+        else:
+            st.cache_data.clear()
+    except Exception as e:
+        print(f"Fout bij cache invalidatie: {e}")
+        try: st.cache_data.clear()
+        except: pass
 
 # --- HULPFUNCTIE: Timestamp normalisatie ---
 def normalize_timestamp_series(ts_series):
@@ -481,10 +500,10 @@ def get_seasons():
     def get_prinsjesdag(year):
         sept = date(year, 9, 1)
         first_tue = sept + timedelta(days=(1 - sept.weekday()) % 7)
-        return datetime.combine(first_tue + timedelta(days=14), datetime.min.time())
+        return datetime.combine(first_tue + timedelta(days=PRINSJESDAG_OFFSET_DAYS), datetime.min.time())
 
     def get_march15(year):
-        return datetime(year, 3, 15)
+        return datetime(year, SEASON_TRANSITION_MONTH, SEASON_TRANSITION_DAY)
 
     min_year = int(matches_df['timestamp'].dt.year.min())
     max_year = int(matches_df['timestamp'].dt.year.max())
@@ -510,24 +529,24 @@ def add_player(name, start_elo):
         batch.set(players_ref.document(), {'speler_naam': name, 'rating': start_elo})
         batch.set(elo_ref.document(), {'speler_naam': name, 'rating': start_elo, 'timestamp': SERVER_TIMESTAMP})
         batch.commit()
-        clear_all_caches()
+        clear_all_caches(only_players=True)
         return "Success"
     except Exception:
         res = _write_gsheet_record("Spelers", {'speler_naam': name, 'rating': start_elo, 'speler_id': f"OFFLINE_{uuid.uuid4().hex[:8]}"})
         if res:
-            clear_all_caches()
+            clear_all_caches(only_players=True)
             return "Success"
         return "Error: Database offline en GSheet schrijven mislukt."
 
 def add_request(text):
     try:
         requests_ref.add({'Verzoek': text, 'Timestamp': SERVER_TIMESTAMP})
-        clear_all_caches()
+        clear_all_caches(only_requests=True)
         return "Success"
     except Exception:
         res = _write_gsheet_record("Verzoeken", {'Verzoek': text, 'Timestamp': pd.Timestamp.now()})
         if res:
-            clear_all_caches()
+            clear_all_caches(only_requests=True)
             return "Success"
         return "Error: Database offline en GSheet schrijven mislukt."
 
@@ -546,7 +565,7 @@ def add_match_and_update_elo(match_data, elo_updates):
             if p_docs: batch.update(p_docs[0].reference, {'rating': elo})
 
         batch.commit()
-        clear_all_caches()
+        clear_all_caches(only_matches=True, only_elo=True)
         return True
     except Exception:
         match_id = f"OFFLINE_{uuid.uuid4().hex[:10]}"
@@ -554,7 +573,7 @@ def add_match_and_update_elo(match_data, elo_updates):
         if m_success:
             elo_records = [{'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id} for naam, elo in elo_updates]
             _write_gsheet_records("ELO_Logs", elo_records)
-            clear_all_caches()
+            clear_all_caches(only_matches=True, only_elo=True)
             return True
         return False
 
@@ -573,7 +592,7 @@ def delete_match_by_id(mid):
         _delete_gsheet_record("Wedstrijden", "match_id", mid)
         _delete_gsheet_record("ELO_Logs", "match_id", mid)
         
-        clear_all_caches()
+        clear_all_caches(only_matches=True, only_elo=True)
         return True
     except: return False
 
@@ -588,7 +607,7 @@ def update_match(mid, data):
             _delete_gsheet_record("Wedstrijden", "match_id", mid)
             _write_gsheet_record("Wedstrijden", {**doc.to_dict(), 'match_id': mid})
             
-        clear_all_caches()
+        clear_all_caches(only_matches=True)
         return True
     except: return False
 
@@ -612,7 +631,7 @@ def delete_player_by_id(player_id):
         if player_name:
             _delete_gsheet_record("ELO_Logs", "speler_naam", player_name)
             
-        clear_all_caches()
+        clear_all_caches(only_players=True, only_elo=True)
         return True
     except Exception as e:
         print(f"Fout bij verwijderen: {e}")
@@ -657,7 +676,7 @@ def recalculate_elos_for_season(start_date, end_date):
                     batch = db.batch()
                     c = 0
         if c > 0: batch.commit()
-        clear_all_caches()
+        clear_all_caches(only_elo=True)
         return True
     except Exception as e:
         print(f"Recalc error: {e}")
@@ -674,6 +693,6 @@ def delete_match_with_elo_recalculation(match_id):
         s_row = seasons[(seasons['start_datum'] <= ts) & (seasons['eind_datum'] >= ts)]
         if not s_row.empty:
             recalculate_elos_for_season(s_row.iloc[0]['start_datum'], s_row.iloc[0]['eind_datum'])
-        clear_all_caches()
+        clear_all_caches(only_matches=True, only_elo=True)
         return True
     except: return False
