@@ -501,15 +501,11 @@ def get_elo_history(_ttl, speler_naam):
         set_offline_mode(True)
         return pd.DataFrame()
 
-@handle_firestore_exceptions
 @st.cache_data
 def get_seasons():
-    """Bepaalt seizoenen automatisch op basis van de data."""
-    matches_df = get_matches()
-    if matches_df.empty or 'timestamp' not in matches_df.columns:
-        return pd.DataFrame()
-
+    """Bepaalt seizoenen automatisch op basis van vaste datums, zonder data te laden."""
     from datetime import date, timedelta, datetime
+
     def get_prinsjesdag(year):
         sept = date(year, 9, 1)
         first_tue = sept + timedelta(days=(1 - sept.weekday()) % 7)
@@ -518,19 +514,19 @@ def get_seasons():
     def get_march15(year):
         return datetime(year, SEASON_TRANSITION_MONTH, SEASON_TRANSITION_DAY)
 
-    min_year = int(matches_df['timestamp'].dt.year.min())
-    max_year = int(matches_df['timestamp'].dt.year.max())
+    # Vaste jaren om te voorkomen dat de hele match historie geladen moet worden
+    min_year = 2022 
+    max_year = datetime.now().year + 1
 
     seizoenen = []
-    for y in range(min_year - 1, max_year + 2):
+    for y in range(min_year, max_year + 1):
         s1, e1 = get_march15(y), get_prinsjesdag(y) - timedelta(seconds=1)
-        m1 = (matches_df['timestamp'] >= s1) & (matches_df['timestamp'] <= e1)
-        seizoenen.append({'seizoen_naam': f"CJ {y} Zomer", 'start_datum': s1, 'eind_datum': e1, 'aantal_wedstrijden': int(m1.sum())})
+        seizoenen.append({'seizoen_naam': f"CJ {y} Zomer", 'start_datum': s1, 'eind_datum': e1, 'aantal_wedstrijden': 0})
+        
         s2, e2 = get_prinsjesdag(y), get_march15(y+1) - timedelta(seconds=1)
-        m2 = (matches_df['timestamp'] >= s2) & (matches_df['timestamp'] <= e2)
-        seizoenen.append({'seizoen_naam': f"CJ {y} Winter", 'start_datum': s2, 'eind_datum': e2, 'aantal_wedstrijden': int(m2.sum())})
+        seizoenen.append({'seizoen_naam': f"CJ {y} Winter", 'start_datum': s2, 'eind_datum': e2, 'aantal_wedstrijden': 0})
 
-    df_s = pd.DataFrame([s for s in seizoenen if s['aantal_wedstrijden'] > 0 or (s['start_datum'] <= datetime.now() <= s['eind_datum'])])
+    df_s = pd.DataFrame([s for s in seizoenen if s['start_datum'] <= datetime.now()])
     return df_s.sort_values('start_datum').reset_index(drop=True)
 
 # DATA SCHRIJFFUNCTIES

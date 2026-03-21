@@ -2,14 +2,13 @@ import streamlit as st
 import firestore_service as db
 from utils.utils import get_download_filename
 
-def render_data_tab():
+def render_data_tab(matches_df, df_elo, df_players, df_beheer_log, df_requests):
     st.header("📊 Ruwe Data uit Firestore")
 
 
     try:
         # --- Uitslagen (Wedstrijden) ---
         st.subheader("🏆 Uitslagen (Wedstrijden)")
-        matches_df = db.get_matches()
         if not matches_df.empty:
             st.download_button(
                 label="💾 Download Uitslagen",
@@ -24,7 +23,6 @@ def render_data_tab():
 
         # --- ELO Geschiedenis ---
         st.subheader("⚡ ELO Geschiedenis")
-        df_elo = db.get_elo_logs()
         if not df_elo.empty:
             st.download_button(
                 label="💾 Download ELO Geschiedenis",
@@ -39,7 +37,6 @@ def render_data_tab():
 
         # --- Spelers ---
         st.subheader("👤 Spelers")
-        df_players = db.get_players()
         if not df_players.empty:
             st.download_button(
                 label="💾 Download Spelers",
@@ -54,7 +51,6 @@ def render_data_tab():
 
         # --- Beheer Logging ---
         st.subheader("📝 Beheer Logging (Admin acties)")
-        df_beheer_log = db.get_beheer_log()
         if not df_beheer_log.empty:
             st.download_button(
                 label="💾 Download Beheer Logging",
@@ -69,7 +65,6 @@ def render_data_tab():
 
         # --- Verzoeken ---
         st.subheader("💬 Verzoeken (Requests)")
-        df_requests = db.get_requests()
         if not df_requests.empty:
             st.download_button(
                 label="💾 Download Verzoeken",

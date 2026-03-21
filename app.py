@@ -44,9 +44,12 @@ def load_all_data(version):
     m = db.get_matches()
     s = db.get_seasons()
     e = db.get_elo_logs()
+    b = db.get_beheer_log()
+    r = db.get_requests()
+    
     load_end = time.perf_counter()
     print(f"[TIMING] data load (v{version}): players={len(p) if p is not None else 0}, matches={len(m) if m is not None else 0}, seasons={len(s) if s is not None else 0}, elo={len(e) if e is not None else 0} in {load_end-load_start:.3f}s")
-    return p, m, s, e
+    return p, m, s, e, b, r
 
 
 
@@ -60,7 +63,7 @@ with st.sidebar:
     st.divider()
 
 # --- Initialize data ---
-players_df, matches_df, seasons_df, elo_df = load_all_data(CACHE_VERSION)
+players_df, matches_df, seasons_df, elo_df, beheer_log_df, requests_df = load_all_data(CACHE_VERSION)
 
 # --- Diagnostics ---
 if (players_df is None or players_df.empty) and (matches_df is None or matches_df.empty):
@@ -141,7 +144,7 @@ with tab5:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")
-    render_data_tab()
+    render_data_tab(matches_df, elo_df, players_df, beheer_log_df, requests_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab RUWE DATA rendered in {t1-t0:.3f}s")
 
