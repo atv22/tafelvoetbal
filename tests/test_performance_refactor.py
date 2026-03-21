@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from analytics import get_vectorized_player_stats
-from tab_home import calculate_stats
+from tabs.tab_home import calculate_stats
 
 def test_get_vectorized_player_stats_basic():
     # Setup mock data
