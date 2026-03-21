@@ -171,6 +171,41 @@ def _write_gsheet_records(sheet_name, data_dicts):
 def _write_gsheet_record(sheet_name, data_dict):
     return _write_gsheet_records(sheet_name, [data_dict])
 
+def _delete_gsheet_record(sheet_name, key_col, value):
+    """Verwijdert een record uit Google Sheets."""
+    try:
+        import gspread
+        creds = get_google_creds(scopes=GS_SCOPES)
+        if not creds: return False
+        
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(SHEET_ID)
+        
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            return True
+            
+        all_values = worksheet.get_all_values()
+        if not all_values: return True
+        
+        headers = all_values[0]
+        if key_col not in headers: return False
+        
+        idx = headers.index(key_col)
+        rows_to_keep = [all_values[0]]
+        for row in all_values[1:]:
+            if len(row) > idx and row[idx] != str(value):
+                rows_to_keep.append(row)
+        
+        if len(rows_to_keep) < len(all_values):
+            worksheet.clear()
+            worksheet.update('A1', rows_to_keep)
+        return True
+    except Exception as e:
+        print(f"[GSHEET DELETE] Fout bij verwijderen uit {sheet_name}: {e}")
+        return False
+
 def reconcile_data_sources():
     """Synchroniseert data tussen Firestore en Google Sheets op een efficiënte manier."""
     try:
@@ -531,14 +566,33 @@ def add_match_and_update_elo(match_data, elo_updates):
 # Beheer functies
 def delete_match_by_id(mid):
     try:
+        # Verwijder uit Firestore
         matches_ref.document(mid).delete()
+        # Verwijder bijbehorende ELO logs uit Firestore
+        elo_docs = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
+        batch = db.batch()
+        for doc in elo_docs: batch.delete(doc.reference)
+        batch.commit()
+        
+        # Verwijder uit GSheet Backup
+        _delete_gsheet_record("Wedstrijden", "match_id", mid)
+        _delete_gsheet_record("ELO_Logs", "match_id", mid)
+        
         clear_all_caches()
         return True
     except: return False
 
 def update_match(mid, data):
     try:
+        # Update Firestore
         matches_ref.document(mid).update(data)
+        
+        # Voor GSheet is update lastiger (delete + re-insert)
+        doc = matches_ref.document(mid).get()
+        if doc.exists:
+            _delete_gsheet_record("Wedstrijden", "match_id", mid)
+            _write_gsheet_record("Wedstrijden", {**doc.to_dict(), 'match_id': mid})
+            
         clear_all_caches()
         return True
     except: return False
@@ -550,11 +604,19 @@ def delete_player_by_id(player_id):
         player_doc = players_ref.document(player_id).get()
         if not player_doc.exists: return True
         player_name = player_doc.to_dict().get('speler_naam')
+        
+        # Firestore Deletions
         batch.delete(players_ref.document(player_id))
         if player_name:
             elo_docs = elo_ref.where(filter=FieldFilter('speler_naam', '==', player_name)).stream()
             for doc in elo_docs: batch.delete(doc.reference)
         batch.commit()
+        
+        # GSheet Deletions
+        _delete_gsheet_record("Spelers", "speler_id", player_id)
+        if player_name:
+            _delete_gsheet_record("ELO_Logs", "speler_naam", player_name)
+            
         clear_all_caches()
         return True
     except Exception as e:
