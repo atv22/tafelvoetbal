@@ -189,31 +189,6 @@ def _write_gsheet_records(sheet_name, data_dicts):
     except Exception as e:
         print(f"[GSHEET BATCH WRITE] Fout bij schrijven naar {sheet_name}: {e}")
         return False
-            worksheet = sh.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet = sh.add_worksheet(title=sheet_name, rows="100", cols="20")
-        
-        # Ensure headers exist
-        headers = worksheet.row_values(1)
-        if not headers:
-            headers = list(data_dicts[0].keys())
-            worksheet.append_row(headers)
-        
-        rows = []
-        for d in data_dicts:
-            row = []
-            for h in headers:
-                val = d.get(h, "")
-                if isinstance(val, (pd.Timestamp, datetime)):
-                    val = val.strftime('%Y-%m-%d %H:%M:%S')
-                row.append(val)
-            rows.append(row)
-        
-        worksheet.append_rows(rows)
-        return True
-    except Exception as e:
-        print(f"[GSHEET BATCH WRITE] Fout bij schrijven naar {sheet_name}: {e}")
-        return False
 
 def _write_gsheet_record(sheet_name, data_dict):
     return _write_gsheet_records(sheet_name, [data_dict])
