@@ -91,29 +91,56 @@ def _get_gsheet_workbook():
     client = _get_gsheet_client()
     if not client: return None
     try:
+        # Extra check om te voorkomen dat we de API blijven hameren bij 429
         return client.open_by_key(SHEET_ID)
     except Exception as e:
-        print(f"[GSHEET OPEN] Fout bij openen van workbook: {e}")
+        if "429" in str(e):
+            print(f"[GSHEET QUOTA] Te veel aanvragen. Wacht even met refreshen.")
+        else:
+            print(f"[GSHEET OPEN] Fout bij openen van workbook: {e}")
         return None
 
-@st.cache_data(ttl=3600) # Cache GSheet fallback voor 1 uur
+@st.cache_data(ttl=3600)
+def _fetch_all_gsheet_data():
+    """Haalt alle relevante data uit Google Sheets in één keer op (indien mogelijk per sheet)."""
+    sh = _get_gsheet_workbook()
+    if not sh: return {}
+    
+    all_data = {}
+    sheets_to_load = ["Wedstrijden", "Spelers", "ELO_Logs", "Verzoeken", "Beheer_Log"]
+    for sheet_name in sheets_to_load:
+        try:
+            worksheet = sh.worksheet(sheet_name)
+            all_data[sheet_name] = worksheet.get_all_values()
+        except Exception:
+            continue
+    return all_data
+
+@st.cache_data(ttl=300) # Kortere cache voor individuele sheets via de batch fetch
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
     global LAST_FALLBACK_ERROR
     try:
-        sh = _get_gsheet_workbook()
-        if not sh:
-            LAST_FALLBACK_ERROR = "Geen Google credentials gevonden voor GSheet fallback of sheet onbereikbaar."
-            return pd.DataFrame()
+        # Gebruik de batch fetch om API calls te minimaliseren
+        all_gs_data = _fetch_all_gsheet_data()
         
-        # Check of worksheet bestaat om spam-errors te voorkomen
-        try:
-            worksheet = sh.worksheet(sheet_name)
-        except Exception:
-            print(f"[GSHEET] Tabblad '{sheet_name}' niet gevonden.")
-            return pd.DataFrame()
-            
-        all_values = worksheet.get_all_values()
+        if not all_gs_data or sheet_name not in all_gs_data:
+            # Fallback naar directe call als batch leeg is (mocht het een andere sheet zijn)
+            if not all_gs_data:
+                sh = _get_gsheet_workbook()
+                if not sh: 
+                    LAST_FALLBACK_ERROR = "Geen Google credentials gevonden voor GSheet fallback."
+                    return pd.DataFrame()
+                try:
+                    worksheet = sh.worksheet(sheet_name)
+                    all_values = worksheet.get_all_values()
+                except:
+                    return pd.DataFrame()
+            else:
+                return pd.DataFrame()
+        else:
+            all_values = all_gs_data[sheet_name]
+
         if not all_values or len(all_values) < 1:
             return pd.DataFrame()
             
@@ -131,18 +158,19 @@ def _read_gsheet_fallback(sheet_name):
                 row = row[:len(headers)]
             data_dicts.append(dict(zip(headers, row)))
             
-        df = pd.DataFrame(data_dicts)
+        # Normalize column names to lowercase for consistency
+        df.columns = [c.lower() for c in df.columns]
         
         if not df.empty:
             numeric_cols = ['rating', 'thuis_score', 'uit_score', 
                             'klinkers_thuis_1', 'klinkers_thuis_2', 
                             'klinkers_uit_1', 'klinkers_uit_2',
-                            'Score Thuis', 'Score Uit']
+                            'score thuis', 'score uit']
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-            ts_cols = ['timestamp', 'Timestamp']
+            ts_cols = ['timestamp']
             for col in ts_cols:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce')
@@ -446,12 +474,23 @@ def get_requests():
     """Haalt verzoeken op."""
     try:
         docs = requests_ref.order_by("Timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        req_list = [doc.to_dict() for doc in docs]
+        req_list = []
+        for doc in docs:
+            d = doc.to_dict()
+            if 'Timestamp' in d:
+                d['timestamp'] = d.pop('Timestamp')
+            req_list.append(d)
+            
         if not req_list:
             return _read_gsheet_fallback("Verzoeken")
         
+        df = pd.DataFrame(req_list)
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            
         set_offline_mode(False)
-        return pd.DataFrame(req_list)
+        return df
     except Exception:
         return _read_gsheet_fallback("Verzoeken")
 
@@ -469,6 +508,11 @@ def get_beheer_log():
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        
+        # Ensure lowercase timestamp if it came in capitalized from some source
+        if not df.empty:
+            df.columns = [c.lower() for c in df.columns]
+            
         set_offline_mode(False)
         return df
     except Exception:

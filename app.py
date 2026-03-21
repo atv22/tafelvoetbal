@@ -31,9 +31,11 @@ st.caption("Versie 2.5")
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
 CACHE_VERSION = "2.1" 
 
-# Bij een nieuwe versie, leeg de cache volledig (buiten de cached functie om race-conditions te voorkomen)
+# Bij een nieuwe versie, leeg de cache (voorzichtiger om quota te sparen)
 if 'cache_version' not in st.session_state or st.session_state.cache_version != CACHE_VERSION:
-    st.cache_data.clear()
+    # Alleen de hoofd-data cache legen, niet de hele app cache om resource-intensive GSheet calls te sparen
+    if 'cache_version' in st.session_state:
+        load_all_data.clear()
     st.session_state.cache_version = CACHE_VERSION
 
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
