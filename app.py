@@ -31,17 +31,14 @@ st.caption("Versie 2.5")
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
 CACHE_VERSION = "2.1" 
 
+# Bij een nieuwe versie, leeg de cache volledig (buiten de cached functie om race-conditions te voorkomen)
+if 'cache_version' not in st.session_state or st.session_state.cache_version != CACHE_VERSION:
+    st.cache_data.clear()
+    st.session_state.cache_version = CACHE_VERSION
+
 @st.cache_data(ttl=600)  # Cache voor 10 minuten
 def load_all_data(version):
-    # Bij een nieuwe versie, leeg de cache volledig
-    if 'cache_version' not in st.session_state or st.session_state.cache_version != version:
-        st.cache_data.clear()
-        st.session_state.cache_version = version
-
     load_start = time.perf_counter()
-
-    # Automatische sync bij boot verwijderd wegens vertraging. 
-    # Gebruik de sync-knop in het beheerpaneel.
 
     p = db.get_players()
     m = db.get_matches()

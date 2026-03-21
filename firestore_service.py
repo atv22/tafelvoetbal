@@ -73,24 +73,43 @@ def get_google_creds(scopes=None):
         return service_account.Credentials.from_service_account_file(key_path)
     return None
 
+@st.cache_resource
+def _get_gsheet_client():
+    """Maakt een gecachte verbinding met Google Sheets."""
+    try:
+        import gspread
+        creds = get_google_creds(scopes=GS_SCOPES)
+        if not creds: return None
+        return gspread.authorize(creds)
+    except Exception as e:
+        print(f"[GSHEET AUTH] Fout bij authenticatie: {e}")
+        return None
+
+@st.cache_resource
+def _get_gsheet_workbook():
+    """Opent het Google Sheets werkboek en cacht dit."""
+    client = _get_gsheet_client()
+    if not client: return None
+    try:
+        return client.open_by_key(SHEET_ID)
+    except Exception as e:
+        print(f"[GSHEET OPEN] Fout bij openen van workbook: {e}")
+        return None
+
 @st.cache_data(ttl=3600) # Cache GSheet fallback voor 1 uur
 def _read_gsheet_fallback(sheet_name):
     """Leest data uit Google Sheets als Firestore offline is of geen data geeft."""
     global LAST_FALLBACK_ERROR
     try:
-        import gspread
-        creds = get_google_creds(scopes=GS_SCOPES)
-        if not creds:
-            LAST_FALLBACK_ERROR = "Geen Google credentials gevonden voor GSheet fallback."
+        sh = _get_gsheet_workbook()
+        if not sh:
+            LAST_FALLBACK_ERROR = "Geen Google credentials gevonden voor GSheet fallback of sheet onbereikbaar."
             return pd.DataFrame()
-        
-        gc = gspread.authorize(creds)
-        sh = gc.open_by_key(SHEET_ID)
         
         # Check of worksheet bestaat om spam-errors te voorkomen
         try:
             worksheet = sh.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        except Exception:
             print(f"[GSHEET] Tabblad '{sheet_name}' niet gevonden.")
             return pd.DataFrame()
             
@@ -140,14 +159,36 @@ def _write_gsheet_records(sheet_name, data_dicts):
     """Schrijft meerdere records naar Google Sheets."""
     if not data_dicts: return True
     try:
-        import gspread
-        creds = get_google_creds(scopes=GS_SCOPES)
-        if not creds: return False
-        
-        gc = gspread.authorize(creds)
-        sh = gc.open_by_key(SHEET_ID)
+        sh = _get_gsheet_workbook()
+        if not sh: return False
         
         try:
+            worksheet = sh.worksheet(sheet_name)
+        except Exception:
+            import gspread
+            worksheet = sh.add_worksheet(title=sheet_name, rows="100", cols="20")
+        
+        # Ensure headers exist
+        headers = worksheet.row_values(1)
+        if not headers:
+            headers = list(data_dicts[0].keys())
+            worksheet.append_row(headers)
+        
+        rows = []
+        for d in data_dicts:
+            row = []
+            for h in headers:
+                val = d.get(h, "")
+                if isinstance(val, (pd.Timestamp, datetime)):
+                    val = val.strftime('%Y-%m-%d %H:%M:%S')
+                row.append(val)
+            rows.append(row)
+        
+        worksheet.append_rows(rows)
+        return True
+    except Exception as e:
+        print(f"[GSHEET BATCH WRITE] Fout bij schrijven naar {sheet_name}: {e}")
+        return False
             worksheet = sh.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
             worksheet = sh.add_worksheet(title=sheet_name, rows="100", cols="20")
@@ -180,16 +221,12 @@ def _write_gsheet_record(sheet_name, data_dict):
 def _delete_gsheet_record(sheet_name, key_col, value):
     """Verwijdert een record uit Google Sheets."""
     try:
-        import gspread
-        creds = get_google_creds(scopes=GS_SCOPES)
-        if not creds: return False
-        
-        gc = gspread.authorize(creds)
-        sh = gc.open_by_key(SHEET_ID)
+        sh = _get_gsheet_workbook()
+        if not sh: return False
         
         try:
             worksheet = sh.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
+        except Exception:
             return True
             
         all_values = worksheet.get_all_values()
