@@ -13,7 +13,8 @@ if ROOT not in sys.path:
 import firestore_service as db_service
 
 # Google Sheet ID van de gebruiker
-SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
+DEFAULT_SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
+SHEET_ID = os.environ.get("GSHEET_ID", DEFAULT_SHEET_ID)
 
 # Scopes nodig voor Google Sheets en Drive
 SCOPES = [

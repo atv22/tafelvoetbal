@@ -11,7 +11,8 @@ if ROOT not in sys.path:
 
 import firestore_service as db_service
 
-SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
+DEFAULT_SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
+SHEET_ID = os.environ.get("GSHEET_ID", DEFAULT_SHEET_ID)
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 CSV_DIR = os.path.join(ROOT, 'csv', 'read')
 
