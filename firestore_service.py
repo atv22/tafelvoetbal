@@ -206,19 +206,24 @@ def _delete_gsheet_record(sheet_name, key_col, value):
         print(f"[GSHEET DELETE] Fout bij verwijderen uit {sheet_name}: {e}")
         return False
 
+@st.cache_resource
+def get_sync_throttle():
+    """Globale sync throttle."""
+    return {"last_sync": datetime.min}
+
 def reconcile_data_sources():
     """Synchroniseert data tussen Firestore en Google Sheets op een efficiënte manier."""
     try:
-        # Throttling: Maximaal eens per 15 minuten syncen
+        # Throttling: Maximaal eens per 15 minuten syncen (Globaal)
         now = datetime.now()
-        if 'last_sync_attempt' in st.session_state:
-            if (now - st.session_state.last_sync_attempt).total_seconds() < 900:
-                return
-        st.session_state.last_sync_attempt = now
+        throttle = get_sync_throttle()
+        if (now - throttle["last_sync"]).total_seconds() < 900:
+            return
+        throttle["last_sync"] = now
 
-        print("[SYNC] Controleren op nieuwe data...")
+        print("[SYNC] Bezig met synchronisatie...")
         
-        # 1. Haal match IDs op uit Firestore
+        # 1. Sync Wedstrijden & ELO logs
         try:
             fs_matches = list(matches_ref.select(['match_id']).stream())
             fs_ids = {doc.to_dict().get('match_id') for doc in fs_matches if doc.to_dict().get('match_id')}
@@ -226,68 +231,58 @@ def reconcile_data_sources():
             print("[SYNC] Firestore niet bereikbaar voor sync.")
             return
 
-        # 2. Haal matches uit GSheet (zonder cache voor sync)
         gs_df = _read_gsheet_fallback.__wrapped__("Wedstrijden") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("Wedstrijden")
-        if gs_df.empty:
-            gs_ids = set()
-        else:
-            gs_ids = set(gs_df['match_id'].dropna().unique())
+        gs_ids = set(gs_df['match_id'].dropna().unique()) if not gs_df.empty else set()
 
-        # --- A. GSheet -> Firestore (Recovery van offline werk) ---
+        # A. GSheet -> Firestore (Offline recovery)
         missing_in_fs = gs_ids - fs_ids
         if missing_in_fs:
-            print(f"[SYNC] {len(missing_in_fs)} nieuwe items in GSheet gevonden. Herstellen naar Firestore...")
-            
-            # Haal ELO_Logs ook eenmalig op
+            print(f"[SYNC] {len(missing_in_fs)} nieuwe wedstrijden in GSheet gevonden.")
             elo_gs = _read_gsheet_fallback.__wrapped__("ELO_Logs") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("ELO_Logs")
-            
-            # Gebruik Firestore WriteBatch voor snelheid (max 500 per batch)
             batch = db.batch()
             count = 0
-            
             for mid in missing_in_fs:
-                # Sync Wedstrijd
-                match_rows = gs_df[gs_df['match_id'] == mid]
-                if match_rows.empty: continue
-                match_row = match_rows.iloc[0].to_dict()
-                batch.set(matches_ref.document(mid), match_row)
+                m_row = gs_df[gs_df['match_id'] == mid].iloc[0].to_dict()
+                batch.set(matches_ref.document(mid), m_row)
                 count += 1
-                
-                # Sync bijbehorende ELO logs
                 if not elo_gs.empty:
-                    match_elos = elo_gs[elo_gs['match_id'] == mid]
-                    for _, erow in match_elos.iterrows():
+                    for _, erow in elo_gs[elo_gs['match_id'] == mid].iterrows():
                         batch.set(elo_ref.document(), erow.to_dict())
                         count += 1
-                
-                if count >= 400: # Firestore limiet is 500
+                if count >= 400:
                     batch.commit()
                     batch = db.batch()
                     count = 0
-            
-            if count > 0:
-                batch.commit()
-            print(f"[SYNC] Firestore herstel voltooid.")
-            clear_all_caches()
+            if count > 0: batch.commit()
 
-        # --- B. Firestore -> GSheet (Bijwerken backup) ---
+        # B. Firestore -> GSheet (Backup update)
         missing_in_gs = fs_ids - gs_ids
         if missing_in_gs:
-            print(f"[SYNC] {len(missing_in_gs)} nieuwe items in Firestore. Updaten naar GSheet backup...")
-            # Dit doen we per item om gspread limieten te respecteren
+            print(f"[SYNC] {len(missing_in_gs)} nieuwe wedstrijden in Firestore gevonden.")
+            m_records = []
+            e_records = []
             for mid in missing_in_gs:
                 m_doc = matches_ref.document(mid).get()
-                if not m_doc.exists: continue
-                mdata = m_doc.to_dict()
-                _write_gsheet_record("Wedstrijden", mdata)
-                
-                # ELO logs syncen
-                elos = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
-                for edoc in elos:
-                    _write_gsheet_record("ELO_Logs", edoc.to_dict())
-            print(f"[SYNC] GSheet backup voltooid.")
+                if m_doc.exists:
+                    m_records.append({**m_doc.to_dict(), 'match_id': mid})
+                    elos = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
+                    for edoc in elos: e_records.append(edoc.to_dict())
+            if m_records: _write_gsheet_records("Wedstrijden", m_records)
+            if e_records: _write_gsheet_records("ELO_Logs", e_records)
 
-        print("[SYNC] Alles is up-to-date.")
+        # 2. Sync Spelers
+        fs_players = {p.id: p.to_dict() for p in players_ref.stream()}
+        gs_players_df = _read_gsheet_fallback.__wrapped__("Spelers") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("Spelers")
+        gs_p_ids = set(gs_players_df['speler_id'].unique()) if not gs_players_df.empty else set()
+        
+        # Firestore -> GSheet Backup (alleen missende spelers)
+        missing_p_in_gs = set(fs_players.keys()) - gs_p_ids
+        if missing_p_in_gs:
+            p_to_add = [{**fs_players[pid], 'speler_id': pid} for pid in missing_p_in_gs]
+            _write_gsheet_records("Spelers", p_to_add)
+
+        print("[SYNC] Synchronisatie voltooid.")
+        clear_all_caches()
     except Exception as e:
         print(f"[SYNC] Fout tijdens synchronisatie: {e}")
 
