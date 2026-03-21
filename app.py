@@ -1,4 +1,4 @@
-from tab_analytics import render_seizoenen_tab
+from tabs.tab_analytics import render_seizoenen_tab
 import streamlit as st
 import pandas as pd
 import time
@@ -12,15 +12,15 @@ import plotly.graph_objects as go
 from analytics import show_timeline_chart, show_cross_season_charts, show_individual_season_analysis, create_all_time_leaderboards
 import utils.utils_seizoen as utils_seizoen  # Import hele module om functie parameters correct te kunnen gebruiken
 # Import TAB modules
-from tab_home import render_home_tab, calculate_stats
-from tab_invullen import render_input_tab
-from tab_spelers import render_players_tab
+from tabs.tab_home import render_home_tab, calculate_stats
+from tabs.tab_invullen import render_input_tab
+from tabs.tab_spelers import render_players_tab
 
 
-from tab_verzoeken import render_verzoeken_tab
-from tab_data import render_data_tab
-from tab_beheer import render_admin_tab
-from tab_colofon import render_colofon_tab
+from tabs.tab_verzoeken import render_verzoeken_tab
+from tabs.tab_data import render_data_tab
+from tabs.tab_beheer import render_admin_tab
+from tabs.tab_colofon import render_colofon_tab
 
 setup_page()
 

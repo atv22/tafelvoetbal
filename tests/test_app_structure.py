@@ -10,14 +10,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # Test of alle hoofd-tab modules en de app entrypoint correct importeren en de juiste functies bevatten
 MODULES = [
     "app",
-    "tab_home",
-    "tab_invullen",
-    "tab_spelers",
-    "tab_analytics",
-    "tab_data",
-    "tab_beheer",
-    "tab_verzoeken",
-    "tab_colofon",
+    "tabs.tab_home",
+    "tabs.tab_invullen",
+    "tabs.tab_spelers",
+    "tabs.tab_analytics",
+    "tabs.tab_data",
+    "tabs.tab_beheer",
+    "tabs.tab_verzoeken",
+    "tabs.tab_colofon",
 ]
 
 @pytest.mark.parametrize("module_name", MODULES)
@@ -30,7 +30,7 @@ def test_module_imports(module_name):
 def test_app_tabs():
     # Controleer of de tab-namen in de app overeenkomen met verwachting
     expected_tabs = [
-        "🏠 Home", "📝 Invullen", "👥 Spelers", "� Analytics",
+        "🏠 Home", "📝 Invullen", "👥 Spelers", "📈 Analytics",
         "📊 Ruwe Data", "⚙️ Beheer", "💬 Verzoeken", "ℹ️ Colofon"
     ]
     app_path = os.path.join(os.path.dirname(__file__), "..", "app.py")
@@ -40,7 +40,7 @@ def test_app_tabs():
         assert tab in content, f"Tab '{tab}' niet gevonden in app.py"
 
 def test_admin_subtabs():
-    beheer_path = os.path.join(os.path.dirname(__file__), "..", "tab_beheer.py")
+    beheer_path = os.path.join(os.path.dirname(__file__), "..", "tabs", "tab_beheer.py")
     with open(beheer_path, encoding="utf-8") as f:
         content = f.read()
     # Hoofd subtabs
