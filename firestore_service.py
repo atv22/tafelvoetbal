@@ -130,8 +130,9 @@ def _read_gsheet_fallback(sheet_name):
         print(f"[GSHEET FALLBACK] Fout bij lezen van {sheet_name}: {e}")
         return pd.DataFrame()
 
-def _write_gsheet_record(sheet_name, data_dict):
-    """Schrijft een record naar Google Sheets als Firestore offline is of voor sync."""
+def _write_gsheet_records(sheet_name, data_dicts):
+    """Schrijft meerdere records naar Google Sheets."""
+    if not data_dicts: return True
     try:
         import gspread
         creds = get_google_creds(scopes=GS_SCOPES)
@@ -143,26 +144,32 @@ def _write_gsheet_record(sheet_name, data_dict):
         try:
             worksheet = sh.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
-            # Maak tabblad aan als het mist
             worksheet = sh.add_worksheet(title=sheet_name, rows="100", cols="20")
         
+        # Ensure headers exist
         headers = worksheet.row_values(1)
         if not headers:
-            headers = list(data_dict.keys())
+            headers = list(data_dicts[0].keys())
             worksheet.append_row(headers)
-            
-        row = []
-        for h in headers:
-            val = data_dict.get(h, "")
-            if isinstance(val, (pd.Timestamp, datetime)):
-                val = val.strftime('%Y-%m-%d %H:%M:%S')
-            row.append(val)
         
-        worksheet.append_row(row)
+        rows = []
+        for d in data_dicts:
+            row = []
+            for h in headers:
+                val = d.get(h, "")
+                if isinstance(val, (pd.Timestamp, datetime)):
+                    val = val.strftime('%Y-%m-%d %H:%M:%S')
+                row.append(val)
+            rows.append(row)
+        
+        worksheet.append_rows(rows)
         return True
     except Exception as e:
-        print(f"[GSHEET WRITE] Fout bij schrijven naar {sheet_name}: {e}")
+        print(f"[GSHEET BATCH WRITE] Fout bij schrijven naar {sheet_name}: {e}")
         return False
+
+def _write_gsheet_record(sheet_name, data_dict):
+    return _write_gsheet_records(sheet_name, [data_dict])
 
 def reconcile_data_sources():
     """Synchroniseert data tussen Firestore en Google Sheets op een efficiënte manier."""
@@ -515,8 +522,8 @@ def add_match_and_update_elo(match_data, elo_updates):
         match_id = f"OFFLINE_{uuid.uuid4().hex[:10]}"
         m_success = _write_gsheet_record("Wedstrijden", {**match_data, 'timestamp': ts, 'match_id': match_id})
         if m_success:
-            for naam, elo in elo_updates:
-                _write_gsheet_record("ELO_Logs", {'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id})
+            elo_records = [{'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id} for naam, elo in elo_updates]
+            _write_gsheet_records("ELO_Logs", elo_records)
             clear_all_caches()
             return True
         return False
