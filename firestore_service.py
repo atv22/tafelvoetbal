@@ -153,11 +153,13 @@ def _read_gsheet_fallback(sheet_name):
         for row in rows:
             if not any(row): continue
             if len(row) < len(headers):
-                row.extend([''] * (len(headers) - len(row)))
+                row.extend([''] * (len(headers) - row))
             elif len(row) > len(headers):
                 row = row[:len(headers)]
             data_dicts.append(dict(zip(headers, row)))
             
+        df = pd.DataFrame(data_dicts)
+        
         # Normalize column names to lowercase for consistency
         df.columns = [c.lower() for c in df.columns]
         
