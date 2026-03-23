@@ -690,6 +690,104 @@ def delete_player_by_id(player_id):
         print(f"Fout bij verwijderen: {e}")
         return False
 
+def import_matches(matches_list):
+    """Importeert een lijst met wedstrijden in Firestore."""
+    try:
+        batch = db.batch()
+        added = 0
+        duplicates = 0
+        
+        # Voor duplicaat-check: haal laatste 100 matches op
+        existing_matches = get_matches().head(100)
+        
+        for m in matches_list:
+            # Simpele duplicaat-check op basis van spelers en timestamp
+            ts = pd.to_datetime(m.get('timestamp'))
+            if not existing_matches.empty:
+                is_dup = any((existing_matches['thuis_1'] == m.get('thuis_1')) & 
+                             (existing_matches['uit_1'] == m.get('uit_1')) & 
+                             (existing_matches['timestamp'] == ts))
+                if is_dup:
+                    duplicates += 1
+                    continue
+            
+            new_ref = matches_ref.document()
+            batch.set(new_ref, {**m, 'timestamp': ts, 'match_id': new_ref.id})
+            added += 1
+            if added % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        
+        batch.commit()
+        clear_all_caches(only_matches=True)
+        return added, duplicates
+    except Exception as e:
+        print(f"Import matches error: {e}")
+        return 0, 0
+
+def import_players(players_list):
+    """Importeert een lijst met spelers in Firestore."""
+    try:
+        batch = db.batch()
+        added = 0
+        duplicates = 0
+        
+        existing_players = set(get_players()['speler_naam'].tolist())
+        
+        for p in players_list:
+            name = p.get('speler_naam')
+            if name in existing_players:
+                duplicates += 1
+                continue
+            
+            batch.set(players_ref.document(), p)
+            added += 1
+            if added % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        
+        batch.commit()
+        clear_all_caches(only_players=True)
+        return added, duplicates
+    except Exception as e:
+        print(f"Import players error: {e}")
+        return 0, 0
+
+def reset_all_elos(timestamp=None):
+    """Reset alle ELO scores naar 1000 voor alle spelers."""
+    try:
+        if timestamp is None:
+            timestamp = SERVER_TIMESTAMP
+        
+        players_df = get_players()
+        batch = db.batch()
+        c = 0
+        for _, player in players_df.iterrows():
+            # Update current rating in spelers collectie
+            p_ref = players_ref.document(player['speler_id'])
+            batch.update(p_ref, {'rating': 1000})
+            
+            # Voeg reset entry toe aan ELO logs
+            e_ref = elo_ref.document()
+            batch.set(e_ref, {
+                'speler_naam': player['speler_naam'],
+                'rating': 1000,
+                'timestamp': timestamp,
+                'match_id': 'SEASON_RESET'
+            })
+            
+            c += 2
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
+        if c > 0: batch.commit()
+        clear_all_caches(only_players=True, only_elo=True)
+        return True
+    except Exception as e:
+        print(f"Reset ELO error: {e}")
+        return False
+
 def recalculate_elos_for_season(start_date, end_date):
     """Herberekent alle ELO scores voor een seizoen."""
     try:
@@ -699,39 +797,97 @@ def recalculate_elos_for_season(start_date, end_date):
         
         all_matches = get_matches().sort_values('timestamp', ascending=True)
         players_df = get_players()
-        mask = (all_matches['timestamp'].dt.date >= start_date) & (all_matches['timestamp'].dt.date <= end_date)
+        # Normaliseer timestamp voor vergelijking
+        all_matches['ts_date'] = all_matches['timestamp'].dt.date
+        mask = (all_matches['ts_date'] >= start_date) & (all_matches['ts_date'] <= end_date)
         season_matches = all_matches[mask]
         
         player_elos = {name: 1000 for name in players_df['speler_naam']}
         batch = db.batch()
-        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', pd.Timestamp(start_date))).where(filter=FieldFilter('timestamp', '<=', pd.Timestamp(end_date))).stream()
-        for doc in old_elos: batch.delete(doc.reference)
-        batch.commit()
         
+        # Verwijder ALLE ELO logs in dit seizoen
+        start_ts = pd.Timestamp(start_date)
+        end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        
+        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', start_ts)).where(filter=FieldFilter('timestamp', '<=', end_ts)).stream()
+        c = 0
+        for doc in old_elos:
+            batch.delete(doc.reference)
+            c += 1
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
+        if c > 0: batch.commit()
+        
+        # Stap 1: Voeg voor iedereen een baseline 1000 toe aan het begin van het seizoen
+        batch = db.batch()
+        c = 0
+        baseline_ts = pd.Timestamp(start_date)
+        for name in player_elos.keys():
+            batch.set(elo_ref.document(), {
+                'speler_naam': name,
+                'rating': 1000,
+                'timestamp': baseline_ts,
+                'match_id': 'SEASON_RESET'
+            })
+            c += 1
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
+        if c > 0: batch.commit()
+        
+        # Stap 2: Bereken matches opnieuw
         batch = db.batch()
         c = 0
         for _, match in season_matches.iterrows():
             m_dict = {
                 "Thuis_1": match['thuis_1'], "Thuis_2": match['thuis_2'],
                 "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
-                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score']
+                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score'],
+                "klinkers_thuis_1": match.get('klinkers_thuis_1', 0),
+                "klinkers_thuis_2": match.get('klinkers_thuis_2', 0),
+                "klinkers_uit_1": match.get('klinkers_uit_1', 0),
+                "klinkers_uit_2": match.get('klinkers_uit_2', 0)
             }
             m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
+            # Belangrijk: all_ratings moet de HUIDIGE ratings van deze spelers bevatten
             all_ratings = {p: [player_elos.get(p, 1000)] for p in m_players}
+            
             new_df = calculate_new_elo(m_dict, all_ratings)
             for _, row in new_df.iterrows():
                 p, r = row['Speler'], row['ELO']
                 player_elos[p] = r
-                batch.set(elo_ref.document(), {'speler_naam': p, 'rating': r, 'timestamp': match['timestamp'], 'match_id': match['match_id']})
+                batch.set(elo_ref.document(), {
+                    'speler_naam': p, 
+                    'rating': r, 
+                    'timestamp': match['timestamp'], 
+                    'match_id': match['match_id']
+                })
                 c += 1
                 if c >= 400:
                     batch.commit()
                     batch = db.batch()
                     c = 0
+        
+        # Update current ratings in players table to match end of season
+        for name, rating in player_elos.items():
+            p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+            if p_docs:
+                batch.update(p_docs[0].reference, {'rating': rating})
+                c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+
         if c > 0: batch.commit()
-        clear_all_caches(only_elo=True)
+        clear_all_caches(only_elo=True, only_players=True)
         return True
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Recalc error: {e}")
         return False
 
