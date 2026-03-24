@@ -22,6 +22,7 @@ from tabs.tab_verzoeken import render_verzoeken_tab
 from tabs.tab_data import render_data_tab
 from tabs.tab_beheer import render_admin_tab
 from tabs.tab_colofon import render_colofon_tab
+from tabs.tab_commits import render_commits_tab
 
 setup_page()
 
@@ -90,7 +91,7 @@ if hasattr(db, 'is_offline') and db.is_offline():
     st.info(f"📊 De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is nog steeds mogelijk.")
 
 # --- Tab navigatie ---
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🏠 Home", 
     "📝 Invullen", 
     "👥 Spelers", 
@@ -98,6 +99,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Ruwe Data", 
     "⚙️ Beheer", 
     "💬 Verzoeken",
+    "📜 Commits",
     "ℹ️ Colofon"
 ])
 
@@ -169,8 +171,15 @@ with tab7:
     t1 = time.perf_counter()
     print(f"[TIMING] tab VERZOEKEN rendered in {t1-t0:.3f}s")
 
-# ===== TAB 8: COLOFON =====
+# ===== TAB 8: COMMITS =====
 with tab8:
+    t0 = time.perf_counter()
+    render_commits_tab()
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab COMMITS rendered in {t1-t0:.3f}s")
+
+# ===== TAB 9: COLOFON =====
+with tab9:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")
