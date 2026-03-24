@@ -10,63 +10,6 @@ from utils.utils_new_elo import calculate_new_elo
 from datetime import datetime
 
 
-def render_match_input_form(player_names, player_elos):
-    """Render het wedstrijd invoer formulier (nu met datum keuze)"""
-    klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
-
-    selected_names = {
-        'Thuis 1': {'name': None, 'klinkers': 0},
-        'Thuis 2': {'name': None, 'klinkers': 0},
-        'Uit 1':   {'name': None, 'klinkers': 0},
-        'Uit 2':   {'name': None, 'klinkers': 0},
-    }
-
-    # Default testspelers als ze bestaan
-    test_defaults = ["TestThuisA", "TestThuisB", "TestUitA", "TestUitB"]
-    default_indices = []
-    for test_name in test_defaults:
-        if test_name in player_names:
-            default_indices.append(player_names.index(test_name))
-        else:
-            default_indices.append(0)
-
-    # Gebruik een stabiele session_key zodat Streamlit de state behoudt
-    session_key = "wedstrijd_invoer"
-    with st.form("formulier"):
-        cols = st.columns(4)
-        for i, title in enumerate(selected_names):
-            with cols[i]:
-                selected_names[title]['name'] = st.selectbox(
-                    title,
-                    player_names,
-                    key=f"sel_{title}_{session_key}",
-                    index=default_indices[i] if len(default_indices) == 4 else i % len(player_names)
-                )
-
-        if klink == "Ja":
-            klinker_cols = st.columns(4)
-            for i, title in enumerate(selected_names):
-                with klinker_cols[i]:
-                    selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}_{session_key}")
-
-        score_cols = st.columns(2)
-        with score_cols[0]:
-            home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1, key=f"score_thuis_{session_key}")
-        with score_cols[1]:
-            away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1, key=f"score_uit_{session_key}")
-
-        from utils.utils import get_nl_now
-        # Huidige datum en tijd in Nederlandse tijdzone ophalen
-        now = get_nl_now()
-        match_date = st.date_input("Datum van de wedstrijd", value=now.date(), key=f"date_{session_key}", help="Standaard vandaag. Kies een andere dag indien gewenst.")
-        match_time = st.time_input("Tijd van de wedstrijd", value=now.time().replace(microsecond=0), key=f"time_{session_key}", help="Standaard huidige tijd. Kies een andere tijd indien gewenst.")
-
-        if st.form_submit_button("Verstuur Uitslag"):
-            match_datetime = datetime.combine(match_date, match_time)
-            return process_match_submission(selected_names, home_score, away_score, player_elos, match_datetime)
-    return False
-
-
 def validate_match_input(selected_names, home_score, away_score):
     """Valideer de wedstrijd invoer"""
     # Score validatie (accepteer ook float 10.0)
