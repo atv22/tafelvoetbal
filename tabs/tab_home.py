@@ -136,13 +136,13 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     trends = calculate_elo_trends(elo_df)
     stats_df['Trend'] = stats_df['Speler'].map(lambda x: int(round(trends.get(x, 0))))
         
-    # Verbeterde sortering: ELO, dan Doelsaldo, dan Win%
-    # We voegen een hulpkolom toe voor 'gerangschikt' (minimaal 3 wedstrijden)
+    # Sortering: Puur op ELO (en tie-breakers), zoals gevraagd door de gebruiker
+    # De 'Gerangschikt' status wordt alleen nog gebruikt voor visuele markering (grijs/italic)
     stats_df['Gerangschikt'] = stats_df['Gespeeld'] >= 3
     
     display_df = stats_df.copy().sort_values(
-        by=['Gerangschikt', 'ELO', 'Doelsaldo', 'Win%'], 
-        ascending=[False, False, False, False]
+        by=['ELO', 'Doelsaldo', 'Win%'], 
+        ascending=[False, False, False]
     ).reset_index(drop=True)
     
     display_df['ELO'] = display_df['ELO'].round(0).astype(int)
@@ -151,18 +151,26 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
     
     def highlight_ranked_and_top3(row):
+        # Let op: de index (row.name) komt overeen met de positie in display_df
         idx = row.name
+        styles = [''] * len(row)
+        
+        # Markeer ongerangschikte spelers (minder dan 3 potjes)
         if not row.get('Gerangschikt', True):
             return ['color: #9e9e9e; font-style: italic'] * len(row)
         
+        # Markeer de echte top 3 van gerangschikte spelers
+        # Omdat de lijst nu puur op ELO staat, kan een ongerangschikte speler bovenaan staan.
+        # We willen alleen de top 3 'actieve' spelers een kleurtje geven.
+        # Maar de gebruiker wil de lijst op ELO, dus we volgen de index voor goud/zilver/brons.
         if idx == 0:
             return ['background-color: #d4edda; font-weight: bold'] * len(row)
         elif idx == 1:
             return ['background-color: #eafaf1'] * len(row)
         elif idx == 2:
             return ['background-color: #f4fbf7'] * len(row)
-        else:
-            return [''] * len(row)
+        
+        return styles
 
     def color_trend(val):
         try:
@@ -181,12 +189,14 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         except: return "-"
             
     # Kolomvolgorde aanpassen: Trend naast ELO
-    # We voegen Gerangschikt tijdelijk toe voor styling maar verbergen het daarna
     cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers', 'Gerangschikt']
     styled = display_df[cols].style.apply(highlight_ranked_and_top3, axis=1).map(color_trend, subset=['Trend'])
     
-    # Verberg de Gerangschikt kolom in de weergave
-    styled = styled.hide(['Gerangschikt'], axis=1)
+    # Gebruik hide op de styler (werkt in nieuwere pandas)
+    try:
+        styled = styled.hide(['Gerangschikt'], axis=1)
+    except:
+        pass
     
     styled = styled.format({
         'Trend': format_trend,
@@ -197,7 +207,11 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     st.dataframe(
         styled,
         width='stretch',
-        height=max(400, 35 * len(display_df) + 100)
+        height=max(400, 35 * len(display_df) + 100),
+        column_config={
+            "Gerangschikt": None, # Forceer verbergen in Streamlit UI mocht styled.hide falen
+            "Trend": st.column_config.TextColumn("Trend", help="ELO verschil t.o.v. vorige wedstrijd (exclusief seizoens-resets)")
+        }
     )
 
 

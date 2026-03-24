@@ -1,4 +1,4 @@
-# Force redeploy to clear cache - 2026-03-23
+# Force redeploy to clear cache - 2026-03-23 (v2.6)
 from tabs.tab_analytics import render_seizoenen_tab
 import streamlit as st
 import pandas as pd
