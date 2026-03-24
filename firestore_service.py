@@ -338,19 +338,23 @@ def reconcile_data_sources():
 def clear_all_caches(only_players=False, only_matches=False, only_elo=False, only_requests=False):
     """Leeg specifieke of alle Streamlit caches na mutaties."""
     try:
+        # Als er geen specifieke cache is opgegeven, leeg alles (inclusief app.py load_all_data)
+        if not (only_players or only_matches or only_elo or only_requests):
+            st.cache_data.clear()
+            return
+            
         if only_players:
             get_players.clear()
-        elif only_matches:
+        if only_matches:
             get_matches.clear()
             get_seasons.clear()
-        elif only_elo:
+        if only_elo:
             get_players.clear()
             get_elo_logs.clear()
             get_elo_history.clear()
-        elif only_requests:
+        if only_requests:
             get_requests.clear()
-        else:
-            st.cache_data.clear()
+            
     except Exception as e:
         print(f"Fout bij cache invalidatie: {e}")
         try: st.cache_data.clear()
@@ -805,6 +809,7 @@ def recalculate_elos_for_season(start_date, end_date):
         season_matches = all_matches[mask]
         
         player_elos = {name: 1000 for name in players_df['speler_naam']}
+        player_matches = {name: 0 for name in players_df['speler_naam']}
         batch = db.batch()
         
         # Verwijder ALLE ELO logs in dit seizoen
@@ -855,12 +860,14 @@ def recalculate_elos_for_season(start_date, end_date):
             }
             m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
             # Belangrijk: all_ratings moet de HUIDIGE ratings van deze spelers bevatten
-            all_ratings = {p: [player_elos.get(p, 1000)] for p in m_players}
+            # We voegen 'mock' history toe op basis van match_count om de K-factor correct te berekenen
+            all_ratings = {p: [player_elos.get(p, 1000)] * (player_matches.get(p, 0) + 1) for p in m_players}
             
             new_df = calculate_new_elo(m_dict, all_ratings)
             for _, row in new_df.iterrows():
                 p, r = row['Speler'], row['ELO']
                 player_elos[p] = r
+                player_matches[p] = player_matches.get(p, 0) + 1
                 batch.set(elo_ref.document(), {
                     'speler_naam': p, 
                     'rating': r, 

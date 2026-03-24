@@ -30,7 +30,8 @@ def calculate_stats(players, matches):
     stats_list = []
     for _, player in players.iterrows():
         p_name = str(player['speler_naam'])
-        p_stats = vector_stats[vector_stats['Speler'] == p_name]
+        # Case-insensitive match voor robuustheid
+        p_stats = vector_stats[vector_stats['Speler'].str.lower() == p_name.lower()]
         
         if p_stats.empty:
             stats = {
@@ -68,15 +69,18 @@ def calculate_elo_trends(elo_df):
     
     trends = {}
     df = elo_df.copy()
+    
+    # Filter SEASON_RESET logs uit voor de trend, anders krijg je enorme sprongen
+    if 'match_id' in df.columns:
+        df = df[df['match_id'] != 'SEASON_RESET']
+        
     df['speler_naam'] = df['speler_naam'].astype(str)
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     
-    # Sorteer stabiel: op tijd en dan op de index (volgorde van creatie in DB)
-    df = df.sort_values(['timestamp', 'speler_naam'], ascending=[True, True])
+    # Sorteer op tijd
+    df = df.sort_values(['timestamp'], ascending=[True])
     
     for speler, group in df.groupby('speler_naam'):
-        # Pak de unieke ratings in chronologische volgorde
-        # We willen het verschil tussen de allerlaatste rating en de rating NA de vorige wedstrijd
         if len(group) >= 2:
             ratings = group['rating'].tolist()
             last_elo = ratings[-1]
@@ -132,16 +136,27 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     trends = calculate_elo_trends(elo_df)
     stats_df['Trend'] = stats_df['Speler'].map(lambda x: int(round(trends.get(x, 0))))
         
-    display_df = stats_df.copy().sort_values(by='ELO', ascending=False).reset_index(drop=True)
+    # Verbeterde sortering: ELO, dan Doelsaldo, dan Win%
+    # We voegen een hulpkolom toe voor 'gerangschikt' (minimaal 3 wedstrijden)
+    stats_df['Gerangschikt'] = stats_df['Gespeeld'] >= 3
+    
+    display_df = stats_df.copy().sort_values(
+        by=['Gerangschikt', 'ELO', 'Doelsaldo', 'Win%'], 
+        ascending=[False, False, False, False]
+    ).reset_index(drop=True)
+    
     display_df['ELO'] = display_df['ELO'].round(0).astype(int)
     import numpy as np
     display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
     display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
     
-    def highlight_top3_lightgreen(row):
+    def highlight_ranked_and_top3(row):
         idx = row.name
+        if not row.get('Gerangschikt', True):
+            return ['color: #9e9e9e; font-style: italic'] * len(row)
+        
         if idx == 0:
-            return ['background-color: #d4edda'] * len(row)
+            return ['background-color: #d4edda; font-weight: bold'] * len(row)
         elif idx == 1:
             return ['background-color: #eafaf1'] * len(row)
         elif idx == 2:
@@ -166,8 +181,12 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         except: return "-"
             
     # Kolomvolgorde aanpassen: Trend naast ELO
-    cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers']
-    styled = display_df[cols].style.apply(highlight_top3_lightgreen, axis=1).map(color_trend, subset=['Trend'])
+    # We voegen Gerangschikt tijdelijk toe voor styling maar verbergen het daarna
+    cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers', 'Gerangschikt']
+    styled = display_df[cols].style.apply(highlight_ranked_and_top3, axis=1).map(color_trend, subset=['Trend'])
+    
+    # Verberg de Gerangschikt kolom in de weergave
+    styled = styled.hide(['Gerangschikt'], axis=1)
     
     styled = styled.format({
         'Trend': format_trend,

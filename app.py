@@ -117,7 +117,7 @@ with tab2:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — invoer in wachtrij")
-    render_input_tab(players_df)
+    render_input_tab(players_df, matches_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab INVULLEN rendered in {t1-t0:.3f}s")
 

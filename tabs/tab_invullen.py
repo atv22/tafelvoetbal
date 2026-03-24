@@ -92,10 +92,9 @@ def validate_match_input(selected_names, home_score, away_score):
     return True
 
 
-def calculate_new_elos(selected_names, home_score, away_score, player_elos):
+def calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df=None):
     """Bereken nieuwe ELO ratings voor alle spelers"""
     # Prepare match dict for new ELO calculation
-    # Detect home/away columns for ELO calculation (support both schemas)
     match = {
         "Thuis_1": selected_names['Thuis 1']['name'],
         "Thuis_2": selected_names['Thuis 2']['name'],
@@ -108,10 +107,22 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos):
         "klinkers_uit_1": selected_names['Uit 1']['klinkers'],
         "klinkers_uit_2": selected_names['Uit 2']['klinkers']
     }
+
+    # Haal match counts op voor K-factor stabiliteit
+    match_counts = {}
+    if matches_df is not None and not matches_df.empty:
+        from analytics import get_vectorized_player_stats
+        stats = get_vectorized_player_stats(matches_df)
+        if not stats.empty:
+            match_counts = dict(zip(stats['Speler'], stats['Matches']))
+
     all_ELO_ratings = {}
     for player in [match["Thuis_1"], match["Thuis_2"], match["Uit_1"], match["Uit_2"]]:
         if player is not None:
-            all_ELO_ratings[player] = [player_elos.get(player, 1000)]
+            # We voegen 'mock' history toe op basis van match_count om de K-factor correct te berekenen
+            count = match_counts.get(player, 0)
+            all_ELO_ratings[player] = [player_elos.get(player, 1000)] * (count + 1)
+
     new_elo_df = calculate_new_elo(match, all_ELO_ratings)
     new_elos = dict(zip(new_elo_df["Speler"], new_elo_df["ELO"].astype(float)))
     return new_elos
@@ -136,14 +147,14 @@ def prepare_match_data(selected_names, home_score, away_score, match_date):
     }
 
 
-def process_match_submission(selected_names, home_score, away_score, player_elos, match_date):
+def process_match_submission(selected_names, home_score, away_score, player_elos, match_date, matches_df=None):
     """Proces de complete wedstrijd submissie"""
     # Valideer input
     if not validate_match_input(selected_names, home_score, away_score):
         return False
 
     # Bereken nieuwe ELO ratings
-    new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos)
+    new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df)
 
     # Bereid data voor
     match_data = prepare_match_data(selected_names, home_score, away_score, match_date)
@@ -172,14 +183,65 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
         return False
 
 
-def render_input_tab(players_df):
+def render_input_tab(players_df, matches_df=None):
     """Render de complete Input tab"""
     st.header("Tafelvoetbal Competitie ⚽ — Invullen")
-    
+
     if players_df.empty:
         st.warning("Er zijn nog geen spelers. Voeg eerst een speler toe via de 'Spelers' tab.")
     else:
         player_names = sorted(players_df['speler_naam'].tolist())
         player_elos = players_df.set_index('speler_naam')['rating'].to_dict()
 
-        render_match_input_form(player_names, player_elos)
+        klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
+
+        selected_names = {
+            'Thuis 1': {'name': None, 'klinkers': 0},
+            'Thuis 2': {'name': None, 'klinkers': 0},
+            'Uit 1':   {'name': None, 'klinkers': 0},
+            'Uit 2':   {'name': None, 'klinkers': 0},
+        }
+
+        # Default testspelers als ze bestaan
+        test_defaults = ["TestThuisA", "TestThuisB", "TestUitA", "TestUitB"]
+        default_indices = []
+        for test_name in test_defaults:
+            if test_name in player_names:
+                default_indices.append(player_names.index(test_name))
+            else:
+                default_indices.append(0)
+
+        # Gebruik een stabiele session_key zodat Streamlit de state behoudt
+        session_key = "wedstrijd_invoer"
+        with st.form("formulier"):
+            cols = st.columns(4)
+            for i, title in enumerate(selected_names):
+                with cols[i]:
+                    selected_names[title]['name'] = st.selectbox(
+                        title,
+                        player_names,
+                        key=f"sel_{title}_{session_key}",
+                        index=default_indices[i] if len(default_indices) == 4 else i % len(player_names)
+                    )
+
+            if klink == "Ja":
+                klinker_cols = st.columns(4)
+                for i, title in enumerate(selected_names):
+                    with klinker_cols[i]:
+                        selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}_{session_key}")
+
+            score_cols = st.columns(2)
+            with score_cols[0]:
+                home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1, key=f"score_thuis_{session_key}")
+            with score_cols[1]:
+                away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1, key=f"score_uit_{session_key}")
+
+            from utils.utils import get_nl_now
+            # Huidige datum en tijd in Nederlandse tijdzone ophalen
+            now = get_nl_now()
+            match_date = st.date_input("Datum van de wedstrijd", value=now.date(), key=f"date_{session_key}", help="Standaard vandaag. Kies een andere dag indien gewenst.")
+            match_time = st.time_input("Tijd van de wedstrijd", value=now.time().replace(microsecond=0), key=f"time_{session_key}", help="Standaard huidige tijd. Kies een andere tijd indien gewenst.")
+
+            if st.form_submit_button("Verstuur Uitslag"):
+                match_datetime = datetime.combine(match_date, match_time)
+                process_match_submission(selected_names, home_score, away_score, player_elos, match_datetime, matches_df)
