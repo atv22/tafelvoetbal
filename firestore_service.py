@@ -6,6 +6,7 @@ from google.oauth2 import service_account
 import json
 import pandas as pd
 import uuid
+import traceback
 from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
@@ -644,8 +645,12 @@ def delete_match_by_id(mid):
         # Verwijder bijbehorende ELO logs uit Firestore
         elo_docs = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
         batch = db.batch()
-        for doc in elo_docs: batch.delete(doc.reference)
-        batch.commit()
+        count = 0
+        for doc in elo_docs: 
+            batch.delete(doc.reference)
+            count += 1
+        if count > 0:
+            batch.commit()
         
         # Verwijder uit GSheet Backup
         _delete_gsheet_record("Wedstrijden", "match_id", mid)
@@ -653,7 +658,11 @@ def delete_match_by_id(mid):
         
         clear_all_caches(only_matches=True, only_elo=True)
         return True
-    except: return False
+    except Exception as e:
+        print(f"Error in delete_match_by_id: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def update_match(mid, data):
     try:
@@ -904,13 +913,39 @@ def delete_match_with_elo_recalculation(match_id):
     """Verwijdert match en herbereken seizoen."""
     try:
         doc = matches_ref.document(match_id).get()
-        if not doc.exists: return True
-        ts = doc.to_dict().get('timestamp')
+        if not doc.exists: 
+            print(f"Match {match_id} not found in Firestore.")
+            return True
+        
+        match_data = doc.to_dict()
+        ts = match_data.get('timestamp')
+        
+        # Verwijder de match
         matches_ref.document(match_id).delete()
+        
+        # Zoek het bijbehorende seizoen voor herberekening
         seasons = get_seasons()
-        s_row = seasons[(seasons['start_datum'] <= ts) & (seasons['eind_datum'] >= ts)]
+        
+        # Normaliseer ts naar naive datetime voor vergelijking met seasons df
+        if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+            ts_naive = ts.replace(tzinfo=None)
+        else:
+            ts_naive = ts
+            
+        s_row = seasons[(seasons['start_datum'] <= ts_naive) & (seasons['eind_datum'] >= ts_naive)]
+        
         if not s_row.empty:
-            recalculate_elos_for_season(s_row.iloc[0]['start_datum'], s_row.iloc[0]['eind_datum'])
+            start_date = s_row.iloc[0]['start_datum']
+            end_date = s_row.iloc[0]['eind_datum']
+            print(f"Recalculating season: {s_row.iloc[0]['seizoen_naam']} ({start_date} to {end_date})")
+            recalculate_elos_for_season(start_date, end_date)
+        else:
+            print(f"No matching season found for match at {ts_naive}. Skipping ELO recalculation.")
+            
         clear_all_caches(only_matches=True, only_elo=True)
         return True
-    except: return False
+    except Exception as e:
+        print(f"Error in delete_match_with_elo_recalculation: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
