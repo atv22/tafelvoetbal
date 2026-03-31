@@ -8,6 +8,7 @@ import time
 import firestore_service as db
 from utils.utils_new_elo import calculate_new_elo
 from datetime import datetime
+from utils.utils import IGNORE_PLAYERS
 
 
 def validate_match_input(selected_names, home_score, away_score):
@@ -133,8 +134,15 @@ def render_input_tab(players_df, matches_df=None):
     if players_df.empty:
         st.warning("Er zijn nog geen spelers. Voeg eerst een speler toe via de 'Spelers' tab.")
     else:
-        player_names = sorted(players_df['speler_naam'].tolist())
-        player_elos = players_df.set_index('speler_naam')['rating'].to_dict()
+        # Filter 'Niemand' en test-spelers uit - Case-insensitive
+        filtered_players_df = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
+        
+        if filtered_players_df.empty:
+            st.warning("Geen geldige spelers gevonden. Voeg spelers toe via de 'Spelers' tab.")
+            return
+
+        player_names = sorted(filtered_players_df['speler_naam'].tolist())
+        player_elos = filtered_players_df.set_index('speler_naam')['rating'].to_dict()
 
         klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
 
@@ -144,15 +152,6 @@ def render_input_tab(players_df, matches_df=None):
             'Uit 1':   {'name': None, 'klinkers': 0},
             'Uit 2':   {'name': None, 'klinkers': 0},
         }
-
-        # Default testspelers als ze bestaan
-        test_defaults = ["TestThuisA", "TestThuisB", "TestUitA", "TestUitB"]
-        default_indices = []
-        for test_name in test_defaults:
-            if test_name in player_names:
-                default_indices.append(player_names.index(test_name))
-            else:
-                default_indices.append(0)
 
         # Gebruik een stabiele session_key zodat Streamlit de state behoudt
         session_key = "wedstrijd_invoer"
@@ -164,7 +163,7 @@ def render_input_tab(players_df, matches_df=None):
                         title,
                         player_names,
                         key=f"sel_{title}_{session_key}",
-                        index=default_indices[i] if len(default_indices) == 4 else i % len(player_names)
+                        index=i % len(player_names)
                     )
 
             if klink == "Ja":

@@ -7,6 +7,7 @@ import pandas as pd
 import firestore_service as db
 import plotly.express as px
 from utils.utils_seizoen import get_current_season
+from utils.utils import IGNORE_PLAYERS
 
 def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.header("👥 Speler Beheer & Historie")
@@ -20,9 +21,8 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.subheader("📈 ELO Ontwikkeling")
     
     # 1. Bepaal standaard speler (Nummer 1 van de ranglijst)
-    # Filter eerst 'Niemand' spelers uit - Case-insensitive
-    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
-    valid_players = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
+    # Filter eerst 'Niemand' en test-spelers uit - Case-insensitive
+    valid_players = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     if valid_players.empty:
         st.info("Geen geldige spelers gevonden.")

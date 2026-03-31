@@ -15,6 +15,7 @@ from analytics import (
     get_vectorized_player_stats,
     get_absolute_top3_elo
 )
+from utils.utils import IGNORE_PLAYERS
 
 def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     st.header("📅 Seizoensanalyse")
@@ -56,7 +57,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
             existing_p_cols = [c for c in p_cols if c in s_matches.columns]
             u_players = pd.unique(s_matches[existing_p_cols].values.ravel())
-            u_players_count = len([p for p in u_players if p and not pd.isna(p)])
+            u_players_count = len([p for p in u_players if p and not pd.isna(p) and str(p).lower().strip() not in IGNORE_PLAYERS])
             
             top3 = get_season_top3_elo(elo_df, s_matches)
             
@@ -141,7 +142,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     avg_g = total_g / total_m if total_m > 0 else 0
     p_cols = ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']
     existing_p_cols = [c for c in p_cols if c in filtered_matches.columns]
-    u_players = len([p for p in pd.unique(filtered_matches[existing_p_cols].values.ravel()) if p and not pd.isna(p)])
+    u_players = len([p for p in pd.unique(filtered_matches[existing_p_cols].values.ravel()) if p and not pd.isna(p) and str(p).lower().strip() not in IGNORE_PLAYERS])
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Wedstrijden", total_m)

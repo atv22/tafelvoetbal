@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from collections import defaultdict
 import numpy as np
+from utils.utils import IGNORE_PLAYERS
 
 # --- Helper voor het extraheren van spelerstatistieken (Vectorized) ---
 @st.cache_data
@@ -65,9 +66,8 @@ def get_vectorized_player_stats(matches_df):
     # Combineer alles
     all_player_events = pd.concat(home_list + away_list).dropna(subset=['Speler'])
     
-    # Filter 'Niemand' spelers uit (gebruikt bij 1v1) - Case-insensitive
-    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
-    all_player_events = all_player_events[~all_player_events['Speler'].str.lower().str.strip().isin(niemand_base)]
+    # Filter 'Niemand' en test-spelers uit - Case-insensitive
+    all_player_events = all_player_events[~all_player_events['Speler'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     # Groepeer op speler
     stats = all_player_events.groupby('Speler').agg(
@@ -93,10 +93,9 @@ def get_absolute_top3_elo(elo_df):
     if elo_df is None or elo_df.empty:
         return []
     
-    # Filter 'Niemand' spelers uit voor de zekerheid
+    # Filter 'Niemand' en test-spelers uit voor de zekerheid
     df = elo_df.copy()
-    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
-    df = df[~df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
+    df = df[~df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     # Pak de maximale rating per speler over de hele historie
     peak_elos = df.groupby('speler_naam')['rating'].max().reset_index()
@@ -119,9 +118,8 @@ def get_season_top3_elo(elo_df, seizoen_matches):
     # Filter ELO-logs op matches in seizoen
     elo_season = elo_df[elo_df['match_id'].isin(match_ids_in_season)].copy()
     
-    # Filter 'Niemand' spelers uit
-    niemand_variations = ['NiemandIn', 'NiemandUit', 'Niemand', 'None', '', ' ']
-    elo_season = elo_season[~elo_season['speler_naam'].isin(niemand_variations)]
+    # Filter 'Niemand' en test-spelers uit
+    elo_season = elo_season[~elo_season['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     if elo_season.empty:
         return []
@@ -169,6 +167,9 @@ def show_unique_players_bar_chart(season_matches):
     temp = season_matches[['timestamp'] + existing_p_cols].copy()
     temp['Datum'] = temp['timestamp'].dt.date
     melted = temp.melt(id_vars=['Datum'], value_vars=existing_p_cols, value_name='Speler').dropna(subset=['Speler'])
+    
+    # Filter 'Niemand' en test-spelers uit
+    melted = melted[~melted['Speler'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     daily_unique = melted.groupby('Datum')['Speler'].nunique().reset_index()
     daily_unique.columns = ['Datum', 'Unieke spelers']
@@ -303,9 +304,8 @@ def show_all_time_leaderboards(player_stats_df, elo_df=None):
 
     # ELO toevoegen: Gebruik Peak ELO uit elo_df indien beschikbaar, anders huidige stand
     if elo_df is not None and not elo_df.empty:
-        # Filter 'Niemand' spelers uit
-        niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
-        df_clean = elo_df[~elo_df['speler_naam'].str.lower().str.strip().isin(niemand_base)]
+        # Filter 'Niemand' en test-spelers uit
+        df_clean = elo_df[~elo_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
         
         # Pak de maximale rating per speler die voorkomt in de huidige player_stats_df
         peak_elos = df_clean.groupby('speler_naam')['rating'].max().to_dict()
@@ -380,7 +380,7 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
     # Filter kolommen die daadwerkelijk bestaan
     existing_p_cols = [c for c in p_cols if c in season_matches.columns]
     unique_players = pd.unique(season_matches[existing_p_cols].values.ravel())
-    unique_players_count = len([p for p in unique_players if p and not pd.isna(p)])
+    unique_players_count = len([p for p in unique_players if p and not pd.isna(p) and str(p).lower().strip() not in IGNORE_PLAYERS])
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Totaal Wedstrijden", total_matches)

@@ -19,6 +19,9 @@ import firestore_service as db # Use Firestore service
 
 K_FACTOR = 32
 
+# Lijst van spelers die we niet willen tonen in statistieken/ranglijsten (system players of test players)
+IGNORE_PLAYERS = ['niemandin', 'niemanduit', 'niemand', 'none', '', ' ', 'testthuisa', 'testthuisb', 'testuita', 'testuitb']
+
 # ---------- Helpers voor namen & verzoeken ----------
 def add_name(name: str):
     """Valideer en voeg nieuwe speler toe aan Firestore."""
