@@ -393,6 +393,13 @@ matches_ref = db.collection('uitslag')
 elo_ref = db.collection('elo')
 requests_ref = db.collection('requests')
 
+# Kolomvolgorde voor uitslagen
+MATCH_COLUMNS = [
+    'match_id', 'timestamp', 'thuis_1', 'thuis_2', 'thuis_score',
+    'uit_1', 'uit_2', 'uit_score', 'klinkers_thuis_1',
+    'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2'
+]
+
 # DATA LEESFUNCTIES
 @handle_firestore_exceptions
 @st.cache_data
@@ -439,6 +446,11 @@ def get_matches(start_ts=None, end_ts=None):
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
             df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            
+            # Enforce column order
+            existing_cols = [c for c in MATCH_COLUMNS if c in df.columns]
+            other_cols = [c for c in df.columns if c not in MATCH_COLUMNS]
+            df = df[existing_cols + other_cols]
         
         if matches:
             set_offline_mode(False)
@@ -617,7 +629,24 @@ def add_match_and_update_elo(match_data, elo_updates):
         batch = db.batch()
         new_match_ref = matches_ref.document()
         match_id = new_match_ref.id
-        batch.set(new_match_ref, {**match_data, 'timestamp': ts, 'match_id': match_id})
+        
+        # Geordende dict voor Firestore (Python 3.7+ behoudt volgorde)
+        final_match_data = {
+            'match_id': match_id,
+            'timestamp': ts,
+            'thuis_1': match_data.get('thuis_1'),
+            'thuis_2': match_data.get('thuis_2'),
+            'thuis_score': match_data.get('thuis_score'),
+            'uit_1': match_data.get('uit_1'),
+            'uit_2': match_data.get('uit_2'),
+            'uit_score': match_data.get('uit_score'),
+            'klinkers_thuis_1': match_data.get('klinkers_thuis_1', 0),
+            'klinkers_thuis_2': match_data.get('klinkers_thuis_2', 0),
+            'klinkers_uit_1': match_data.get('klinkers_uit_1', 0),
+            'klinkers_uit_2': match_data.get('klinkers_uit_2', 0)
+        }
+        
+        batch.set(new_match_ref, final_match_data)
 
         for naam, elo in elo_updates:
             batch.set(elo_ref.document(), {'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id})
