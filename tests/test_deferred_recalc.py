@@ -120,3 +120,53 @@ def test_check_and_run_scheduled_recalc():
         
     finally:
         db.recalculate_elos_from = original_recalc
+
+
+def test_check_duplicate_match():
+    from tabs.tab_invullen import check_duplicate_match
+    
+    # Bereid mock matches_df voor
+    matches_data = [
+        {
+            'timestamp': pd.Timestamp('2026-06-10 10:00:00'),
+            'thuis_1': 'A', 'thuis_2': 'B',
+            'uit_1': 'C', 'uit_2': 'D',
+            'thuis_score': 10, 'uit_score': 5
+        },
+        {
+            'timestamp': pd.Timestamp('2026-06-09 08:00:00'), # meer dan 24 uur geleden
+            'thuis_1': 'A', 'thuis_2': 'B',
+            'uit_1': 'C', 'uit_2': 'D',
+            'thuis_score': 10, 'uit_score': 5
+        }
+    ]
+    matches_df = pd.DataFrame(matches_data)
+    
+    # Input wedstrijdgegevens
+    selected_names = {
+        'Thuis 1': {'name': 'A'},
+        'Thuis 2': {'name': 'B'},
+        'Uit 1': {'name': 'C'},
+        'Uit 2': {'name': 'D'},
+    }
+    
+    # Test A: Exacte dubbele wedstrijd binnen 24 uur (moet True retourneren)
+    input_ts_a = pd.Timestamp('2026-06-10 12:00:00')
+    assert check_duplicate_match(selected_names, 10, 5, input_ts_a, matches_df) is True
+    
+    # Test B: Zelfde spelers en score, maar meer dan 24 uur geleden ten opzichte van die uitslag (moet False retourneren)
+    input_ts_b = pd.Timestamp('2026-06-11 11:00:00')
+    assert check_duplicate_match(selected_names, 10, 5, input_ts_b, matches_df) is False
+    
+    # Test C: Omgedraaide teams binnen 24 uur met omgedraaide score (moet True retourneren)
+    selected_names_swapped = {
+        'Thuis 1': {'name': 'C'},
+        'Thuis 2': {'name': 'D'},
+        'Uit 1': {'name': 'A'},
+        'Uit 2': {'name': 'B'},
+    }
+    assert check_duplicate_match(selected_names_swapped, 5, 10, input_ts_a, matches_df) is True
+    
+    # Test D: Zelfde spelers binnen 24 uur, maar met een ANDERE score (moet False retourneren)
+    assert check_duplicate_match(selected_names, 10, 8, input_ts_a, matches_df) is False
+
