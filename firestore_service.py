@@ -938,9 +938,169 @@ def recalculate_elos_for_season(start_date, end_date):
         print(f"Recalc error: {e}")
         return False
 
-def delete_match_with_elo_recalculation(match_id):
-    """Verwijdert match en herbereken seizoen."""
+@st.cache_data(ttl=60)
+def get_recalc_status():
+    """Haalt de herberekeningsstatus op uit system_config."""
     try:
+        config_ref = db.collection("system_config").document("elo_recalc")
+        doc = config_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+    except Exception as e:
+        print(f"Fout bij ophalen ELO herberekeningsstatus: {e}")
+    return None
+
+def set_recalc_needed_flag(season_start, season_end, season_naam, modified_timestamp):
+    try:
+        import pandas as pd
+        config_ref = db.collection("system_config").document("elo_recalc")
+        doc = config_ref.get()
+        
+        # Bepaal de vroegste wijzigingstijdstip
+        new_ts = pd.Timestamp(modified_timestamp)
+        if new_ts.tzinfo is not None:
+            new_ts = new_ts.tz_localize(None)
+            
+        if doc.exists:
+            data = doc.to_dict()
+            if data.get("recalc_needed"):
+                existing_ts = data.get("earliest_modified_timestamp")
+                if existing_ts:
+                    existing_ts = pd.Timestamp(existing_ts)
+                    if existing_ts.tzinfo is not None:
+                        existing_ts = existing_ts.tz_localize(None)
+                    if existing_ts < new_ts:
+                        new_ts = existing_ts
+        
+        config_ref.set({
+            "recalc_needed": True,
+            "season_start": pd.Timestamp(season_start),
+            "season_end": pd.Timestamp(season_end),
+            "season_naam": season_naam,
+            "earliest_modified_timestamp": new_ts,
+            "timestamp": pd.Timestamp.now()
+        }, merge=True)
+        get_recalc_status.clear()
+    except Exception as e:
+        print(f"Error setting recalc flag: {e}")
+
+def recalculate_elos_from(start_timestamp, season_start, season_end):
+    """Herberekent ELO scores incrementeel vanaf een specifiek tijdstip binnen een seizoen."""
+    try:
+        import pandas as pd
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        from utils.utils_new_elo import calculate_new_elo
+        
+        all_matches = get_matches().sort_values('timestamp', ascending=True)
+        players_df = get_players()
+        
+        start_ts_pd = pd.Timestamp(start_timestamp)
+        if start_ts_pd.tzinfo is not None:
+            start_ts_pd = start_ts_pd.tz_localize(None)
+
+        all_matches['ts_naive'] = all_matches['timestamp'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
+        
+        season_mask = (all_matches['ts_naive'].dt.date >= pd.Timestamp(season_start).date()) & (all_matches['ts_naive'].dt.date <= pd.Timestamp(season_end).date())
+        season_matches = all_matches[season_mask]
+        
+        future_matches = season_matches[season_matches['ts_naive'] >= start_ts_pd]
+        
+        if future_matches.empty:
+            clear_all_caches(only_elo=True, only_players=True)
+            return True
+
+        elo_df = get_elo_logs()
+        elo_df['ts_naive'] = elo_df['timestamp'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
+        
+        past_elos = elo_df[(elo_df['ts_naive'] >= pd.Timestamp(season_start)) & (elo_df['ts_naive'] < start_ts_pd)]
+        
+        player_elos = {name: 1000 for name in players_df['speler_naam']}
+        player_matches = {name: 0 for name in players_df['speler_naam']}
+        
+        for name in player_elos.keys():
+            p_history = past_elos[past_elos['speler_naam'] == name]
+            if not p_history.empty:
+                last_record = p_history.loc[p_history['ts_naive'].idxmax()]
+                player_elos[name] = last_record['rating']
+                player_matches[name] = len(p_history) - 1
+        
+        batch = db.batch()
+        
+        start_ts_utc = start_timestamp
+        end_ts_utc = pd.Timestamp(season_end)
+        if not hasattr(end_ts_utc, 'tzinfo') or end_ts_utc.tzinfo is None:
+            end_ts_utc = end_ts_utc.tz_localize('UTC')
+        end_ts_utc = end_ts_utc + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        
+        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', start_ts_utc)).where(filter=FieldFilter('timestamp', '<=', end_ts_utc)).stream()
+        c = 0
+        for doc in old_elos:
+            batch.delete(doc.reference)
+            c += 1
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
+        if c > 0: batch.commit()
+        
+        batch = db.batch()
+        c = 0
+        for _, match in future_matches.iterrows():
+            m_dict = {
+                "Thuis_1": match['thuis_1'], "Thuis_2": match['thuis_2'],
+                "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
+                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score'],
+                "klinkers_thuis_1": match.get('klinkers_thuis_1', 0),
+                "klinkers_thuis_2": match.get('klinkers_thuis_2', 0),
+                "klinkers_uit_1": match.get('klinkers_uit_1', 0),
+                "klinkers_uit_2": match.get('klinkers_uit_2', 0)
+            }
+            m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
+            
+            all_ratings = {p: [player_elos.get(p, 1000)] * (player_matches.get(p, 0) + 1) for p in m_players}
+            
+            new_df = calculate_new_elo(m_dict, all_ratings)
+            for _, row in new_df.iterrows():
+                p, r = row['Speler'], row['ELO']
+                player_elos[p] = r
+                player_matches[p] = player_matches.get(p, 0) + 1
+                batch.set(elo_ref.document(), {
+                    'speler_naam': p, 
+                    'rating': r, 
+                    'timestamp': match['timestamp'], 
+                    'match_id': match['match_id']
+                })
+                c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+        
+        for name, rating in player_elos.items():
+            p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+            if p_docs:
+                batch.update(p_docs[0].reference, {'rating': rating})
+                c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+
+        if c > 0: batch.commit()
+        clear_all_caches(only_elo=True, only_players=True)
+        return True
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Incremental recalc error: {e}")
+        return False
+
+def delete_match_with_elo_recalculation(match_id):
+    """Verwijdert match en zet herberekeningsvlag (geen directe herberekening)."""
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        import pandas as pd
+        
         doc = matches_ref.document(match_id).get()
         if not doc.exists: 
             print(f"Match {match_id} not found in Firestore.")
@@ -949,13 +1109,28 @@ def delete_match_with_elo_recalculation(match_id):
         match_data = doc.to_dict()
         ts = match_data.get('timestamp')
         
-        # Verwijder de match
+        # Verwijder wedstrijd
         matches_ref.document(match_id).delete()
         
-        # Zoek het bijbehorende seizoen voor herberekening
+        # Verwijder direct de 4 bijbehorende ELO-logs van deze specifieke wedstrijd
+        try:
+            elo_docs = elo_ref.where(filter=FieldFilter('match_id', '==', match_id)).stream()
+            b = db.batch()
+            for edoc in elo_docs: 
+                b.delete(edoc.reference)
+            b.commit()
+        except Exception as e:
+            print(f"Kon ELO-logs voor wedstrijd {match_id} niet direct verwijderen: {e}")
+        
+        # Verwijder uit GSheet Backup
+        try:
+            _delete_gsheet_record("Wedstrijden", "match_id", match_id)
+            _delete_gsheet_record("ELO_Logs", "match_id", match_id)
+        except Exception as e:
+            print(f"Kon niet uit GSheet verwijderen: {e}")
+            
         seasons = get_seasons()
         
-        # Normaliseer ts naar naive datetime voor vergelijking met seasons df
         if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
             ts_naive = ts.replace(tzinfo=None)
         else:
@@ -966,15 +1141,228 @@ def delete_match_with_elo_recalculation(match_id):
         if not s_row.empty:
             start_date = s_row.iloc[0]['start_datum']
             end_date = s_row.iloc[0]['eind_datum']
-            print(f"Recalculating season: {s_row.iloc[0]['seizoen_naam']} ({start_date} to {end_date})")
-            recalculate_elos_for_season(start_date, end_date)
-        else:
-            print(f"No matching season found for match at {ts_naive}. Skipping ELO recalculation.")
+            season_naam = s_row.iloc[0]['seizoen_naam']
+            
+            # Zet de vlag en de vroegste wijzigingstijdstip (altijd uitgesteld)
+            set_recalc_needed_flag(start_date, end_date, season_naam, ts)
             
         clear_all_caches(only_matches=True, only_elo=True)
-        return True
+        return "FLAGGED"
     except Exception as e:
         print(f"Error in delete_match_with_elo_recalculation: {e}")
         import traceback
         traceback.print_exc()
         return False
+
+def update_match_with_elo_recalculation(match_id, updated_data):
+    """Update match en zet herberekeningsvlag (geen directe herberekening)."""
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        import pandas as pd
+        
+        doc = matches_ref.document(match_id).get()
+        if not doc.exists:
+            print(f"Match {match_id} not found in Firestore.")
+            return False
+            
+        orig_match_data = doc.to_dict()
+        orig_ts = orig_match_data.get('timestamp')
+        new_ts = updated_data.get('timestamp') or orig_ts
+        
+        # Bepaal het vroegste tijdstip tussen origineel en nieuw
+        ts = orig_ts
+        if orig_ts and new_ts:
+            orig_ts_pd = pd.Timestamp(orig_ts)
+            new_ts_pd = pd.Timestamp(new_ts)
+            if orig_ts_pd.tzinfo is not None: orig_ts_pd = orig_ts_pd.tz_localize(None)
+            if new_ts_pd.tzinfo is not None: new_ts_pd = new_ts_pd.tz_localize(None)
+            if new_ts_pd < orig_ts_pd:
+                ts = new_ts
+        
+        # Update wedstrijd in Firestore
+        matches_ref.document(match_id).update(updated_data)
+        
+        # Verwijder de oude ELO-logs voor deze match
+        try:
+            elo_docs = elo_ref.where(filter=FieldFilter('match_id', '==', match_id)).stream()
+            b = db.batch()
+            for edoc in elo_docs: 
+                b.delete(edoc.reference)
+            b.commit()
+        except Exception as e:
+            print(f"Kon oude ELO-logs voor wedstrijd {match_id} niet verwijderen: {e}")
+            
+        # Update GSheet Backup
+        try:
+            _delete_gsheet_record("Wedstrijden", "match_id", match_id)
+            updated_doc = matches_ref.document(match_id).get()
+            if updated_doc.exists:
+                _write_gsheet_record("Wedstrijden", {**updated_doc.to_dict(), 'match_id': match_id})
+            _delete_gsheet_record("ELO_Logs", "match_id", match_id)
+        except Exception as e:
+            print(f"Kon GSheet niet updaten: {e}")
+            
+        seasons = get_seasons()
+        
+        if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+            ts_naive = ts.replace(tzinfo=None)
+        else:
+            ts_naive = ts
+            
+        s_row = seasons[(seasons['start_datum'] <= ts_naive) & (seasons['eind_datum'] >= ts_naive)]
+        
+        if not s_row.empty:
+            start_date = s_row.iloc[0]['start_datum']
+            end_date = s_row.iloc[0]['eind_datum']
+            season_naam = s_row.iloc[0]['seizoen_naam']
+            
+            # Zet de vlag en de vroegste wijzigingstijdstip (altijd uitgesteld)
+            set_recalc_needed_flag(start_date, end_date, season_naam, ts)
+            
+        clear_all_caches(only_matches=True, only_elo=True)
+        return "FLAGGED"
+    except Exception as e:
+        print(f"Error in update_match_with_elo_recalculation: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def delete_multiple_matches_with_elo_recalculation(match_ids):
+    """Verwijdert meerdere matches en zet de herberekeningsvlag op basis van de vroegste match."""
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        import pandas as pd
+        
+        earliest_ts = None
+        earliest_season_info = None
+        
+        seasons = get_seasons()
+        
+        for mid in match_ids:
+            doc = matches_ref.document(mid).get()
+            if not doc.exists:
+                continue
+                
+            m_data = doc.to_dict()
+            ts = m_data.get('timestamp')
+            
+            # Vergelijk timestamps om de vroegste te vinden
+            if ts:
+                ts_pd = pd.Timestamp(ts)
+                ts_naive = ts_pd.replace(tzinfo=None) if ts_pd.tzinfo is not None else ts_pd
+                
+                if earliest_ts is None:
+                    earliest_ts = ts_pd
+                else:
+                    earliest_ts_naive = earliest_ts.replace(tzinfo=None) if earliest_ts.tzinfo is not None else earliest_ts
+                    if ts_naive < earliest_ts_naive:
+                        earliest_ts = ts_pd
+                        
+                # Zoek seizoen
+                s_row = seasons[(seasons['start_datum'] <= ts_naive) & (seasons['eind_datum'] >= ts_naive)]
+                if not s_row.empty and (earliest_season_info is None or ts_naive < earliest_ts.replace(tzinfo=None)):
+                    earliest_season_info = (
+                        s_row.iloc[0]['start_datum'],
+                        s_row.iloc[0]['eind_datum'],
+                        s_row.iloc[0]['seizoen_naam']
+                    )
+            
+            # Verwijder match
+            matches_ref.document(mid).delete()
+            
+            # Verwijder ELO logs van deze match
+            try:
+                elo_docs = elo_ref.where(filter=FieldFilter('match_id', '==', mid)).stream()
+                b = db.batch()
+                for edoc in elo_docs: 
+                    b.delete(edoc.reference)
+                b.commit()
+            except Exception:
+                pass
+                
+            # Verwijder uit GSheet Backup
+            try:
+                _delete_gsheet_record("Wedstrijden", "match_id", mid)
+                _delete_gsheet_record("ELO_Logs", "match_id", mid)
+            except Exception:
+                pass
+                
+        if earliest_ts and earliest_season_info:
+            start_date, end_date, season_naam = earliest_season_info
+            set_recalc_needed_flag(start_date, end_date, season_naam, earliest_ts)
+            
+        clear_all_caches(only_matches=True, only_elo=True)
+        return "FLAGGED"
+    except Exception as e:
+        print(f"Error in delete_multiple_matches_with_elo_recalculation: {e}")
+        return False
+
+def check_and_run_scheduled_recalc():
+    """Controleert of er een ELO-herberekening gepland staat en voert deze uit na 23:00 uur."""
+    try:
+        from datetime import datetime, timedelta
+        import pandas as pd
+        import google.cloud.firestore
+        
+        # We gebruiken een transactie om de controle en het claimen van de lock atomair uit te voeren
+        transaction = db.transaction()
+        
+        @google.cloud.firestore.transactional
+        def check_and_claim_recalc(tx):
+            config_ref = db.collection("system_config").document("elo_recalc")
+            snapshot = config_ref.get(transaction=tx)
+            if not snapshot.exists:
+                return None
+                
+            data = snapshot.to_dict()
+            if not data.get("recalc_needed"):
+                return None
+                
+            # Bepaal het meest recente geplande tijdstip (vandaag om 23:00, of gisteren om 23:00)
+            now = datetime.now()
+            if now.hour >= 23:
+                last_scheduled = now.replace(hour=23, minute=0, second=0, microsecond=0)
+            else:
+                last_scheduled = (now - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
+                
+            last_recalc = data.get("last_recalc_time")
+            if last_recalc:
+                last_recalc = pd.Timestamp(last_recalc).to_pydatetime()
+                if last_recalc.tzinfo is not None:
+                    last_recalc = last_recalc.replace(tzinfo=None)
+                    
+            if not last_recalc or last_recalc < last_scheduled:
+                # Claim de herberekening: zet recalc_needed direct op False
+                tx.update(config_ref, {
+                    "recalc_needed": False,
+                    "last_recalc_time": now
+                })
+                return data
+            return None
+            
+        recalc_data = check_and_claim_recalc(transaction)
+        if recalc_data:
+            get_recalc_status.clear()
+            print(f"[RECALC] Transactie geclaimd voor seizoen {recalc_data.get('season_naam')}. Starten met herberekenen vanaf {recalc_data.get('earliest_modified_timestamp')}...")
+            success = recalculate_elos_from(
+                recalc_data.get("earliest_modified_timestamp"),
+                recalc_data.get("season_start"),
+                recalc_data.get("season_end")
+            )
+            config_ref = db.collection("system_config").document("elo_recalc")
+            if success:
+                # Wis de vroegste wijzigingstijdstip nu de herberekening is gelukt
+                config_ref.update({
+                    "earliest_modified_timestamp": None
+                })
+                get_recalc_status.clear()
+                print("[RECALC] ELO-herberekening succesvol afgerond.")
+            else:
+                # Bij fout: zet vlag terug op True zodat het later opnieuw wordt geprobeerd
+                print("[RECALC] ELO-herberekening mislukt. Vlag teruggezet naar True.")
+                config_ref.update({
+                    "recalc_needed": True
+                })
+                get_recalc_status.clear()
+    except Exception as e:
+        print(f"Fout bij checken/uitvoeren geplande ELO-herberekening: {e}")

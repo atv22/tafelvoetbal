@@ -26,8 +26,16 @@ from tabs.tab_commits import render_commits_tab
 
 setup_page()
 
+import threading
+threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()
+
 st.title("Tafelvoetbal Competitie ⚽")
 st.caption("Versie 2.5")
+
+# Check of ELO herberekening gepland is
+recalc_status = db.get_recalc_status()
+if recalc_status and recalc_status.get("recalc_needed"):
+    st.warning("⚠️ **ELO-herberekening gepland:** Er zijn recente wijzigingen in de wedstrijden. De ELO-scores en ranglijsten worden vanavond om 23:00 uur automatisch herberekend.")
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
