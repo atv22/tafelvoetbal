@@ -104,7 +104,8 @@ def cleanup_test_players():
             return
         deleted_count = 0
         for index, player in df_players.iterrows():
-            if 'speler_naam' in player and 'speler_id' in player and str(player['speler_naam']).startswith("TestSpeler"):
+            name = str(player.get('speler_naam', ''))
+            if name.startswith("TestSpeler") or name in test_players:
                 if db.delete_player_by_id(player['speler_id']):
                     deleted_count += 1
         if deleted_count > 0:

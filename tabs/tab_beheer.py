@@ -36,18 +36,7 @@ def _ensure_authentication() -> bool:
 # ---------------------------------------------------------------------------
 def _render_match_delete(db, matches_df: pd.DataFrame):
     st.write("**Wedstrijd(en) verwijderen**")
-    elo_delete_option = st.radio(
-        "ELO herberekening bij verwijdering:",
-        options=[
-            "🔄 Automatisch herberekenen na verwijdering (aanbevolen)",
-            "⚠️ Alleen verwijderen (geen ELO update)",
-        ],
-        help="Automatische herberekening zorgt voor correcte ELO scores na verwijdering.",
-        key="elo_delete_option",
-    )
-    if elo_delete_option == "⚠️ Alleen verwijderen (geen ELO update)":
-        st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het verwijderen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
-    auto_recalc_delete = elo_delete_option.startswith("🔄")
+    st.info("💡 Wedstrijden worden direct verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend om database-limieten te sparen.")
     
     matches_display_df = matches_df.copy()
     # Detect home/away columns
@@ -78,13 +67,9 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
             match_id = match_row.iloc[0]["match_id"]
             with st.spinner("Wedstrijd wordt verwijderd..."):
                 try:
-                    if auto_recalc_delete:
-                        success = db.delete_match_with_elo_recalculation(match_id)
-                        action_type = "delete_match_with_elo_recalculation"
-                    else:
-                        success = db.delete_match_by_id(match_id)
-                        action_type = "delete_match"
-                except db.FirestoreUnavailable as e:
+                    success = db.delete_match_with_elo_recalculation(match_id)
+                    action_type = "delete_match_with_elo_recalculation"
+                except Exception as e:
                     st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
                     with st.expander("Toon technische details"):
                         st.code(str(e.details) if hasattr(e, 'details') else str(e))
@@ -97,12 +82,8 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
                         details={"match_id": match_id, "display": match_to_delete},
                         db=db.db
                     )
-                    if auto_recalc_delete:
-                        st.success("Wedstrijd succesvol verwijderd en ELO scores herberekend!")
-                    else:
-                        st.success("Wedstrijd succesvol verwijderd.")
-                        st.warning("⚠️ ELO scores zijn niet herberekend.")
-                    time.sleep(1)
+                    st.success("Wedstrijd succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
+                    time.sleep(1.5)
                     st.rerun()
 
     st.write("**Meerdere wedstrijden verwijderen:**")
@@ -115,54 +96,35 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
         "Verwijder geselecteerde wedstrijden", key="delete_multiple"
     ):
         with st.spinner(f"Bezig met verwijderen van {len(matches_to_delete)} wedstrijden..."):
-            success_count = 0
+            match_ids = []
             for match_display in matches_to_delete:
                 match_row = matches_display_df[matches_display_df["display"] == match_display]
                 if not match_row.empty:
-                    match_id = match_row.iloc[0]["match_id"]
-                    # Verwijder wedstrijd en bijbehorende ELO-logs
-                    if db.delete_match_by_id(match_id):
-                        # Verwijder ELO-logs met deze match_id
-                        try:
-                            from google.cloud.firestore_v1.base_query import FieldFilter
-                            elo_docs = db.elo_ref.where(filter=FieldFilter('match_id', '==', match_id)).stream()
-                            batch = db.db.batch()
-                            batch_counter = 0
-                            for doc in elo_docs:
-                                batch.delete(doc.reference)
-                                batch_counter += 1
-                                if batch_counter >= 400:
-                                    batch.commit()
-                                    batch = db.db.batch()
-                                    batch_counter = 0
-                            if batch_counter > 0:
-                                batch.commit()
-                        except Exception as e:
-                            st.warning(f"Kon ELO-logs voor match {match_id} niet verwijderen: {e}")
-                        success_count += 1
-            if success_count == len(matches_to_delete):
-                st.success(f"Alle {success_count} wedstrijden en bijbehorende ELO-logs succesvol verwijderd.")
-            else:
-                st.warning(f"{success_count} van de {len(matches_to_delete)} wedstrijden verwijderd.")
-            time.sleep(1)
-            st.rerun()
+                    match_ids.append(match_row.iloc[0]["match_id"])
+            if match_ids:
+                try:
+                    success = db.delete_multiple_matches_with_elo_recalculation(match_ids)
+                except Exception as e:
+                    st.error(f"Fout bij verwijderen: {e}")
+                    return
+                if success:
+                    from utils.utils_beheer_log import log_admin_action
+                    log_admin_action(
+                        action_type="delete_multiple_matches_with_elo_recalculation",
+                        user=st.session_state.get("user", "onbekend"),
+                        details={"match_ids": match_ids},
+                        db=db.db
+                    )
+                    st.success(f"{len(match_ids)} wedstrijden succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
+                    time.sleep(1.5)
+                    st.rerun()
 
 # ---------------------------------------------------------------------------
 # Wedstrijd bewerken
 # ---------------------------------------------------------------------------
 def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
     st.write("**Wedstrijd bewerken**")
-    elo_option = st.radio(
-        "ELO herberekening optie:",
-        options=[
-            "🔄 Automatisch herberekenen (aanbevolen)",
-            "⚠️ Alleen wedstrijd aanpassen (geen ELO update)",
-        ],
-        help="Automatische herberekening zorgt for correcte ELO scores maar duurt langer.",
-    )
-    if elo_option == "⚠️ Alleen wedstrijd aanpassen (geen ELO update)":
-        st.warning("\n⚠️ **Let op:** Deze optie is alleen bedoeld voor testen of debuggen. Gebruik dit niet voor reguliere uitslagen! Het aanpassen van wedstrijden zonder ELO herberekening kan leiden tot inconsistente of foutieve ratings.\n")
-    auto_recalculate = elo_option.startswith("🔄")
+    st.info("💡 Wijzigingen worden direct opgeslagen. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend om database-limieten te sparen.")
     
     if players_df.empty:
         st.info("Geen spelers beschikbaar om wedstrijden mee te bewerken.")
@@ -283,12 +245,8 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
                 "timestamp": match_data.get("timestamp"),
             }
             with st.spinner("Wedstrijd wordt bijgewerkt..."):
-                if auto_recalculate:
-                    success = db.update_match_with_elo_recalculation(match_data["match_id"], updated)
-                    action_type = "update_match_with_elo_recalculation"
-                else:
-                    success = db.update_match(match_data["match_id"], updated)
-                    action_type = "update_match"
+                success = db.update_match_with_elo_recalculation(match_data["match_id"], updated)
+                action_type = "update_match_with_elo_recalculation"
                 from utils.utils_beheer_log import log_admin_action
                 log_admin_action(
                     action_type=action_type,
@@ -297,18 +255,12 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
                     db=db.db
                 )
                 if success:
-                    if auto_recalculate:
-                        st.success("Wedstrijd succesvol bijgewerkt en ELO scores herberekend!")
-                    else:
-                        st.success("Wedstrijd succesvol bijgewerkt!")
-                        st.warning(
-                            "⚠️ **Belangrijk:** ELO scores zijn niet herberekend. Dit kan leiden tot inconsistenties."
-                        )
+                    st.success("Wedstrijd succesvol bijgewerkt. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
                     time.sleep(1.5)
                     st.rerun()
                 else:
                     st.error(
-                        "Er is een fout opgetreden bij het bijwerken van de wedstrijd (of herberekenen)."
+                        "Er is een fout opgetreden bij het bijwerken van de wedstrijd."
                     )
 
 # ---------------------------------------------------------------------------
