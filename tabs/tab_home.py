@@ -247,8 +247,8 @@ def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
         if not matches_df.empty:
             st.subheader("🕒 Laatste 10 uitslagen")
             
-            # Selecteer en formatteer data
-            recent_matches = matches_df.head(10).copy()
+            # Selecteer en formatteer data (sorteer expliciet aflopend op timestamp)
+            recent_matches = matches_df.sort_values('timestamp', ascending=False).head(10).copy()
             
             # Formatteer timestamp voor weergave
             if 'timestamp' in recent_matches.columns:
