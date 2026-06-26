@@ -77,8 +77,8 @@ def calculate_elo_trends(elo_df):
     df['speler_naam'] = df['speler_naam'].astype(str)
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     
-    # Sorteer op tijd
-    df = df.sort_values(['timestamp'], ascending=[True])
+    # Sorteer op tijd (zet NaT helemaal vooraan zodat ze als oudste tellen)
+    df = df.sort_values(['timestamp'], ascending=[True], na_position='first')
     
     for speler, group in df.groupby('speler_naam'):
         if len(group) >= 2:
