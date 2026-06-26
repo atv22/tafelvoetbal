@@ -23,11 +23,11 @@ from tabs.tab_data import render_data_tab
 from tabs.tab_beheer import render_admin_tab
 from tabs.tab_colofon import render_colofon_tab
 from tabs.tab_commits import render_commits_tab
+from tabs.tab_logging import render_logging_tab
 
 setup_page()
 
 import threading
-threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()
 
 st.title("Tafelvoetbal Competitie ⚽")
 st.caption("Versie 2.5")
@@ -36,6 +36,23 @@ st.caption("Versie 2.5")
 recalc_status = db.get_recalc_status()
 if recalc_status and recalc_status.get("recalc_needed"):
     st.warning("⚠️ **ELO-herberekening gepland:** Er zijn recente wijzigingen in de wedstrijden. De ELO-scores en ranglijsten worden vanavond om 23:00 uur automatisch herberekend.")
+    
+    import pandas as pd
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    if now.hour >= 23:
+        last_scheduled = now.replace(hour=23, minute=0, second=0, microsecond=0)
+    else:
+        last_scheduled = (now - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
+        
+    last_recalc = recalc_status.get("last_recalc_time")
+    if last_recalc:
+        last_recalc = pd.Timestamp(last_recalc).to_pydatetime()
+        if last_recalc.tzinfo is not None:
+            last_recalc = last_recalc.replace(tzinfo=None)
+            
+    if not last_recalc or last_recalc < last_scheduled:
+        threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
@@ -98,7 +115,7 @@ if hasattr(db, 'is_offline') and db.is_offline():
     st.info(f"📊 De meest recente data is nog steeds inzichtelijk via de [Google Sheet Backup](https://docs.google.com/spreadsheets/d/1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA). Nieuwe invoer is nog steeds mogelijk.")
 
 # --- Tab navigatie ---
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🏠 Home", 
     "📝 Invullen", 
     "👥 Spelers", 
@@ -107,6 +124,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "⚙️ Beheer", 
     "💬 Verzoeken",
     "📜 Commits",
+    "🔍 Logging",
     "ℹ️ Colofon"
 ])
 
@@ -185,8 +203,15 @@ with tab8:
     t1 = time.perf_counter()
     print(f"[TIMING] tab COMMITS rendered in {t1-t0:.3f}s")
 
-# ===== TAB 9: COLOFON =====
+# ===== TAB 9: LOGGING =====
 with tab9:
+    t0 = time.perf_counter()
+    render_logging_tab()
+    t1 = time.perf_counter()
+    print(f"[TIMING] tab LOGGING rendered in {t1-t0:.3f}s")
+
+# ===== TAB 10: COLOFON =====
+with tab10:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")

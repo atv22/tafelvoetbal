@@ -11,6 +11,44 @@ from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
+# --- FIRESTORE LOGGING ---
+import collections
+
+@st.cache_resource
+def get_log_history():
+    return collections.deque(maxlen=1000)
+
+def log_firestore_op(op_type, collection, action, count=1):
+    """Logt Firestore operaties naar de console, inclusief het IP-adres van de gebruiker (indien beschikbaar)."""
+    try:
+        from datetime import datetime
+        import streamlit as st
+        ip = "Unknown IP"
+        try:
+            if hasattr(st, 'context') and hasattr(st.context, 'headers'):
+                headers = st.context.headers
+                ip = headers.get("X-Forwarded-For", headers.get("X-Real-IP", "Unknown IP"))
+            else:
+                try:
+                    from streamlit.web.server.websocket_headers import _get_websocket_headers
+                    headers = _get_websocket_headers()
+                    if headers:
+                        ip = headers.get("X-Forwarded-For", headers.get("X-Real-IP", "Unknown IP"))
+                except:
+                    pass
+        except:
+            pass
+            
+        if ip != "Unknown IP":
+            ip = ip.split(',')[0].strip()
+            
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_str = f"[{ts}] [FIRESTORE] {op_type.upper():<5} | Coll: {collection:<12} | Action: {action:<22} | Count: {count:<4} | IP: {ip}"
+        print(log_str)
+        get_log_history().appendleft(log_str)
+    except Exception as e:
+        print(f"[FIRESTORE LOG ERROR] {e}")
+
 # Google Sheet ID voor fallback
 DEFAULT_SHEET_ID = "1cCiNoYfro9SqS8qIjEKT8prsAvAA7wowvhzhh2ljHnA"
 SHEET_ID = st.secrets.get("GSHEET_ID", DEFAULT_SHEET_ID)
@@ -337,29 +375,16 @@ def reconcile_data_sources():
 
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches(only_players=False, only_matches=False, only_elo=False, only_requests=False):
-    """Leeg specifieke of alle Streamlit caches na mutaties."""
+    """
+    Leegt specifieke Streamlit caches. Omdat data nu via real-time listeners wordt bijgehouden, 
+    is harde invalidatie van data-query functies niet meer nodig (de 'last_updated' timestamp regelt dit).
+    """
     try:
-        # Als er geen specifieke cache is opgegeven, leeg alles (inclusief app.py load_all_data)
-        if not (only_players or only_matches or only_elo or only_requests):
-            st.cache_data.clear()
-            return
-            
-        if only_players:
-            get_players.clear()
         if only_matches:
-            get_matches.clear()
-            get_seasons.clear()
-        if only_elo:
-            get_players.clear()
-            get_elo_logs.clear()
-            get_elo_history.clear()
-        if only_requests:
-            get_requests.clear()
-            
+            if hasattr(get_seasons, "clear"):
+                get_seasons.clear()
     except Exception as e:
         print(f"Fout bij cache invalidatie: {e}")
-        try: st.cache_data.clear()
-        except: pass
 
 # --- HULPFUNCTIE: Timestamp normalisatie ---
 def normalize_timestamp_series(ts_series):
@@ -393,6 +418,68 @@ matches_ref = db.collection('uitslag')
 elo_ref = db.collection('elo')
 requests_ref = db.collection('requests')
 
+# --- FIRESTORE LISTENERS ---
+@st.cache_resource
+def init_firestore_listeners():
+    import threading
+    store = {
+        "matches": {},
+        "elo": {},
+        "players": {},
+        "requests": {},
+        "beheer_log": {},
+        "watchers": [],
+        "last_updated": {
+            "matches": 0,
+            "elo": 0,
+            "players": 0,
+            "requests": 0,
+            "beheer_log": 0
+        }
+    }
+    
+    events = {
+        "matches": threading.Event(),
+        "elo": threading.Event(),
+        "players": threading.Event(),
+        "requests": threading.Event(),
+        "beheer_log": threading.Event()
+    }
+    
+    import time
+    def make_callback(collection_name, id_field=None):
+        def callback(doc_snapshot, changes, read_time):
+            for change in changes:
+                doc_id = change.document.id
+                if change.type.name in ('ADDED', 'MODIFIED'):
+                    d = change.document.to_dict()
+                    if id_field:
+                        d[id_field] = doc_id
+                    store[collection_name][doc_id] = d
+                elif change.type.name == 'REMOVED':
+                    store[collection_name].pop(doc_id, None)
+            store["last_updated"][collection_name] = time.time()
+            events[collection_name].set()
+        return callback
+
+    if not is_offline():
+        try:
+            store["watchers"].append(matches_ref.on_snapshot(make_callback("matches", "match_id")))
+            store["watchers"].append(elo_ref.on_snapshot(make_callback("elo", None)))
+            store["watchers"].append(players_ref.on_snapshot(make_callback("players", "speler_id")))
+            store["watchers"].append(requests_ref.on_snapshot(make_callback("requests", None)))
+            store["watchers"].append(db.collection('beheer_log').on_snapshot(make_callback("beheer_log", None)))
+            
+            # Wacht op initiële snapshot zodat de app niet met lege data start
+            events["matches"].wait(timeout=5)
+            events["elo"].wait(timeout=5)
+            events["players"].wait(timeout=5)
+            log_firestore_op("READ", "all", "init_listeners", "~ALL")
+        except Exception as e:
+            print(f"Error initializing firestore listeners: {e}")
+            
+    return store
+
 # Kolomvolgorde voor uitslagen
 MATCH_COLUMNS = [
     'match_id', 'timestamp', 'thuis_1', 'thuis_2', 'thuis_score',
@@ -401,59 +488,67 @@ MATCH_COLUMNS = [
 ]
 
 # DATA LEESFUNCTIES
-@handle_firestore_exceptions
 @st.cache_data
+def _build_players_df(last_updated):
+    store = init_firestore_listeners()
+    players_list = list(store["players"].values())
+    if not players_list:
+        return _read_gsheet_fallback("Spelers")
+    df = pd.DataFrame(players_list)
+    if 'rating' not in df.columns:
+        df['rating'] = 1000
+    df['rating'] = df['rating'].fillna(1000)
+    set_offline_mode(False)
+    return df
+
+@handle_firestore_exceptions
 def get_players():
     """Haalt alle spelers op."""
     try:
-        spelers_docs = players_ref.stream()
-        players_list = []
-        for doc in spelers_docs:
-            d = doc.to_dict()
-            d['speler_id'] = doc.id
-            if 'rating' not in d: d['rating'] = 1000
-            players_list.append(d)
-        
-        if not players_list:
-            return _read_gsheet_fallback("Spelers")
-            
-        set_offline_mode(False)
-        return pd.DataFrame(players_list)
+        store = init_firestore_listeners()
+        return _build_players_df(store["last_updated"]["players"])
     except Exception:
         return _read_gsheet_fallback("Spelers")
 
-@handle_firestore_exceptions
 @st.cache_data
+def _build_matches_df(last_updated):
+    store = init_firestore_listeners()
+    matches = list(store["matches"].values())
+    if not matches:
+        df = _read_gsheet_fallback("Wedstrijden")
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
+
+    df = pd.DataFrame(matches)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+    
+    # Enforce column order
+    existing_cols = [c for c in MATCH_COLUMNS if c in df.columns]
+    other_cols = [c for c in df.columns if c not in MATCH_COLUMNS]
+    df = df[existing_cols + other_cols]
+    
+    df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+    set_offline_mode(False)
+    return df
+
+@handle_firestore_exceptions
 def get_matches(start_ts=None, end_ts=None):
     """Haalt wedstrijden op."""
     try:
-        query = matches_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING)
+        store = init_firestore_listeners()
+        df = _build_matches_df(store["last_updated"]["matches"])
+        
         if start_ts and end_ts:
-            query = matches_ref.where(filter=FieldFilter('timestamp', '>=', pd.to_datetime(start_ts))).where(filter=FieldFilter('timestamp', '<=', pd.to_datetime(end_ts)))
-        
-        matches_docs = query.stream()
-        matches = []
-        for doc in matches_docs:
-            d = doc.to_dict()
-            d['match_id'] = doc.id
-            matches.append(d)
-        
-        if not matches:
-             df = _read_gsheet_fallback("Wedstrijden")
-        else:
-            df = pd.DataFrame(matches)
-
-        if not df.empty:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+            start_pd = pd.to_datetime(start_ts)
+            end_pd = pd.to_datetime(end_ts)
+            if start_pd.tzinfo is not None and df['timestamp'].dt.tz is None:
+                start_pd = start_pd.tz_localize(None)
+            if end_pd.tzinfo is not None and df['timestamp'].dt.tz is None:
+                end_pd = end_pd.tz_localize(None)
+            df = df[(df['timestamp'] >= start_pd) & (df['timestamp'] <= end_pd)]
             
-            # Enforce column order
-            existing_cols = [c for c in MATCH_COLUMNS if c in df.columns]
-            other_cols = [c for c in df.columns if c not in MATCH_COLUMNS]
-            df = df[existing_cols + other_cols]
-        
-        if matches:
-            set_offline_mode(False)
         return df
     except Exception:
         df = _read_gsheet_fallback("Wedstrijden")
@@ -461,105 +556,103 @@ def get_matches(start_ts=None, end_ts=None):
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
         return df
 
-@handle_firestore_exceptions
 @st.cache_data
+def _build_elo_logs_df(last_updated):
+    store = init_firestore_listeners()
+    elos = list(store["elo"].values())
+    if not elos:
+        df = _read_gsheet_fallback("ELO_Logs")
+        if not df.empty and 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        return df
+
+    df = pd.DataFrame(elos)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+    df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+    set_offline_mode(False)
+    return df
+
+@handle_firestore_exceptions
 def get_elo_logs():
     """Haalt de ELO logs op."""
     try:
-        elo_docs = elo_ref.order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        elos = [doc.to_dict() for doc in elo_docs]
-        
-        if not elos:
-            df = _read_gsheet_fallback("ELO_Logs")
-        else:
-            df = pd.DataFrame(elos)
-
-        if not df.empty:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        
-        if elos:
-            set_offline_mode(False)
-        return df
+        store = init_firestore_listeners()
+        return _build_elo_logs_df(store["last_updated"]["elo"])
     except Exception:
         df = _read_gsheet_fallback("ELO_Logs")
         if not df.empty and 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
         return df
 
-@handle_firestore_exceptions
 @st.cache_data
+def _build_requests_df(last_updated):
+    store = init_firestore_listeners()
+    req_list = list(store["requests"].values())
+    for d in req_list:
+        if 'Timestamp' in d:
+            d['timestamp'] = d.pop('Timestamp')
+            
+    if not req_list:
+        return _read_gsheet_fallback("Verzoeken")
+    
+    df = pd.DataFrame(req_list)
+    if not df.empty and 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+        
+    set_offline_mode(False)
+    return df
+
+@handle_firestore_exceptions
 def get_requests():
     """Haalt verzoeken op."""
     try:
-        docs = requests_ref.order_by("Timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        req_list = []
-        for doc in docs:
-            d = doc.to_dict()
-            if 'Timestamp' in d:
-                d['timestamp'] = d.pop('Timestamp')
-            req_list.append(d)
-            
-        if not req_list:
-            return _read_gsheet_fallback("Verzoeken")
-        
-        df = pd.DataFrame(req_list)
-        if not df.empty and 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-            
-        set_offline_mode(False)
-        return df
+        store = init_firestore_listeners()
+        return _build_requests_df(store["last_updated"]["requests"])
     except Exception:
         return _read_gsheet_fallback("Verzoeken")
 
-@handle_firestore_exceptions
 @st.cache_data
+def _build_beheer_log_df(last_updated):
+    store = init_firestore_listeners()
+    log_list = list(store["beheer_log"].values())
+    if not log_list:
+        return _read_gsheet_fallback("Beheer_Log")
+    
+    df = pd.DataFrame(log_list)
+    if not df.empty and 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+        df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+    
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+        
+    set_offline_mode(False)
+    return df
+
+@handle_firestore_exceptions
 def get_beheer_log():
     """Haalt alle beheer-log entries op uit Firestore."""
     try:
-        beheer_docs = db.collection('beheer_log').order_by("timestamp", direction=google.cloud.firestore.Query.DESCENDING).stream()
-        log_list = [doc.to_dict() for doc in beheer_docs]
-        if not log_list:
-            return _read_gsheet_fallback("Beheer_Log")
-        
-        df = pd.DataFrame(log_list)
-        if not df.empty and 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        
-        # Ensure lowercase timestamp if it came in capitalized from some source
-        if not df.empty:
-            df.columns = [c.lower() for c in df.columns]
-            
-        set_offline_mode(False)
-        return df
+        store = init_firestore_listeners()
+        return _build_beheer_log_df(store["last_updated"]["beheer_log"])
     except Exception:
         return _read_gsheet_fallback("Beheer_Log")
 
 @handle_firestore_exceptions
-@st.cache_data
 def get_elo_history(_ttl, speler_naam):
     """Haalt de ELO geschiedenis voor een specifieke speler op."""
     try:
-        elo_query = elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_naam)).order_by("timestamp", direction=google.cloud.firestore.Query.ASCENDING)
-        history_docs = elo_query.stream()
-        history = [doc.to_dict() for doc in history_docs]
-        
-        if not history:
-            df = _read_gsheet_fallback("ELO_Logs")
-            if not df.empty and 'speler_naam' in df.columns:
-                df = df[df['speler_naam'] == speler_naam]
-        else:
-            df = pd.DataFrame(history)
-
-        if not df.empty and 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        
-        if history:
-            set_offline_mode(False)
-        return df
+        df = get_elo_logs()
+        if not df.empty and 'speler_naam' in df.columns:
+            df = df[df['speler_naam'] == speler_naam]
+            # Sorteer oplopend voor de history grafiek
+            df = df.sort_values("timestamp", ascending=True).reset_index(drop=True)
+            return df
+        return pd.DataFrame()
     except Exception:
         set_offline_mode(True)
         return pd.DataFrame()
@@ -594,6 +687,7 @@ def get_seasons():
 
 # DATA SCHRIJFFUNCTIES
 def add_player(name, start_elo):
+    log_firestore_op("WRITE", "spelers", "add_player", 1)
     try:
         if players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get():
             return f"Error: Speler '{name}' bestaat al."
@@ -611,6 +705,7 @@ def add_player(name, start_elo):
         return "Error: Database offline en GSheet schrijven mislukt."
 
 def add_request(text):
+    log_firestore_op("WRITE", "requests", "add_request", 1)
     try:
         requests_ref.add({'Verzoek': text, 'Timestamp': SERVER_TIMESTAMP})
         clear_all_caches(only_requests=True)
@@ -624,6 +719,8 @@ def add_request(text):
 
 @handle_firestore_exceptions
 def add_match_and_update_elo(match_data, elo_updates):
+    log_firestore_op("WRITE", "uitslag", "add_match", 1)
+    log_firestore_op("WRITE", "elo", "add_match_elo", len(elo_updates))
     ts = match_data.get('timestamp') or pd.Timestamp.now()
     try:
         batch = db.batch()
@@ -668,6 +765,8 @@ def add_match_and_update_elo(match_data, elo_updates):
 
 # Beheer functies
 def delete_match_by_id(mid):
+    log_firestore_op("WRITE", "uitslag", "delete_match", 1)
+    log_firestore_op("WRITE", "elo", "delete_match_elo", 4)
     try:
         # Verwijder uit Firestore
         matches_ref.document(mid).delete()
@@ -694,6 +793,7 @@ def delete_match_by_id(mid):
         return False
 
 def update_match(mid, data):
+    log_firestore_op("WRITE", "uitslag", "update_match", 1)
     try:
         # Update Firestore
         matches_ref.document(mid).update(data)
@@ -710,6 +810,7 @@ def update_match(mid, data):
 
 def delete_player_by_id(player_id):
     """Verwijdert een speler en al zijn ELO-geschiedenis."""
+    log_firestore_op("WRITE", "spelers", "delete_player", 1)
     batch = db.batch()
     try:
         player_doc = players_ref.document(player_id).get()
