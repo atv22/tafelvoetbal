@@ -1104,7 +1104,7 @@ def recalculate_elos_from(start_timestamp, season_start, season_end):
         season_mask = (all_matches['ts_naive'].dt.date >= pd.Timestamp(season_start).date()) & (all_matches['ts_naive'].dt.date <= pd.Timestamp(season_end).date())
         season_matches = all_matches[season_mask]
         
-        future_matches = season_matches[season_matches['ts_naive'] >= start_ts_pd]
+        future_matches = season_matches[season_matches['ts_naive'] >= start_ts_pd].sort_values('ts_naive', ascending=True)
         
         if future_matches.empty:
             clear_all_caches(only_elo=True, only_players=True)
