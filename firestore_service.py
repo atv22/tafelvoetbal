@@ -1113,7 +1113,11 @@ def recalculate_elos_from(start_timestamp, season_start, season_end):
         elo_df = get_elo_logs()
         elo_df['ts_naive'] = elo_df['timestamp'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
         
-        past_elos = elo_df[(elo_df['ts_naive'] >= pd.Timestamp(season_start)) & (elo_df['ts_naive'] < start_ts_pd)]
+        season_start_pd = pd.Timestamp(season_start)
+        if hasattr(season_start_pd, 'tzinfo') and season_start_pd.tzinfo is not None:
+            season_start_pd = season_start_pd.tz_localize(None)
+        
+        past_elos = elo_df[(elo_df['ts_naive'] >= season_start_pd) & (elo_df['ts_naive'] < start_ts_pd)]
         
         player_elos = {name: 1000 for name in players_df['speler_naam']}
         player_matches = {name: 0 for name in players_df['speler_naam']}
