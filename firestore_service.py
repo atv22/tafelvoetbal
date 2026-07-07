@@ -571,7 +571,7 @@ def _build_matches_df(last_updated):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
             
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
     
     # Enforce column order
@@ -621,7 +621,7 @@ def _build_elo_logs_df(last_updated):
         df['rating'] = df['rating'].astype(str).str.replace(',', '.')
         df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
         
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
     
     # Verwijder duplicaten (overlap tussen GSheet history en Firestore on_snapshot)
