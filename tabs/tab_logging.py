@@ -26,11 +26,18 @@ def render_logging_tab(df_beheer_log):
     if st.button("🔄 Ververs Systeem Logs"):
         st.rerun()
         
-    logs = get_log_history()
+    logs = list(get_log_history())
     
     if not logs:
         st.info("Nog geen systeem logs beschikbaar in deze sessie.")
         return
         
-    log_text = "\n".join(logs)
-    st.code(log_text, language="text")
+    import pandas as pd
+    # Controleer of de logs het nieuwe dictionary formaat hebben
+    if len(logs) > 0 and isinstance(logs[0], dict):
+        df_logs = pd.DataFrame(logs)
+        st.dataframe(df_logs, use_container_width=True, hide_index=True)
+    else:
+        # Fallback voor oude string logs in de cache
+        log_text = "\n".join(logs)
+        st.code(log_text, language="text")

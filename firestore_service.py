@@ -45,7 +45,15 @@ def log_firestore_op(op_type, collection, action, count=1):
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_str = f"[{ts}] [FIRESTORE] {op_type.upper():<5} | Coll: {collection:<12} | Action: {action:<22} | Count: {count:<4} | IP: {ip}"
         print(log_str)
-        get_log_history().appendleft(log_str)
+        log_dict = {
+            "Tijdstip": ts,
+            "Type": op_type.upper(),
+            "Collectie": collection,
+            "Actie": action,
+            "Aantal": count,
+            "IP": ip
+        }
+        get_log_history().appendleft(log_dict)
     except Exception as e:
         print(f"[FIRESTORE LOG ERROR] {e}")
 
