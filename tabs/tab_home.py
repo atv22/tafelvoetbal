@@ -53,9 +53,13 @@ def calculate_stats(players, matches):
         
         # Rating uit players_df halen (huidige rating)
         rating_value = player.get('rating', 1000)
-        if rating_value is None or pd.isna(rating_value):
+        if pd.isna(rating_value) or rating_value == '':
             rating_value = 1000
-        stats['ELO'] = int(rating_value)
+        try:
+            stats['ELO'] = int(float(str(rating_value).replace(',', '.')))
+        except (ValueError, TypeError):
+            stats['ELO'] = 1000
+            
         stats_list.append(stats)
         
     return pd.DataFrame(stats_list)
