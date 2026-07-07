@@ -121,11 +121,11 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "👥 Spelers", 
     "📈 Analytics",
     "📊 Ruwe Data", 
-    "⚙️ Beheer", 
     "💬 Verzoeken",
     "📜 Commits",
     "🔍 Logging",
-    "ℹ️ Colofon"
+    "ℹ️ Colofon",
+    "⚙️ Beheer"
 ])
 
 
@@ -178,8 +178,8 @@ with tab5:
     t1 = time.perf_counter()
     print(f"[TIMING] tab RUWE DATA rendered in {t1-t0:.3f}s")
 
-# ===== TAB 6: BEHEER =====
-with tab6:
+# ===== TAB 10: BEHEER =====
+with tab10:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — beheer kan beperkt zijn")
@@ -187,8 +187,8 @@ with tab6:
     t1 = time.perf_counter()
     print(f"[TIMING] tab BEHEER rendered in {t1-t0:.3f}s")
 
-# ===== TAB 7: VERZOEKEN =====
-with tab7:
+# ===== TAB 6: VERZOEKEN =====
+with tab6:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")
@@ -196,22 +196,22 @@ with tab7:
     t1 = time.perf_counter()
     print(f"[TIMING] tab VERZOEKEN rendered in {t1-t0:.3f}s")
 
-# ===== TAB 8: COMMITS =====
-with tab8:
+# ===== TAB 7: COMMITS =====
+with tab7:
     t0 = time.perf_counter()
     render_commits_tab()
     t1 = time.perf_counter()
     print(f"[TIMING] tab COMMITS rendered in {t1-t0:.3f}s")
 
-# ===== TAB 9: LOGGING =====
-with tab9:
+# ===== TAB 8: LOGGING =====
+with tab8:
     t0 = time.perf_counter()
     render_logging_tab()
     t1 = time.perf_counter()
     print(f"[TIMING] tab LOGGING rendered in {t1-t0:.3f}s")
 
-# ===== TAB 10: COLOFON =====
-with tab10:
+# ===== TAB 9: COLOFON =====
+with tab9:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")
