@@ -193,7 +193,7 @@ def clean_and_translate_commit(hash_val, message):
     return message, category
 
 def render_commits_tab():
-    """Render de Commits tab met een premium visualisatie en filters."""
+    """Render de Commits tab als een simpele tabel."""
     st.header("📜 Wijzigingshistorie")
     st.write("Een overzicht van de laatste aanpassingen en updates van de tafelvoetbal-app.")
 
@@ -208,142 +208,23 @@ def render_commits_tab():
     # Pas opschoning en vertaling toe
     cleaned_data = []
     for _, row in commits_df.iterrows():
-        cleaned_msg, category = clean_and_translate_commit(row["Hash"], row["Bericht"])
+        cleaned_msg, _ = clean_and_translate_commit(row["Hash"], row["Bericht"])
         cleaned_data.append({
             "Hash": row["Hash"],
             "Datum": row["Datum"],
             "Auteur": row["Auteur"],
-            "Origineel": row["Bericht"],
-            "Bericht": cleaned_msg,
-            "Categorie": category
+            "Bericht": cleaned_msg
         })
     df = pd.DataFrame(cleaned_data)
 
-    # Categories filter met counts
-    category_counts = df["Categorie"].value_counts().to_dict()
-    
-    category_options = ["Alles (%d)" % len(df)]
-    category_map = {"Alles (%d)" % len(df): "Alles"}
-    
-    for cat in sorted(list(df["Categorie"].unique())):
-        label = f"{cat} ({category_counts.get(cat, 0)})"
-        category_options.append(label)
-        category_map[label] = cat
-
-    # Search filter and category filter side-by-side
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        selected_option = st.selectbox("Filter op categorie:", category_options)
-        selected_category = category_map[selected_option]
-    with col2:
-        search_query = st.text_input("🔍 Zoek in commit-berichten:", "").strip().lower()
-
-    # Filter data
-    filtered_df = df.copy()
-    if selected_category != "Alles":
-        filtered_df = filtered_df[filtered_df["Categorie"] == selected_category]
-    if search_query:
-        filtered_df = filtered_df[
-            filtered_df["Bericht"].str.lower().str.contains(search_query) | 
-            filtered_df["Hash"].str.lower().str.contains(search_query) |
-            filtered_df["Auteur"].str.lower().str.contains(search_query)
-        ]
-
-    # CSS for premium commit cards
-    st.markdown("""
-        <style>
-        .commit-card {
-            background-color: var(--secondary-background-color);
-            border: 1px solid rgba(128, 128, 128, 0.15);
-            border-radius: 10px;
-            padding: 14px 18px;
-            margin-bottom: 12px;
-            transition: all 0.2s ease-in-out;
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Hash": st.column_config.TextColumn("Hash", width="small"),
+            "Datum": st.column_config.TextColumn("Datum", width="small"),
+            "Auteur": st.column_config.TextColumn("Auteur", width="small"),
+            "Bericht": st.column_config.TextColumn("Bericht", width="large")
         }
-        .commit-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--primary-color);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-        .commit-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        .commit-badge {
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-        .badge-nieuw { background-color: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.25); }
-        .badge-herstel { background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.25); }
-        .badge-optimalisatie { background-color: rgba(52, 152, 219, 0.15); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.25); }
-        .badge-refactoring { background-color: rgba(155, 89, 182, 0.15); color: #9b59b6; border: 1px solid rgba(155, 89, 182, 0.25); }
-        .badge-onderhoud { background-color: rgba(149, 165, 166, 0.15); color: #95a5a6; border: 1px solid rgba(149, 165, 166, 0.25); }
-        .badge-test { background-color: rgba(26, 188, 156, 0.15); color: #1abc9c; border: 1px solid rgba(26, 188, 156, 0.25); }
-        .badge-debug { background-color: rgba(241, 196, 15, 0.15); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.25); }
-        .badge-samenvoegen { background-color: rgba(230, 126, 34, 0.15); color: #e67e22; border: 1px solid rgba(230, 126, 34, 0.25); }
-        .badge-overig { background-color: rgba(127, 140, 141, 0.15); color: #95a5a6; border: 1px solid rgba(127, 140, 141, 0.25); }
-        
-        a.commit-hash {
-            text-decoration: none;
-            font-family: monospace;
-            font-size: 0.8rem;
-            color: var(--text-color);
-            opacity: 0.6;
-            background: rgba(128, 128, 128, 0.1);
-            padding: 2px 6px;
-            border-radius: 4px;
-            transition: opacity 0.2s, background-color 0.2s;
-        }
-        a.commit-hash:hover {
-            opacity: 1.0;
-            background: rgba(128, 128, 128, 0.25);
-            color: var(--primary-color);
-        }
-        .commit-message {
-            font-size: 0.95rem;
-            line-height: 1.4;
-            color: var(--text-color);
-            margin: 6px 0;
-            font-weight: 500;
-        }
-        .commit-footer {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8rem;
-            color: var(--text-color);
-            opacity: 0.55;
-            margin-top: 8px;
-            border-top: 1px solid rgba(128, 128, 128, 0.08);
-            padding-top: 6px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    if filtered_df.empty:
-        st.warning("Geen commits gevonden die voldoen aan de filters.")
-        return
-
-    # Render commits als kaarten
-    for _, row in filtered_df.iterrows():
-        badge_class = f"badge-{row['Categorie'].lower()}"
-        github_url = f"https://github.com/atv22/tafelvoetbal/commit/{row['Hash']}"
-        
-        st.markdown(f"""
-            <div class="commit-card">
-                <div class="commit-meta">
-                    <span class="commit-badge {badge_class}">{row['Categorie']}</span>
-                    <a href="{github_url}" target="_blank" class="commit-hash" title="Bekijk commit op GitHub">#{row['Hash']}</a>
-                </div>
-                <div class="commit-message">{row['Bericht']}</div>
-                <div class="commit-footer">
-                    <span>👤 {row['Auteur']}</span>
-                    <span>📅 {row['Datum']}</span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+    )
