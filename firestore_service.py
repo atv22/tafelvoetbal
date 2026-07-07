@@ -539,7 +539,8 @@ def _build_players_df(last_updated):
     df = pd.DataFrame(players_list)
     if 'rating' not in df.columns:
         df['rating'] = 1000
-    df['rating'] = df['rating'].fillna(1000)
+    df['rating'] = df['rating'].astype(str).str.replace(',', '.')
+    df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
     set_offline_mode(False)
     return df
 
@@ -563,6 +564,13 @@ def _build_matches_df(last_updated):
         return df
 
     df = pd.DataFrame(matches)
+    
+    # Force score and klinkers to be integers (handling string floats or empty strings from GSheets)
+    numeric_cols = ['thuis_score', 'uit_score', 'klinkers_thuis_1', 'klinkers_thuis_2', 'klinkers_uit_1', 'klinkers_uit_2']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+            
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
     
@@ -609,6 +617,10 @@ def _build_elo_logs_df(last_updated):
         return df
 
     df = pd.DataFrame(elos)
+    if 'rating' in df.columns:
+        df['rating'] = df['rating'].astype(str).str.replace(',', '.')
+        df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
+        
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
     
