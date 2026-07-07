@@ -422,22 +422,36 @@ requests_ref = db.collection('requests')
 @st.cache_resource
 def init_firestore_listeners():
     import threading
+    import time
+    
+    try:
+        print("[INIT] Loading historical data from Google Sheets to save Firebase quota...")
+        gsheet_data = _fetch_all_gsheet_data()
+        store_matches = gsheet_data.get("matches", {})
+        store_elo = gsheet_data.get("elo", {})
+        store_players = gsheet_data.get("players", {})
+    except Exception as e:
+        print(f"[INIT] GSheet load failed: {e}")
+        store_matches = {}
+        store_elo = {}
+        store_players = {}
+
     store = {
-        "matches": {},
-        "elo": {},
-        "players": {},
+        "matches": store_matches,
+        "elo": store_elo,
+        "players": store_players,
         "requests": {},
         "beheer_log": {},
         "watchers": [],
         "last_updated": {
-            "matches": 0,
-            "elo": 0,
-            "players": 0,
+            "matches": time.time(),
+            "elo": time.time(),
+            "players": time.time(),
             "requests": 0,
             "beheer_log": 0
         }
     }
-    
+
     events = {
         "matches": threading.Event(),
         "elo": threading.Event(),
@@ -446,7 +460,6 @@ def init_firestore_listeners():
         "beheer_log": threading.Event()
     }
     
-    import time
     def make_callback(collection_name, id_field=None):
         def callback(doc_snapshot, changes, read_time):
             for change in changes:
@@ -464,17 +477,26 @@ def init_firestore_listeners():
 
     if not is_offline():
         try:
-            store["watchers"].append(matches_ref.on_snapshot(make_callback("matches", "match_id")))
-            store["watchers"].append(elo_ref.on_snapshot(make_callback("elo", None)))
+            from datetime import datetime, timedelta
+            import pytz
+            
+            # Fetch only the last 7 days from Firestore to drastically reduce read quota
+            last_week = datetime.now(pytz.utc) - timedelta(days=7)
+            
+            recent_matches_query = matches_ref.where(filter=FieldFilter('timestamp', '>=', last_week))
+            recent_elo_query = elo_ref.where(filter=FieldFilter('timestamp', '>=', last_week))
+            
+            store["watchers"].append(recent_matches_query.on_snapshot(make_callback("matches", "match_id")))
+            store["watchers"].append(recent_elo_query.on_snapshot(make_callback("elo", None)))
             store["watchers"].append(players_ref.on_snapshot(make_callback("players", "speler_id")))
             store["watchers"].append(requests_ref.on_snapshot(make_callback("requests", None)))
             store["watchers"].append(db.collection('beheer_log').on_snapshot(make_callback("beheer_log", None)))
             
             # Wacht op initiële snapshot zodat de app niet met lege data start
-            events["matches"].wait(timeout=5)
-            events["elo"].wait(timeout=5)
-            events["players"].wait(timeout=5)
-            log_firestore_op("READ", "all", "init_listeners", "~ALL")
+            events["matches"].wait(timeout=2)
+            events["elo"].wait(timeout=2)
+            events["players"].wait(timeout=2)
+            log_firestore_op("READ", "all", "init_listeners", "~RECENT")
         except Exception as e:
             print(f"Error initializing firestore listeners: {e}")
             
