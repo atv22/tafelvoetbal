@@ -192,7 +192,7 @@ with tab6:
     t0 = time.perf_counter()
     if hasattr(db, 'is_offline') and db.is_offline():
         st.caption("🔴 Offline modus — Google Sheet backup actief")
-    render_verzoeken_tab(matches_df)
+    render_verzoeken_tab(requests_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab VERZOEKEN rendered in {t1-t0:.3f}s")
 
@@ -206,7 +206,7 @@ with tab7:
 # ===== TAB 8: LOGGING =====
 with tab8:
     t0 = time.perf_counter()
-    render_logging_tab()
+    render_logging_tab(beheer_log_df)
     t1 = time.perf_counter()
     print(f"[TIMING] tab LOGGING rendered in {t1-t0:.3f}s")
 

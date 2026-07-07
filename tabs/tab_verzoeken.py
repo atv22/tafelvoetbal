@@ -4,11 +4,11 @@ Eenvoudig formulier om een verzoek/feedback in te dienen en optioneel recente ve
 """
 import streamlit as st
 import pandas as pd
-from utils.utils import add_request
+from utils.utils import add_request, get_download_filename
 import firestore_service as db
 
 
-def render_verzoeken_tab(matches_df=None):
+def render_verzoeken_tab(requests_df):
     st.header("💬 Verzoeken")
     st.subheader("Verzoek indienen")
     st.write("Laat hier je suggestie, bugmelding of wens achter (max 250 tekens).")
@@ -28,19 +28,20 @@ def render_verzoeken_tab(matches_df=None):
             add_request(request_text)
 
     st.subheader("Recente verzoeken")
-    with st.expander("Toon recente verzoeken (laatste 10)"):
-        try:
-            df = db.get_requests()
-            if df is not None and not df.empty:
-                # Zorg voor nette weergave
-                if "Timestamp" in df.columns:
-                    df = df.sort_values(by="Timestamp", ascending=False)
-                st.dataframe(df.head(10), width='stretch')
-            else:
-                st.info("Nog geen verzoeken ingediend.")
-        except db.FirestoreUnavailable as e:
-            st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
-            with st.expander("Toon technische details"):
-                st.code(str(e.details) if hasattr(e, 'details') else str(e))
-        except Exception as e:
-            st.warning(f"Kon verzoeken niet laden: {e}")
+    if requests_df is not None and not requests_df.empty:
+        st.download_button(
+            label="💾 Download Verzoeken",
+            data=requests_df.to_csv(index=False).encode('utf-8'),
+            file_name=get_download_filename('Tafelvoetbal_Verzoeken', 'csv'),
+            mime='text/csv',
+            key='download-verzoeken'
+        )
+        # Zorg voor nette weergave
+        if "Timestamp" in requests_df.columns:
+            display_df = requests_df.sort_values(by="Timestamp", ascending=False)
+        else:
+            display_df = requests_df
+            
+        st.dataframe(display_df, width='stretch')
+    else:
+        st.info("Nog geen verzoeken ingediend.")
