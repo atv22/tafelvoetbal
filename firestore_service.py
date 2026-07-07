@@ -427,9 +427,29 @@ def init_firestore_listeners():
     try:
         print("[INIT] Loading historical data from Google Sheets to save Firebase quota...")
         gsheet_data = _fetch_all_gsheet_data()
-        store_matches = gsheet_data.get("matches", {})
-        store_elo = gsheet_data.get("elo", {})
-        store_players = gsheet_data.get("players", {})
+        
+        def load_sheet(sheet_name, id_field=None):
+            if sheet_name not in gsheet_data: return {}
+            all_values = gsheet_data[sheet_name]
+            if not all_values or len(all_values) < 2: return {}
+            headers = all_values[0]
+            res = {}
+            import uuid
+            for row in all_values[1:]:
+                d = dict(zip(headers, row))
+                if id_field and id_field in d and d[id_field]:
+                    doc_id = d[id_field]
+                else:
+                    if 'match_id' in d and 'speler_naam' in d:
+                        doc_id = f"{d['match_id']}_{d['speler_naam']}"
+                    else:
+                        doc_id = str(uuid.uuid4())
+                res[doc_id] = d
+            return res
+
+        store_matches = load_sheet("Wedstrijden", "match_id")
+        store_elo = load_sheet("ELO_Logs", None)
+        store_players = load_sheet("Spelers", "speler_id")
     except Exception as e:
         print(f"[INIT] GSheet load failed: {e}")
         store_matches = {}
@@ -578,7 +598,7 @@ def get_matches(start_ts=None, end_ts=None):
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
         return df
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def _build_elo_logs_df(last_updated):
     store = init_firestore_listeners()
     elos = list(store["elo"].values())
@@ -591,6 +611,11 @@ def _build_elo_logs_df(last_updated):
     df = pd.DataFrame(elos)
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
+    
+    # Verwijder duplicaten (overlap tussen GSheet history en Firestore on_snapshot)
+    if not df.empty and 'match_id' in df.columns and 'speler_naam' in df.columns:
+        df = df.drop_duplicates(subset=['match_id', 'speler_naam'], keep='last')
+        
     df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
     set_offline_mode(False)
     return df
