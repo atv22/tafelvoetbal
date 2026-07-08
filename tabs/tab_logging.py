@@ -33,11 +33,40 @@ def render_logging_tab(df_beheer_log):
         return
         
     import pandas as pd
-    # Controleer of de logs het nieuwe dictionary formaat hebben
-    if len(logs) > 0 and isinstance(logs[0], dict):
-        df_logs = pd.DataFrame(logs)
-        st.dataframe(df_logs, use_container_width=True, hide_index=True)
+    
+    parsed_logs = []
+    for log in logs:
+        if isinstance(log, dict):
+            parsed_logs.append(log)
+        elif isinstance(log, str):
+            try:
+                # Voorbeeld: [2026-07-08 10:37:00] [FIRESTORE] READ  | Coll: matches      | Action: get                  | Count: 1    | IP: Unknown IP
+                if " | " in log:
+                    parts = log.split(" | ")
+                    ts_and_type = parts[0].split("] [FIRESTORE] ")
+                    ts = ts_and_type[0].strip("[")
+                    op_type = ts_and_type[1].strip() if len(ts_and_type) > 1 else ""
+                    
+                    coll = parts[1].replace("Coll:", "").strip() if len(parts) > 1 else ""
+                    action = parts[2].replace("Action:", "").strip() if len(parts) > 2 else ""
+                    count = parts[3].replace("Count:", "").strip() if len(parts) > 3 else ""
+                    ip = parts[4].replace("IP:", "").strip() if len(parts) > 4 else "Unknown IP"
+                    
+                    parsed_logs.append({
+                        "Tijdstip": ts,
+                        "Type": op_type,
+                        "Collectie": coll,
+                        "Actie": action,
+                        "Aantal": count,
+                        "IP": ip
+                    })
+                else:
+                    parsed_logs.append({"Bericht": log})
+            except Exception:
+                parsed_logs.append({"Bericht": log})
+                
+    if parsed_logs:
+        df_logs = pd.DataFrame(parsed_logs)
+        st.dataframe(df_logs, width='stretch')
     else:
-        # Fallback voor oude string logs in de cache
-        log_text = "\n".join(logs)
-        st.code(log_text, language="text")
+        st.info("Nog geen systeem logs beschikbaar in deze sessie.")
