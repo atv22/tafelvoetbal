@@ -82,7 +82,9 @@ def handle_firestore_exceptions(func):
             import google.api_core.exceptions
             # Herken typische Firestore quota/budget errors
             if isinstance(e, (google.api_core.exceptions.ResourceExhausted, google.api_core.exceptions.PermissionDenied)) or 'quota' in str(e).lower() or 'budget' in str(e).lower():
+                log_firestore_op("ERROR", "Firestore", "Quota/budget limit hit", 1)
                 raise FirestoreUnavailable("Database niet bereikbaar: mogelijk budgetlimiet bereikt.", details=str(e))
+            log_firestore_op("ERROR", "Firestore", "Database unavailable", 1)
             raise FirestoreUnavailable("Database niet bereikbaar.", details=str(e))
     return functools.wraps(func)(wrapper)
 
@@ -92,7 +94,12 @@ LAST_FALLBACK_ERROR = None
 
 def set_offline_mode(value: bool):
     global OFFLINE_MODE
-    OFFLINE_MODE = bool(value)
+    new_value = bool(value)
+    if new_value and not OFFLINE_MODE:
+        log_firestore_op("SYSTEM", "Fallback", "Switched to Google Sheets", 1)
+    elif not new_value and OFFLINE_MODE:
+        log_firestore_op("SYSTEM", "Fallback", "Switched to Firestore", 1)
+    OFFLINE_MODE = new_value
 
 def is_offline():
     return OFFLINE_MODE
