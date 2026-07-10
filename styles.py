@@ -215,7 +215,7 @@ def _get_custom_css():
     }}
     
     /* ===== TABS STYLING ===== */
-    .stTabs [data-baseweb="tab-list"] {{
+    .stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"] {{
         gap: 0.3rem;
         border-bottom: 2px solid {COLORS['primary_pink']};
         padding-bottom: 0.5rem;
@@ -224,7 +224,7 @@ def _get_custom_css():
         flex-wrap: wrap; /* Allow wrapping on mobile */
     }}
     
-    .stTabs [data-baseweb="tab"] {{
+    .stTabs [data-baseweb="tab"], .stTabs [role="tab"] {{
         background: {COLORS['soft_pink']};
         border-radius: 12px 12px 0 0;
         padding: 0.8rem 1.2rem;
@@ -241,7 +241,7 @@ def _get_custom_css():
         justify-content: center;
     }}
     
-    .stTabs [data-baseweb="tab"]:hover {{
+    .stTabs [data-baseweb="tab"], .stTabs [role="tab"]:hover {{
         background-color: {COLORS['light_pink']};
         transform: translateY(-2px);
     }}
@@ -254,7 +254,7 @@ def _get_custom_css():
     }}
     
     /* Tab content styling */
-    .stTabs [data-baseweb="tab-panel"] {{
+    .stTabs [data-baseweb="tab-panel"], .stTabs [role="tabpanel"] {{
         padding: 1.5rem 1rem;
         background: rgba(255, 255, 255, 0.7);
         border-radius: 0 12px 12px 12px;
@@ -265,37 +265,37 @@ def _get_custom_css():
     
     /* Mobile tab optimizations */
     @media (max-width: 768px) {{
-        .stTabs [data-baseweb="tab-list"] {{
+        .stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"] {{
             justify-content: flex-start;
             overflow-x: auto;
             padding-bottom: 0.8rem;
         }}
         
-        .stTabs [data-baseweb="tab"] {{
+        .stTabs [data-baseweb="tab"], .stTabs [role="tab"] {{
             padding: 0.6rem 1rem;
             font-size: 0.9rem;
             min-width: 80px;
             flex-shrink: 0;
         }}
         
-        .stTabs [data-baseweb="tab-panel"] {{
+        .stTabs [data-baseweb="tab-panel"], .stTabs [role="tabpanel"] {{
             padding: 1rem 0.5rem;
             border-radius: 0 8px 8px 8px;
         }}
     }}
     
     @media (max-width: 480px) {{
-        .stTabs [data-baseweb="tab"] {{
+        .stTabs [data-baseweb="tab"], .stTabs [role="tab"] {{
             padding: 0.7rem 0.8rem;
             font-size: 0.8rem;
             min-width: 70px;
         }}
         
-        .stTabs [data-baseweb="tab-list"] {{
+        .stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"] {{
             gap: 0.2rem;
         }}
         
-        .stTabs [data-baseweb="tab-panel"] {{
+        .stTabs [data-baseweb="tab-panel"], .stTabs [role="tabpanel"] {{
             padding: 0.8rem 0.3rem;
         }}
     }}
