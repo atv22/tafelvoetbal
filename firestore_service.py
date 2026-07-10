@@ -515,8 +515,26 @@ def init_firestore_listeners():
             from datetime import datetime, timedelta
             import pytz
             
-            # Fetch only the last 7 days from Firestore to drastically reduce read quota
-            last_week = datetime.now(pytz.utc) - timedelta(days=7)
+            # Fetch from the last GSheet sync to reduce read quota without missing data
+            last_gsheet_ts = None
+            if 'Wedstrijden' in gsheet_data and len(gsheet_data['Wedstrijden']) > 1:
+                try:
+                    import pandas as pd
+                    headers = gsheet_data['Wedstrijden'][0]
+                    if 'timestamp' in headers:
+                        ts_idx = headers.index('timestamp')
+                        ts_list = [row[ts_idx] for row in gsheet_data['Wedstrijden'][1:] if len(row) > ts_idx]
+                        if ts_list:
+                            last_gsheet_ts = max(pd.to_datetime(ts_list, utc=True))
+                except Exception:
+                    pass
+            
+            if last_gsheet_ts:
+                # Gebruik de laatste GSheet sync tijd minus 1 dag (om timezone overlaps te vangen)
+                last_week = last_gsheet_ts - timedelta(days=1)
+            else:
+                # Fallback als we geen GSheet data kunnen lezen
+                last_week = datetime.now(pytz.utc) - timedelta(days=30)
             
             recent_matches_query = matches_ref.where(filter=FieldFilter('timestamp', '>=', last_week))
             recent_elo_query = elo_ref.where(filter=FieldFilter('timestamp', '>=', last_week))
