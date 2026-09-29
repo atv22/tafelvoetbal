@@ -65,7 +65,7 @@ GS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.google
 # Seizoen Configuratie
 SEASON_TRANSITION_MONTH = 3
 SEASON_TRANSITION_DAY = 15
-PRINSJESDAG_OFFSET_DAYS = 14 # Prinsjesdag is 3e dinsdag van september (7 + 14 = 21 max)
+PRINSJESDAG_OFFSET_DAYS = 15 # Prinsjesdag is 3e dinsdag van september. We tellen er 15 op om op woensdag 00:00 uit te komen (middernacht na Prinsjesdag)
 
 class FirestoreUnavailable(Exception):
     def __init__(self, message, details=None):

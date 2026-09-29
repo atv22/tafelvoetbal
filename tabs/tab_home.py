@@ -11,7 +11,7 @@ from utils.utils_seizoen import get_current_season, generate_prinsjesdag_seasons
 from analytics import get_vectorized_player_stats
 
 @st.cache_data
-def calculate_stats(players, matches):
+def calculate_stats(players, matches, elo_df=None, season_start=None, season_end=None):
     """Bereken statistieken voor alle spelers met vectorized Pandas operations"""
     if matches is None or matches.empty:
         # Fallback voor spelers zonder wedstrijden
@@ -51,8 +51,20 @@ def calculate_stats(players, matches):
                 'Speler': p_name
             }
         
-        # Rating uit players_df halen (huidige rating)
-        rating_value = player.get('rating', 1000)
+        # Bepaal ELO rating voor dit specifieke seizoen
+        rating_value = 1000 # Default ELO per seizoen
+        if elo_df is not None and not elo_df.empty and season_start is not None and season_end is not None:
+            # Haal logs voor deze speler in dit seizoen
+            p_elo_logs = elo_df[(elo_df['speler_naam'].str.lower() == p_name.lower()) & 
+                                (elo_df['timestamp'] >= pd.to_datetime(season_start, utc=True)) & 
+                                (elo_df['timestamp'] <= pd.to_datetime(season_end, utc=True))]
+            if not p_elo_logs.empty:
+                # elo_df is gesorteerd aflopend op timestamp, dus de eerste (index 0) is de laatste van het seizoen
+                rating_value = p_elo_logs.iloc[0]['rating']
+        else:
+            # Fallback naar huidige all-time rating als we geen seizoensinfo hebben
+            rating_value = player.get('rating', 1000)
+            
         if pd.isna(rating_value) or rating_value == '':
             rating_value = 1000
         try:
@@ -118,7 +130,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
         
         # Voor de berekening van stats gebruiken we alleen de matches van dit seizoen
-        stats_df = calculate_stats(filtered_players_df, season_matches)
+        stats_df = calculate_stats(filtered_players_df, season_matches, elo_df, season_start, season_end)
     else:
         st.info("Geen actief seizoen geselecteerd voor ranglijst.")
         return

@@ -168,6 +168,29 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
     if not validate_match_input(selected_names, home_score, away_score):
         return False
 
+    # AUTOMATIC SEASON RESET LOGIC: Check of dit de eerste wedstrijd van een nieuw seizoen is
+    try:
+        import pandas as pd
+        from utils.utils_seizoen import generate_prinsjesdag_seasons, get_season_matches
+        seasons_df = generate_prinsjesdag_seasons(matches_df)
+        if not seasons_df.empty:
+            m_date = pd.to_datetime(match_date).date()
+            for _, season in seasons_df.iterrows():
+                s_start = pd.to_datetime(season.get('start_datum') or season.get('startdatum')).date()
+                s_end = pd.to_datetime(season.get('eind_datum') or season.get('einddatum')).date()
+                if s_start <= m_date <= s_end:
+                    season_matches = get_season_matches(matches_df, season)
+                    if season_matches.empty:
+                        # Dit is de ALLEREERSTE wedstrijd van dit seizoen!
+                        st.toast(f"Nieuw seizoen gedetecteerd: {season.get('seizoen_naam')}. ELO's worden gereset naar 1000.")
+                        # Reset in database
+                        db.reset_all_elos(pd.Timestamp(season.get('start_datum') or season.get('startdatum')))
+                        # Reset lokale dictionary voor huidige berekening
+                        player_elos = {k: 1000 for k in player_elos.keys()}
+                    break
+    except Exception as e:
+        print(f"Fout bij automatische seizoensreset check: {e}")
+
     # Bereken nieuwe ELO ratings
     new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df)
 

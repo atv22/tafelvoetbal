@@ -14,7 +14,8 @@ def get_prinsjesdag(year):
     days_until_tuesday = (1 - first_september.weekday()) % 7
     first_tuesday = first_september + timedelta(days=days_until_tuesday)
     # Derde dinsdag is twee weken later
-    prinsjesdag = first_tuesday + timedelta(days=14)
+    # Seizoen start middernacht na Prinsjesdag (woensdag 00:00), dus we tellen er 15 dagen bij op ipv 14
+    prinsjesdag = first_tuesday + timedelta(days=15)
     # Altijd als pd.Timestamp retourneren
     return pd.Timestamp(prinsjesdag)
 
