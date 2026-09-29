@@ -54,10 +54,19 @@ def calculate_stats(players, matches, elo_df=None, season_start=None, season_end
         # Bepaal ELO rating voor dit specifieke seizoen
         rating_value = 1000 # Default ELO per seizoen
         if elo_df is not None and not elo_df.empty and season_start is not None and season_end is not None:
+            # Converteer naar naive timestamps voor veilige vergelijking
+            s_start = pd.to_datetime(season_start)
+            if s_start.tzinfo is not None: s_start = s_start.tz_localize(None)
+            s_end = pd.to_datetime(season_end)
+            if s_end.tzinfo is not None: s_end = s_end.tz_localize(None)
+            
+            elo_ts = pd.to_datetime(elo_df['timestamp'])
+            if elo_ts.dt.tz is not None: elo_ts = elo_ts.dt.tz_localize(None)
+            
             # Haal logs voor deze speler in dit seizoen
             p_elo_logs = elo_df[(elo_df['speler_naam'].str.lower() == p_name.lower()) & 
-                                (elo_df['timestamp'] >= pd.to_datetime(season_start, utc=True)) & 
-                                (elo_df['timestamp'] <= pd.to_datetime(season_end, utc=True))]
+                                (elo_ts >= s_start) & 
+                                (elo_ts <= s_end)]
             if not p_elo_logs.empty:
                 # elo_df is gesorteerd aflopend op timestamp, dus de eerste (index 0) is de laatste van het seizoen
                 rating_value = p_elo_logs.iloc[0]['rating']
