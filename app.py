@@ -52,7 +52,9 @@ if recalc_status and recalc_status.get("recalc_needed"):
             last_recalc = last_recalc.replace(tzinfo=None)
             
     if not last_recalc or last_recalc < last_scheduled:
-        threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()
+        if "recalc_thread_started" not in st.session_state:
+            threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()
+            st.session_state.recalc_thread_started = True
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen

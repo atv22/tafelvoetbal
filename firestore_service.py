@@ -818,6 +818,8 @@ def add_match_and_update_elo(match_data, elo_updates):
     log_firestore_op("WRITE", "uitslag", "add_match", 1)
     log_firestore_op("WRITE", "elo", "add_match_elo", len(elo_updates))
     ts = match_data.get('timestamp') or pd.Timestamp.now()
+    if hasattr(ts, 'to_pydatetime'):
+        ts = ts.to_pydatetime()
     try:
         batch = db.batch()
         new_match_ref = matches_ref.document()
@@ -944,6 +946,8 @@ def import_matches(matches_list):
         for m in matches_list:
             # Simpele duplicaat-check op basis van spelers en timestamp
             ts = pd.to_datetime(m.get('timestamp'))
+            if hasattr(ts, 'to_pydatetime'):
+                ts = ts.to_pydatetime()
             if not existing_matches.empty:
                 is_dup = any((existing_matches['thuis_1'] == m.get('thuis_1')) & 
                              (existing_matches['uit_1'] == m.get('uit_1')) & 
