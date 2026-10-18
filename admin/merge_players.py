@@ -44,9 +44,9 @@ def merge_players(old_names, target_name):
         (db.matches_ref, 'thuis_2'),
         (db.matches_ref, 'uit_1'),
         (db.matches_ref, 'uit_2'),
-        (db.beheer_ref, 'admin_naam'),
-        (db.requests_ref, 'speler_naam')
+        (db.beheer_ref, 'user'),
     ]
+
     
     for old_name in old_names:
         if old_name == target_name:

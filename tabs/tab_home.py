@@ -8,6 +8,7 @@ import firestore_service as db
 from utils.utils_seizoen import get_current_season, generate_prinsjesdag_seasons
 
 
+from utils.utils import IGNORE_PLAYERS
 from analytics import get_vectorized_player_stats
 
 @st.cache_data
@@ -110,17 +111,16 @@ def calculate_elo_trends(elo_df):
             ratings = group['rating'].tolist()
             last_elo = ratings[-1]
             prev_elo = ratings[-2]
-            trends[speler] = int(last_elo - prev_elo)
+            trends[speler] = int(round(last_elo - prev_elo))
         else:
             trends[speler] = 0
             
     return trends
 
 
+
 def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     """Toon de huidige ELO rankings tabel"""
-    import pandas as pd
-
     if matches_df is None or matches_df.empty:
         st.info("Er zijn nog geen wedstrijden gespeeld.")
         return
@@ -136,7 +136,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             if col in season_matches.columns:
                 season_players.update(season_matches[col].dropna().astype(str).tolist())
 
-        filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)]
+        filtered_players_df = players_df[players_df['speler_naam'].isin(season_players)].drop_duplicates(subset=['speler_naam'], keep='first')
         
         # Voor de berekening van stats gebruiken we alleen de matches van dit seizoen
         stats_df = calculate_stats(filtered_players_df, season_matches, elo_df, season_start, season_end)
@@ -150,8 +150,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         return
         
     # Filter 'Niemand' spelers uit - Case-insensitive
-    niemand_base = ['niemandin', 'niemanduit', 'niemand', 'none', '']
-    stats_df = stats_df[~stats_df['Speler'].str.lower().str.strip().isin(niemand_base)]
+    stats_df = stats_df[~stats_df['Speler'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
     
     if stats_df.empty:
         st.info("Geen geldige spelers gevonden in dit seizoen.")
@@ -160,6 +159,7 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     # Trend berekenen (numeriek)
     trends = calculate_elo_trends(elo_df)
     stats_df['Trend'] = stats_df['Speler'].map(lambda x: int(round(trends.get(x, 0))))
+
         
     # Sortering: Puur op ELO (en tie-breakers), zoals gevraagd door de gebruiker
     # De 'Gerangschikt' status wordt alleen nog gebruikt voor visuele markering (grijs/italic)
@@ -171,12 +171,16 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     ).reset_index(drop=True)
     
     display_df['ELO'] = display_df['ELO'].round(0).astype(int)
-    import numpy as np
-    display_df['Gem. Goals'] = display_df.apply(lambda r: r['Gem. Goals'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
-    display_df['Win%'] = display_df.apply(lambda r: r['Win%'] if r['Gespeeld'] >= 3 else np.nan, axis=1)
+    display_df['Gem. Goals'] = display_df.apply(
+        lambda r: f"{r['Gem. Goals']:.2f}" if r['Gespeeld'] >= 3 else "-", axis=1
+    )
+    display_df['Win%'] = display_df.apply(
+        lambda r: f"{r['Win%']:.1f}%" if r['Gespeeld'] >= 3 else "-", axis=1
+    )
     
+    ranked_top3 = display_df[display_df['Gerangschikt']].index[:3].tolist()
+
     def highlight_ranked_and_top3(row):
-        # Let op: de index (row.name) komt overeen met de positie in display_df
         idx = row.name
         styles = [''] * len(row)
         
@@ -185,14 +189,11 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             return ['color: #9e9e9e; font-style: italic'] * len(row)
         
         # Markeer de echte top 3 van gerangschikte spelers
-        # Omdat de lijst nu puur op ELO staat, kan een ongerangschikte speler bovenaan staan.
-        # We willen alleen de top 3 'actieve' spelers een kleurtje geven.
-        # Maar de gebruiker wil de lijst op ELO, dus we volgen de index voor goud/zilver/brons.
-        if idx == 0:
+        if len(ranked_top3) > 0 and idx == ranked_top3[0]:
             return ['background-color: #d4edda; font-weight: bold'] * len(row)
-        elif idx == 1:
+        elif len(ranked_top3) > 1 and idx == ranked_top3[1]:
             return ['background-color: #eafaf1'] * len(row)
-        elif idx == 2:
+        elif len(ranked_top3) > 2 and idx == ranked_top3[2]:
             return ['background-color: #f4fbf7'] * len(row)
         
         return styles
@@ -202,7 +203,8 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             v = int(val)
             if v > 0: return 'color: #28a745; font-weight: bold;' # Groen
             if v < 0: return 'color: #dc3545; font-weight: bold;' # Rood
-        except: pass
+        except Exception:
+            pass
         return 'color: #6c757d;' # Grijs
 
     def format_trend(val):
@@ -211,7 +213,8 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
             if v > 0: return f"+{v}"
             if v < 0: return f"{v}"
             return "0"
-        except: return "-"
+        except Exception:
+            return "-"
             
     # Kolomvolgorde aanpassen: Trend naast ELO
     cols = ['Speler', 'ELO', 'Trend', 'Gespeeld', 'Win%', 'Gem. Goals', 'Voor', 'Tegen', 'Doelsaldo', 'Klinkers', 'Gerangschikt']
@@ -220,13 +223,11 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
     # Gebruik hide op de styler (werkt in nieuwere pandas)
     try:
         styled = styled.hide(['Gerangschikt'], axis=1)
-    except:
+    except Exception:
         pass
     
     styled = styled.format({
         'Trend': format_trend,
-        'Win%': lambda x: f'{x:.1f}%' if isinstance(x, (int, float)) and not pd.isna(x) else '-', 
-        'Gem. Goals': lambda x: f'{x:.2f}' if isinstance(x, (int, float)) and not pd.isna(x) else '-'
     })
     
     st.dataframe(
@@ -235,9 +236,12 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         height=max(400, 35 * len(display_df) + 100),
         column_config={
             "Gerangschikt": None, # Forceer verbergen in Streamlit UI mocht styled.hide falen
-            "Trend": st.column_config.TextColumn("Trend", help="ELO verschil t.o.v. vorige wedstrijd (exclusief seizoens-resets)")
+            "Trend": st.column_config.TextColumn("Trend", help="ELO verschil t.o.v. vorige wedstrijd (exclusief seizoens-resets)"),
+            "Win%": st.column_config.TextColumn("Win%", help="Winstpercentage (vanaf 3 gespeelde wedstrijden)"),
+            "Gem. Goals": st.column_config.TextColumn("Gem. Goals", help="Gemiddeld aantal goals per wedstrijd (vanaf 3 gespeelde wedstrijden)"),
         }
     )
+
 
 
 def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):

@@ -92,8 +92,9 @@ def sync_to_sheets():
             data = [df.columns.values.tolist()] + df.fillna('').values.tolist()
             
             # Update de sheet
-            worksheet.update('A1', data)
+            worksheet.update(values=data, range_name='A1')
             print(f"Succesvol {len(df)} rijen gesynchroniseerd naar '{sheet_name}'.")
+
             
         except Exception as e:
             print(f"Fout bij synchroniseren van {sheet_name}: {e}")

@@ -1,44 +1,35 @@
-# Force redeploy to clear cache - 2026-03-23 (v2.6)
-from tabs.tab_analytics import render_seizoenen_tab
-import streamlit as st
-import pandas as pd
+# Force redeploy to clear cache - 2026-10-18 (v2.6)
+from datetime import datetime, timedelta
+import threading
 import time
-from datetime import date, datetime
-import firestore_service as db # Use Firestore
+import pandas as pd
+import streamlit as st
+
+import firestore_service as db  # Use Firestore
 from styles import setup_page
-from utils.utils import add_name, get_download_filename
-import plotly.express as px
-import plotly.graph_objects as go
-# Import nieuwe modules
-from analytics import show_timeline_chart, show_cross_season_charts, show_individual_season_analysis, create_all_time_leaderboards
-import utils.utils_seizoen as utils_seizoen  # Import hele module om functie parameters correct te kunnen gebruiken
+
 # Import TAB modules
-from tabs.tab_home import render_home_tab, calculate_stats
-from tabs.tab_invullen import render_input_tab
-from tabs.tab_spelers import render_players_tab
-
-
-from tabs.tab_verzoeken import render_verzoeken_tab
-from tabs.tab_data import render_data_tab
+from tabs.tab_analytics import render_seizoenen_tab
 from tabs.tab_beheer import render_admin_tab
 from tabs.tab_colofon import render_colofon_tab
 from tabs.tab_commits import render_commits_tab
+from tabs.tab_data import render_data_tab
+from tabs.tab_home import render_home_tab
+from tabs.tab_invullen import render_input_tab
 from tabs.tab_logging import render_logging_tab
+from tabs.tab_spelers import render_players_tab
+from tabs.tab_verzoeken import render_verzoeken_tab
 
 setup_page()
 
-import threading
-
 st.title("Tafelvoetbal Competitie ⚽")
-st.caption("Versie 2.5")
+st.caption("Versie 2.6")
 
 # Check of ELO herberekening gepland is
 recalc_status = db.get_recalc_status()
 if recalc_status and recalc_status.get("recalc_needed"):
     st.warning("⚠️ **ELO-herberekening gepland:** Er zijn recente wijzigingen in de wedstrijden. De ELO-scores en ranglijsten worden vanavond om 23:00 uur automatisch herberekend.")
     
-    import pandas as pd
-    from datetime import datetime, timedelta
     now = datetime.now()
     if now.hour >= 23:
         last_scheduled = now.replace(hour=23, minute=0, second=0, microsecond=0)
@@ -58,7 +49,8 @@ if recalc_status and recalc_status.get("recalc_needed"):
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "2.1" 
+CACHE_VERSION = "2.2"
+
 
 # Bij een nieuwe versie, leeg de cache (voorzichtiger om quota te sparen)
 if 'cache_version' not in st.session_state or st.session_state.cache_version != CACHE_VERSION:

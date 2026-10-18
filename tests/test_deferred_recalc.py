@@ -13,20 +13,60 @@ if ROOT not in sys.path:
 import firestore_service as db
 
 @pytest.fixture(autouse=True)
-def clean_config():
-    """Zorgt voor een schone start en opschoning van de system_config collectie."""
-    # Bewaar eventuele originele config
-    config_ref = db.db.collection("system_config").document("elo_recalc")
-    orig_doc = config_ref.get()
-    orig_data = orig_doc.to_dict() if orig_doc.exists else None
-    
+def clean_config(monkeypatch):
+    """Zorgt voor een geïsoleerde in-memory mock van system_config/elo_recalc zodat productiedata niet geraakt wordt."""
+    import google.cloud.firestore
+
+    state = {"data": None}
+
+    class MockSnapshot:
+        @property
+        def exists(self):
+            return state["data"] is not None
+
+        def to_dict(self):
+            return dict(state["data"]) if state["data"] is not None else None
+
+    class MockDocRef:
+        def get(self, transaction=None):
+            return MockSnapshot()
+
+        def set(self, new_data, merge=False):
+            if merge and state["data"] is not None:
+                state["data"].update(new_data)
+            else:
+                state["data"] = dict(new_data)
+
+        def update(self, updates):
+            if state["data"] is None:
+                state["data"] = {}
+            state["data"].update(updates)
+
+        def delete(self):
+            state["data"] = None
+
+    class MockCollectionRef:
+        def document(self, doc_id):
+            return MockDocRef()
+
+    class MockTransaction:
+        def update(self, ref, updates):
+            ref.update(updates)
+
+    orig_collection = db.db.collection
+
+    def mock_collection(name):
+        if name == "system_config":
+            return MockCollectionRef()
+        return orig_collection(name)
+
+    monkeypatch.setattr(db.db, "collection", mock_collection)
+    monkeypatch.setattr(db.db, "transaction", lambda: MockTransaction())
+    monkeypatch.setattr(google.cloud.firestore, "transactional", lambda fn: fn)
+    db.get_recalc_status.clear()
     yield
-    
-    # Herstel originele config na afloop
-    if orig_data:
-        config_ref.set(orig_data)
-    else:
-        config_ref.delete()
+    db.get_recalc_status.clear()
+
 
 def test_set_recalc_needed_flag():
     # Test 1: Schrijf eerste vlag

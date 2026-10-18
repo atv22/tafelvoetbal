@@ -7,7 +7,7 @@ import pandas as pd
 import firestore_service as db
 import plotly.express as px
 from utils.utils_seizoen import get_current_season
-from utils.utils import IGNORE_PLAYERS
+from utils.utils import IGNORE_PLAYERS, add_name
 
 def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.header("👥 Speler Beheer & Historie")
@@ -22,7 +22,7 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     
     # 1. Bepaal standaard speler (Nummer 1 van de ranglijst)
     # Filter eerst 'Niemand' en test-spelers uit - Case-insensitive
-    valid_players = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
+    valid_players = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)].drop_duplicates(subset=['speler_naam'], keep='first')
     
     if valid_players.empty:
         st.info("Geen geldige spelers gevonden.")
@@ -49,7 +49,7 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
         )
 
     # 2. Filter ELO data voor de grafiek
-    if selected_player:
+    if selected_player and elo_df is not None and not elo_df.empty:
         # Haal historie op (gefilterd op speler)
         history_df = elo_df[elo_df['speler_naam'] == selected_player].copy()
         
@@ -79,7 +79,7 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
                     hover_data={'rating_rounded': True}
                 )
                 fig.update_layout(xaxis_title="Datum", yaxis_title="ELO Rating")
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig)
             else:
                 st.info(f"Geen ELO-historie gevonden voor {selected_player} in het huidige seizoen.")
         else:
@@ -88,7 +88,7 @@ def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.divider()
 
     # --- Speler Beheer Sectie (Onderaan) ---
-    render_player_list_and_management(players_df)
+    render_player_list_and_management(valid_players)
 
 def render_player_list_and_management(players_df):
     """Sectie voor het bekijken, toevoegen en verwijderen van spelers"""
@@ -97,6 +97,7 @@ def render_player_list_and_management(players_df):
     # Lijst met spelers
     st.write("**Geregistreerde spelers:**")
     display_df = players_df[['speler_naam', 'rating']].sort_values('speler_naam').copy()
+    display_df['rating'] = pd.to_numeric(display_df['rating'], errors='coerce').fillna(1000).round(0).astype(int)
     display_df.columns = ['Naam', 'Huidige ELO']
     st.dataframe(display_df, hide_index=True, width='stretch')
 
@@ -106,18 +107,8 @@ def render_player_list_and_management(players_df):
         st.write("**Nieuwe speler toevoegen:**")
         new_player_name = st.text_input("Naam van de speler:", key="new_player_name")
         if st.button("➕ Speler Toevoegen"):
-            if new_player_name:
-                # Controleer of naam al bestaat
-                if new_player_name in players_df['speler_naam'].values:
-                    st.error(f"Speler '{new_player_name}' bestaat al!")
-                else:
-                    with st.spinner("Toevoegen..."):
-                        res = db.add_player(new_player_name, 1000)
-                        if res == "Success":
-                            st.success(f"Speler '{new_player_name}' succesvol toegevoegd!")
-                            st.rerun()
-                        else:
-                            st.error(res)
+            if new_player_name and new_player_name.strip():
+                add_name(new_player_name.strip())
             else:
                 st.warning("Voer een naam in.")
 
@@ -126,24 +117,37 @@ def render_player_list_and_management(players_df):
         player_to_del = st.selectbox("Selecteer speler om te verwijderen:", [""] + sorted(players_df['speler_naam'].tolist()), key="del_player_select")
         if st.button("🗑️ Verwijder Speler", type="secondary"):
             if player_to_del:
-                # Zoek speler_id
-                p_id = players_df[players_df['speler_naam'] == player_to_del].iloc[0]['speler_id']
-                if st.warning(f"Weet je zeker dat je '{player_to_del}' wilt verwijderen? Alle historie wordt gewist!"):
-                    if st.button(f"Ja, verwijder {player_to_del} definitief", key="confirm_del"):
+                st.session_state["confirm_del_player"] = player_to_del
+            else:
+                st.session_state.pop("confirm_del_player", None)
+                st.warning("Selecteer een speler.")
+
+        confirm_target = st.session_state.get("confirm_del_player")
+        if confirm_target and confirm_target == player_to_del:
+            st.warning(f"Weet je zeker dat je '{confirm_target}' wilt verwijderen? Alle historie wordt gewist!")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button(f"Ja, verwijder {confirm_target} definitief", key="confirm_del", type="primary"):
+                    p_rows = players_df[players_df['speler_naam'] == confirm_target]
+                    if not p_rows.empty:
+                        p_id = p_rows.iloc[0]['speler_id']
                         with st.spinner("Verwijderen..."):
                             if db.delete_player_by_id(p_id):
-                                st.success(f"Speler '{player_to_del}' verwijderd.")
+                                st.session_state.pop("confirm_del_player", None)
+                                st.success(f"Speler '{confirm_target}' verwijderd.")
                                 st.rerun()
                             else:
                                 st.error("Fout bij verwijderen.")
-            else:
-                st.warning("Selecteer een speler.")
+            with c2:
+                if st.button("Annuleren", key="cancel_del_player"):
+                    st.session_state.pop("confirm_del_player", None)
+                    st.rerun()
 
 def render_add_player_section():
     """Simpele sectie als er nog geen spelers zijn"""
     st.write("**Voeg je eerste speler toe:**")
     name = st.text_input("Naam:")
     if st.button("Toevoegen"):
-        if name:
-            db.add_player(name, 1000)
-            st.rerun()
+        if name and name.strip():
+            add_name(name.strip())
+

@@ -149,14 +149,13 @@ def _get_custom_css():
         overscroll-behavior: none;
     }}
     
-    /* ===== ALGEMENE BODY STYLING ===== */
-    .main .block-container {{
-        padding-top: 0.5rem !important; /* Verminder lege ruimte */
-        padding-bottom: 2rem;
-        max-width: 95vw;
-        width: 100%;
-        padding-left: 1rem;
-        padding-right: 1rem;
+    /* ===== VERBERG SIDEBAR COMPLEET ===== */
+    [data-testid="stSidebar"] {{
+        display: none !important;
+    }}
+    
+    [data-testid="collapsedControl"] {{
+        display: none !important;
     }}
     
     /* Zorg ervoor dat content containers volledige breedte gebruiken */
@@ -175,43 +174,6 @@ def _get_custom_css():
     .main {{
         padding-top: 0 !important;
         margin-top: 0 !important;
-    }}
-    
-    /* Mobile optimizations voor main content */
-    @media (max-width: 768px) {{
-        .main .block-container {{
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-            max-width: 98vw;
-        }}
-    }}
-    
-    @media (max-width: 480px) {{
-        .main .block-container {{
-            padding-top: 0.5rem;
-            padding-bottom: 0.5rem;
-            padding-left: 0.3rem;
-            padding-right: 0.3rem;
-            max-width: 100vw;
-        }}
-    }}
-    
-    /* ===== VERBERG SIDEBAR COMPLEET ===== */
-    [data-testid="stSidebar"] {{
-        display: none !important;
-    }}
-    
-    [data-testid="collapsedControl"] {{
-        display: none !important;
-    }}
-    
-    /* Zorg dat main content volledige breedte gebruikt */
-    .main .block-container {{
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        max-width: 100% !important;
     }}
     
     /* ===== TABS STYLING ===== */
@@ -241,7 +203,7 @@ def _get_custom_css():
         justify-content: center;
     }}
     
-    .stTabs [data-baseweb="tab"], .stTabs [role="tab"]:hover {{
+    .stTabs [data-baseweb="tab"]:hover, .stTabs [role="tab"]:hover {{
         background-color: {COLORS['light_pink']};
         transform: translateY(-2px);
     }}

@@ -5,13 +5,15 @@ import streamlit as st
 import subprocess
 import pandas as pd
 
+@st.cache_data(ttl=300)
 def get_git_commits(limit=100):
     """Haal de laatste git commits op via de command line."""
     try:
         # Gebruik git log om commits op te halen in een specifiek formaat
         # %h: short hash, %ad: author date, %an: author name, %s: subject
         cmd = ["git", "log", "-n", str(limit), "--pretty=format:%h|%ad|%an|%s", "--date=short"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, encoding="utf-8", errors="replace")
+
         
         lines = result.stdout.strip().split("\n")
         commits = []
@@ -33,6 +35,12 @@ def get_git_commits(limit=100):
 def clean_and_translate_commit(hash_val, message):
     """Clean, translate, and categorize commit messages to Dutch."""
     translations = {
+        "7344b40": "Optimalisatie: Code review verbeteringen voor achtergrondtaken en tijdstempels",
+        "c0d64c2": "Herstel: Type-mismatch in Firestore listener opgelost waardoor recente wedstrijden weer zichtbaar zijn",
+        "73c2c22": "Herstel: Tijdzone-fout (TypeError) opgelost in de Home-tab",
+        "f0481bc": "Nieuw: Startdatum van seizoenen gecorrigeerd en automatische ELO-reset toegevoegd",
+        "cf26c32": "Herstel: Tab-styling bijgewerkt voor nieuwere Streamlit-versies",
+        "ffe1f6e": "Herstel: Ontbrekende ELO-logs opgelost door dynamisch te zoeken vanaf de laatste Google Sheets-synchronisatie",
         "486a5b1": "Samenvoegen van feature: ELO-herberekening uitstellen naar 23:00 uur",
         "2aafa83": "Samenvoegen van feature: ELO-herberekening uitstellen naar 23:00 uur (deel 1)",
         "c3afc1d": "Herstel: NameError in Google Sheets fallback-functie en trigger redeploy",
@@ -82,6 +90,9 @@ def clean_and_translate_commit(hash_val, message):
             break
             
     message = message.strip()
+    if message.lower() == "argon review":
+        message = "Optimalisatie: Argon Review — Volledige code-audit, bugfixes, UI-optimalisaties en testverbeteringen"
+
     
     # Handle standard merge messages
     if message.startswith("Merge pull request") or message.startswith("Merge branch"):
@@ -219,7 +230,7 @@ def render_commits_tab():
 
     st.dataframe(
         df,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             "Hash": st.column_config.TextColumn("Hash", width="small"),
@@ -228,3 +239,4 @@ def render_commits_tab():
             "Bericht": st.column_config.TextColumn("Bericht", width="large")
         }
     )
+

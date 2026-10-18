@@ -174,22 +174,24 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
     st.write("**Bewerk wedstrijd:**")
     with st.form("edit_match_form"):
         edit_cols = st.columns(4)
+        max_idx = max(0, len(player_names) - 1)
         new_thuis_1 = edit_cols[0].selectbox(
             "Thuis 1", player_names,
             index=player_names.index(match_data.get("thuis_1")) if match_data.get("thuis_1") in player_names else 0,
         )
         new_thuis_2 = edit_cols[1].selectbox(
             "Thuis 2", player_names,
-            index=player_names.index(match_data.get("thuis_2")) if match_data.get("thuis_2") in player_names else 1,
+            index=player_names.index(match_data.get("thuis_2")) if match_data.get("thuis_2") in player_names else min(1, max_idx),
         )
         new_uit_1 = edit_cols[2].selectbox(
             "Uit 1", player_names,
-            index=player_names.index(match_data.get("uit_1")) if match_data.get("uit_1") in player_names else 2,
+            index=player_names.index(match_data.get("uit_1")) if match_data.get("uit_1") in player_names else min(2, max_idx),
         )
         new_uit_2 = edit_cols[3].selectbox(
             "Uit 2", player_names,
-            index=player_names.index(match_data.get("uit_2")) if match_data.get("uit_2") in player_names else 3,
+            index=player_names.index(match_data.get("uit_2")) if match_data.get("uit_2") in player_names else min(3, max_idx),
         )
+
         score_cols = st.columns(2)
         def safe_int(val, default=0):
             try:
@@ -371,24 +373,15 @@ def _render_uploads(db, players_df: pd.DataFrame):
                         val = str(row[col])
                         if any(not is_allowed_char(c) for c in val):
                             validation_errors.append(f"Rij {idx+1}, kolom '{col}': Vreemd teken aangetroffen")
-                # Stop direct bij fouten
-                # Add missing players automatically
-                current_players = players_df["speler_naam"].tolist() if not players_df.empty else []
+                # Controleer op nieuwe spelers en valideer scores (nog NIET toevoegen voor bevestiging!)
+                current_players = set(players_df["speler_naam"].tolist()) if not players_df.empty else set()
                 new_players = set()
                 for row_idx in range(len(matches_upload_df)):
                     row = matches_upload_df.iloc[row_idx]
-                    p = [row["thuis_1"], row["thuis_2"], row["uit_1"], row["uit_2"]]
+                    p = [str(row["thuis_1"]).strip(), str(row["thuis_2"]).strip(), str(row["uit_1"]).strip(), str(row["uit_2"]).strip()]
                     for player in p:
-                        if player not in current_players and player not in new_players:
-                            # Add player with rating 1000
-                            from firestore_service import add_player
-                            result = add_player(player, 1000)
-                            if result == "Success":
-                                new_players.add(player)
-                                current_players.append(player)
-                                st.info(f"Speler '{player}' toegevoegd aan spelerslijst.")
-                            else:
-                                validation_errors.append(f"Rij {row_idx+1}: Speler '{player}' kon niet worden toegevoegd: {result}")
+                        if player and player not in current_players:
+                            new_players.add(player)
                     t_score = row["thuis_score"]
                     u_score = row["uit_score"]
                     if not (
@@ -406,6 +399,8 @@ def _render_uploads(db, players_df: pd.DataFrame):
                         st.error(f"• ... en {len(validation_errors) - 10} meer fouten")
                     return
                 st.success("✅ Alle data is geldig!")
+                if new_players:
+                    st.info(f"👤 Nieuwe spelers die bij import worden aangemaakt ({len(new_players)}): {', '.join(sorted(new_players))}")
                 elo_recalc_option = st.radio(
                     "ELO herberekening na upload:",
                     options=[
@@ -417,16 +412,24 @@ def _render_uploads(db, players_df: pd.DataFrame):
                 st.info(f"📊 Upload samenvatting: {len(matches_upload_df)} wedstrijden klaar voor import")
                 if st.button("🚀 Import Wedstrijden", type="primary"):
                     with st.spinner(f"Bezig met importeren van {len(matches_upload_df)} wedstrijden..."):
+                        for player in sorted(new_players):
+                            db.add_player(player, 1000)
                         added, duplicates = db.import_matches(matches_upload_df.to_dict("records"))
                         if elo_recalc_option.startswith("🔄") and added > 0:
-                            db.reset_all_elos()
+                            from utils.utils_seizoen import get_current_season
+                            curr_s = get_current_season(db.get_seasons())
+                            if curr_s is not None:
+                                db.recalculate_elos_for_season(curr_s['start_datum'], curr_s['eind_datum'])
+                            else:
+                                db.reset_all_elos()
                         st.success(f"🎉 Import voltooid! {added} toegevoegd, {duplicates} duplicaten genegeerd.")
-                        if elo_recalc_option.startswith("🔄"):
+                        if elo_recalc_option.startswith("🔄") and added > 0:
                             st.success("✅ ELO scores zijn volledig herberekend!")
                         time.sleep(1.5)
                         st.rerun()
             except Exception as e:
                 st.error(f"❌ Fout bij verwerken CSV: {e}")
+
     # Spelers
     with upload_subtab2:
         st.subheader("Spelergegevens Uploaden")
@@ -604,7 +607,7 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     if st.button("🚀 Start Synchronisatie"):
         with st.spinner("Bezig met synchroniseren... dit kan even duren bij veel data."):
             try:
-                db.reconcile_data_sources()
+                db.reconcile_data_sources(force=True)
                 st.success("Synchronisatie voltooid!")
                 time.sleep(1)
                 st.rerun()
@@ -661,36 +664,64 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
         st.markdown("---")
         st.subheader("Spelerslijst namen corrigeren")
         spelers_df = players_df.copy()
-        st.dataframe(spelers_df[['speler_naam', 'rating']], width='stretch')
+        if spelers_df.empty:
+            st.info("Geen spelers beschikbaar om te bewerken.")
+        else:
+            st.dataframe(spelers_df[['speler_naam', 'rating']], width='stretch')
 
-        st.info("Hier kun je namen corrigeren. Voor het samenvoegen van dubbele spelers (merge), gebruik het admin-script 'admin/merge_players.py'.")
+            st.info("Hier kun je namen corrigeren. Voor het samenvoegen van dubbele spelers (merge), gebruik het admin-script 'admin/merge_players.py'.")
 
-        speler_select = st.selectbox("Selecteer speler om naam aan te passen", sorted(spelers_df['speler_naam'].tolist()))
-        nieuwe_naam = st.text_input("Nieuwe naam", value=speler_select)
-        if st.button("Pas naam aan"):
-            from firestore_service import players_ref, elo_ref, matches_ref
-            from google.cloud.firestore_v1.base_query import FieldFilter
-            # Update naam in spelers, elo, uitslag
-            # 1. Speler document
-            speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-            for doc in speler_docs:
-                doc.reference.update({'speler_naam': nieuwe_naam})
-            # 2. ELO documenten
-            elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-            for doc in elo_docs:
-                doc.reference.update({'speler_naam': nieuwe_naam})
-            # 3. Wedstrijden
-            for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler_select)).stream())
-                for doc in match_docs:
-                    doc.reference.update({field: nieuwe_naam})
-            st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
-            db.clear_all_caches()
-            st.rerun()
+            speler_select = st.selectbox("Selecteer speler om naam aan te passen", sorted(spelers_df['speler_naam'].tolist()))
+            nieuwe_naam_raw = st.text_input("Nieuwe naam", value=speler_select)
+            if st.button("Pas naam aan"):
+                nieuwe_naam = nieuwe_naam_raw.strip() if nieuwe_naam_raw else ""
+                existing_names_lower = [str(n).lower() for n in spelers_df['speler_naam'].tolist() if n != speler_select]
+                if not nieuwe_naam:
+                    st.error("Nieuwe naam mag niet leeg zijn.")
+                elif nieuwe_naam == speler_select:
+                    st.info("De naam is ongewijzigd.")
+                elif nieuwe_naam.lower() in existing_names_lower:
+                    st.error(f"Er bestaat al een speler met de naam '{nieuwe_naam}'. Gebruik 'admin/merge_players.py' om spelers samen te voegen.")
+                else:
+                    from firestore_service import players_ref, elo_ref, matches_ref
+                    from google.cloud.firestore_v1.base_query import FieldFilter
+                    batch = db.db.batch()
+                    ops = 0
+
+                    def _commit_if_full(b, count):
+                        if count >= 400:
+                            b.commit()
+                            return db.db.batch(), 0
+                        return b, count
+
+                    # 1. Speler document
+                    speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
+                    for doc in speler_docs:
+                        batch.update(doc.reference, {'speler_naam': nieuwe_naam})
+                        batch, ops = _commit_if_full(batch, ops + 1)
+                    # 2. ELO documenten
+                    elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
+                    for doc in elo_docs:
+                        batch.update(doc.reference, {'speler_naam': nieuwe_naam})
+                        batch, ops = _commit_if_full(batch, ops + 1)
+                    # 3. Wedstrijden
+                    for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                        match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler_select)).stream())
+                        for doc in match_docs:
+                            batch.update(doc.reference, {field: nieuwe_naam})
+                            batch, ops = _commit_if_full(batch, ops + 1)
+                    if ops > 0:
+                        batch.commit()
+                    _log_admin_action("rename_player", f"Speler hernoemd van {speler_select} naar {nieuwe_naam}")
+                    st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
+                    db.clear_all_caches()
+                    st.rerun()
 
     with tab_upload:
         st.header("📁 Upload")
-        st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
+        if matches_df is None or matches_df.empty:
+            st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
+
 
     # De inspectie-subtab is verplaatst naar admin/inspectie.py als zelfstandig script.

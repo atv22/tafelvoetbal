@@ -207,7 +207,7 @@ def _read_gsheet_fallback(sheet_name):
         for row in rows:
             if not any(row): continue
             if len(row) < len(headers):
-                row.extend([''] * (len(headers) - row))
+                row.extend([''] * (len(headers) - len(row)))
             elif len(row) > len(headers):
                 row = row[:len(headers)]
             data_dicts.append(dict(zip(headers, row)))
@@ -302,7 +302,7 @@ def _delete_gsheet_record(sheet_name, key_col, value):
         
         if len(rows_to_keep) < len(all_values):
             worksheet.clear()
-            worksheet.update('A1', rows_to_keep)
+            worksheet.update(values=rows_to_keep, range_name='A1')
         return True
     except Exception as e:
         print(f"[GSHEET DELETE] Fout bij verwijderen uit {sheet_name}: {e}")
@@ -313,22 +313,26 @@ def get_sync_throttle():
     """Globale sync throttle."""
     return {"last_sync": datetime.min}
 
-def reconcile_data_sources():
+def reconcile_data_sources(force=False):
     """Synchroniseert data tussen Firestore en Google Sheets op een efficiënte manier."""
     try:
-        # Throttling: Maximaal eens per 15 minuten syncen (Globaal)
+        # Throttling: Maximaal eens per 15 minuten syncen (Globaal), tenzij geforceerd
         now = datetime.now()
         throttle = get_sync_throttle()
-        if (now - throttle["last_sync"]).total_seconds() < 900:
+        if not force and (now - throttle["last_sync"]).total_seconds() < 900:
             return
         throttle["last_sync"] = now
 
         print("[SYNC] Bezig met synchronisatie...")
+        if hasattr(_fetch_all_gsheet_data, "clear"):
+            _fetch_all_gsheet_data.clear()
+        if hasattr(_read_gsheet_fallback, "clear"):
+            _read_gsheet_fallback.clear()
         
         # 1. Sync Wedstrijden & ELO logs
         try:
             fs_matches = list(matches_ref.select(['match_id']).stream())
-            fs_ids = {doc.to_dict().get('match_id') for doc in fs_matches if doc.to_dict().get('match_id')}
+            fs_ids = {doc.to_dict().get('match_id') or doc.id for doc in fs_matches}
         except Exception:
             print("[SYNC] Firestore niet bereikbaar voor sync.")
             return
@@ -336,10 +340,10 @@ def reconcile_data_sources():
         gs_df = _read_gsheet_fallback.__wrapped__("Wedstrijden") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("Wedstrijden")
         gs_ids = set(gs_df['match_id'].dropna().unique()) if not gs_df.empty else set()
 
-        # A. GSheet -> Firestore (Offline recovery)
-        missing_in_fs = gs_ids - fs_ids
+        # A. GSheet -> Firestore (Offline recovery: alleen wedstrijden met OFFLINE_ prefix herstellen)
+        missing_in_fs = {mid for mid in (gs_ids - fs_ids) if str(mid).startswith("OFFLINE_")}
         if missing_in_fs:
-            print(f"[SYNC] {len(missing_in_fs)} nieuwe wedstrijden in GSheet gevonden.")
+            print(f"[SYNC] {len(missing_in_fs)} nieuwe offline wedstrijden in GSheet gevonden.")
             elo_gs = _read_gsheet_fallback.__wrapped__("ELO_Logs") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("ELO_Logs")
             batch = db.batch()
             count = 0
@@ -391,13 +395,40 @@ def reconcile_data_sources():
 # --- HULPFUNCTIE: Cache volledig legen ---
 def clear_all_caches(only_players=False, only_matches=False, only_elo=False, only_requests=False):
     """
-    Leegt specifieke Streamlit caches. Omdat data nu via real-time listeners wordt bijgehouden, 
-    is harde invalidatie van data-query functies niet meer nodig (de 'last_updated' timestamp regelt dit).
+    Leegt specifieke Streamlit caches en werkt de store timestamps bij zodat nieuwe reads direct verversen.
     """
+    import time
     try:
-        if only_matches:
+        store = init_firestore_listeners()
+        now_ts = time.time()
+        all_flags = not (only_players or only_matches or only_elo or only_requests)
+        if all_flags or only_players:
+            store["last_updated"]["players"] = now_ts
+            if hasattr(_build_players_df, "clear"):
+                _build_players_df.clear()
+        if all_flags or only_matches:
+            store["last_updated"]["matches"] = now_ts
+            if hasattr(_build_matches_df, "clear"):
+                _build_matches_df.clear()
             if hasattr(get_seasons, "clear"):
                 get_seasons.clear()
+        if all_flags or only_elo:
+            store["last_updated"]["elo"] = now_ts
+            if hasattr(_build_elo_logs_df, "clear"):
+                _build_elo_logs_df.clear()
+        if all_flags or only_requests:
+            store["last_updated"]["requests"] = now_ts
+            if hasattr(_build_requests_df, "clear"):
+                _build_requests_df.clear()
+        if all_flags:
+            store["last_updated"]["beheer_log"] = now_ts
+            if hasattr(_build_beheer_log_df, "clear"):
+                _build_beheer_log_df.clear()
+        if is_offline() or all_flags:
+            if hasattr(_fetch_all_gsheet_data, "clear"):
+                _fetch_all_gsheet_data.clear()
+            if hasattr(_read_gsheet_fallback, "clear"):
+                _read_gsheet_fallback.clear()
     except Exception as e:
         print(f"Fout bij cache invalidatie: {e}")
 
@@ -432,6 +463,7 @@ players_ref = db.collection('spelers')
 matches_ref = db.collection('uitslag')
 elo_ref = db.collection('elo')
 requests_ref = db.collection('requests')
+beheer_ref = db.collection('beheer_log')
 
 # --- FIRESTORE LISTENERS ---
 @st.cache_resource
@@ -497,6 +529,10 @@ def init_firestore_listeners():
     
     def make_callback(collection_name, id_field=None):
         def callback(doc_snapshot, changes, read_time):
+            # Voor 'players' krijgen we altijd de volledige collectie uit Firestore:
+            # bij de eerste snapshot wissen we eventuele verouderde GSheet player IDs
+            if collection_name == "players" and not events["players"].is_set() and doc_snapshot:
+                store["players"].clear()
             for change in changes:
                 doc_id = change.document.id
                 if change.type.name in ('ADDED', 'MODIFIED'):
@@ -525,7 +561,7 @@ def init_firestore_listeners():
                         ts_idx = headers.index('timestamp')
                         ts_list = [row[ts_idx] for row in gsheet_data['Wedstrijden'][1:] if len(row) > ts_idx]
                         if ts_list:
-                            parsed_ts = pd.to_datetime(ts_list, errors='coerce', dayfirst=True, utc=True)
+                            parsed_ts = pd.to_datetime(ts_list, errors='coerce', format='mixed', utc=True)
                             if not parsed_ts.isna().all():
                                 last_gsheet_ts = parsed_ts.max()
                 except Exception:
@@ -547,7 +583,7 @@ def init_firestore_listeners():
             store["watchers"].append(recent_elo_query.on_snapshot(make_callback("elo", None)))
             store["watchers"].append(players_ref.on_snapshot(make_callback("players", "speler_id")))
             store["watchers"].append(requests_ref.on_snapshot(make_callback("requests", None)))
-            store["watchers"].append(db.collection('beheer_log').on_snapshot(make_callback("beheer_log", None)))
+            store["watchers"].append(beheer_ref.on_snapshot(make_callback("beheer_log", None)))
             
             # Wacht op initiële snapshot zodat de app niet met lege data start
             events["matches"].wait(timeout=2)
@@ -578,6 +614,12 @@ def _build_players_df(last_updated):
         df['rating'] = 1000
     df['rating'] = df['rating'].astype(str).str.replace(',', '.')
     df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
+    if 'speler_naam' in df.columns:
+        # Ontdubbel op speler_naam (geef voorrang aan niet-OFFLINE speler_id en laatst geladen Firestore record)
+        if 'speler_id' in df.columns:
+            df['_is_offline'] = df['speler_id'].astype(str).str.startswith('OFFLINE_')
+            df = df.sort_values('_is_offline', ascending=True).drop(columns=['_is_offline'])
+        df = df.drop_duplicates(subset=['speler_naam'], keep='last').reset_index(drop=True)
     set_offline_mode(False)
     return df
 
@@ -1120,15 +1162,25 @@ def recalculate_elos_for_season(start_date, end_date):
                     c = 0
         
         # Update current ratings in players table to match end of season
+        name_to_id = (
+            dict(zip(players_df['speler_naam'], players_df['speler_id']))
+            if not players_df.empty and 'speler_id' in players_df.columns
+            else {}
+        )
         for name, rating in player_elos.items():
-            p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
-            if p_docs:
-                batch.update(p_docs[0].reference, {'rating': rating})
+            pid = name_to_id.get(name)
+            if pid and not str(pid).startswith("OFFLINE_"):
+                batch.update(players_ref.document(str(pid)), {'rating': rating})
                 c += 1
-                if c >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    c = 0
+            else:
+                p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+                if p_docs:
+                    batch.update(p_docs[0].reference, {'rating': rating})
+                    c += 1
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
 
         if c > 0: batch.commit()
         clear_all_caches(only_elo=True, only_players=True)
@@ -1227,7 +1279,10 @@ def recalculate_elos_from(start_timestamp, season_start, season_end):
             if not p_history.empty:
                 last_record = p_history.loc[p_history['ts_naive'].idxmax()]
                 player_elos[name] = last_record['rating']
-                player_matches[name] = len(p_history) - 1
+                if 'match_id' in p_history.columns:
+                    player_matches[name] = int((p_history['match_id'] != 'SEASON_RESET').sum())
+                else:
+                    player_matches[name] = max(0, len(p_history) - 1)
         
         batch = db.batch()
         
@@ -1281,15 +1336,25 @@ def recalculate_elos_from(start_timestamp, season_start, season_end):
                     batch = db.batch()
                     c = 0
         
+        name_to_id = (
+            dict(zip(players_df['speler_naam'], players_df['speler_id']))
+            if not players_df.empty and 'speler_id' in players_df.columns
+            else {}
+        )
         for name, rating in player_elos.items():
-            p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
-            if p_docs:
-                batch.update(p_docs[0].reference, {'rating': rating})
+            pid = name_to_id.get(name)
+            if pid and not str(pid).startswith("OFFLINE_"):
+                batch.update(players_ref.document(str(pid)), {'rating': rating})
                 c += 1
-                if c >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    c = 0
+            else:
+                p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+                if p_docs:
+                    batch.update(p_docs[0].reference, {'rating': rating})
+                    c += 1
+            if c >= 400:
+                batch.commit()
+                batch = db.batch()
+                c = 0
 
         if c > 0: batch.commit()
         clear_all_caches(only_elo=True, only_players=True)
@@ -1456,16 +1521,19 @@ def delete_multiple_matches_with_elo_recalculation(match_ids):
                 ts_pd = pd.Timestamp(ts)
                 ts_naive = ts_pd.replace(tzinfo=None) if ts_pd.tzinfo is not None else ts_pd
                 
+                is_earlier = False
                 if earliest_ts is None:
                     earliest_ts = ts_pd
+                    is_earlier = True
                 else:
                     earliest_ts_naive = earliest_ts.replace(tzinfo=None) if earliest_ts.tzinfo is not None else earliest_ts
                     if ts_naive < earliest_ts_naive:
                         earliest_ts = ts_pd
+                        is_earlier = True
                         
                 # Zoek seizoen
                 s_row = seasons[(seasons['start_datum'] <= ts_naive) & (seasons['eind_datum'] >= ts_naive)]
-                if not s_row.empty and (earliest_season_info is None or ts_naive < earliest_ts.replace(tzinfo=None)):
+                if not s_row.empty and (earliest_season_info is None or is_earlier):
                     earliest_season_info = (
                         s_row.iloc[0]['start_datum'],
                         s_row.iloc[0]['eind_datum'],
@@ -1571,3 +1639,70 @@ def check_and_run_scheduled_recalc():
                 get_recalc_status.clear()
     except Exception as e:
         print(f"Fout bij checken/uitvoeren geplande ELO-herberekening: {e}")
+
+def expected_schema():
+    """Retourneert de verwachte Firestore schema-definities per collectie."""
+    return {
+        "spelers": {
+            "required": {"speler_naam", "rating"},
+            "optional": {"speler_id"},
+            "derived_only_in_app": {"speler_id"},
+        },
+        "uitslag": {
+            "required": {
+                "timestamp",
+                "thuis_1",
+                "thuis_2",
+                "uit_1",
+                "uit_2",
+                "thuis_score",
+                "uit_score",
+            },
+            "optional": {
+                "match_id",
+                "klinkers_thuis_1",
+                "klinkers_thuis_2",
+                "klinkers_uit_1",
+                "klinkers_uit_2",
+            },
+            "derived_only_in_app": {"match_id"},
+        },
+        "elo": {
+            "required": {"speler_naam", "rating", "timestamp"},
+            "optional": {"match_id"},
+            "derived_only_in_app": set(),
+        },
+        "requests": {
+            "required": {"Verzoek", "Timestamp"},
+            "optional": {"verzoek", "timestamp"},
+            "derived_only_in_app": {"id"},
+        },
+    }
+
+def inspect_collections(max_docs=250):
+    """Inspecteert de Firestore collecties aan de hand van de huidige in-memory store of een beperkte stream."""
+    store = init_firestore_listeners()
+    mapping = {
+        "spelers": ("players", players_ref),
+        "uitslag": ("matches", matches_ref),
+        "elo": ("elo_logs", elo_ref),
+        "requests": ("requests", requests_ref),
+    }
+    results = {}
+    for coll_name, (store_key, ref) in mapping.items():
+        docs_list = list(store.get(store_key, {}).values())[:max_docs]
+        if not docs_list:
+            try:
+                docs_list = [d.to_dict() for d in ref.limit(max_docs).stream()]
+            except Exception:
+                docs_list = []
+        fields = set()
+        for d in docs_list:
+            if isinstance(d, dict):
+                fields.update(d.keys())
+        results[coll_name] = {
+            "sample_size": len(docs_list),
+            "fields": sorted(list(fields)),
+            "examples": docs_list[:5],
+        }
+    return results

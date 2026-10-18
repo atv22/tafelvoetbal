@@ -97,8 +97,9 @@ def reconcile():
                 
                 worksheet.clear()
                 data = [df_to_push.columns.values.tolist()] + df_to_push.fillna('').values.tolist()
-                worksheet.update('A1', data)
+                worksheet.update(values=data, range_name='A1')
                 print(f"Succesvol {len(df_to_push)} rijen gepusht naar {sheet_name}")
+
             except Exception as e:
                 print(f"Fout bij pushen naar {sheet_name}: {e}")
         else:

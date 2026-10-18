@@ -36,7 +36,7 @@ def validate_match_input(selected_names, home_score, away_score):
     return True
 
 
-def calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df=None):
+def calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df=None, match_date=None):
     """Bereken nieuwe ELO ratings voor alle spelers"""
     # Prepare match dict for new ELO calculation
     match = {
@@ -52,11 +52,34 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos, matc
         "klinkers_uit_2": selected_names['Uit 2']['klinkers']
     }
 
-    # Haal match counts op voor K-factor stabiliteit
+    # Haal match counts op voor K-factor stabiliteit (binnen het huidige seizoen, consistent met herberekening)
     match_counts = {}
     if matches_df is not None and not matches_df.empty:
+        import pandas as pd
         from analytics import get_vectorized_player_stats
-        stats = get_vectorized_player_stats(matches_df)
+        from utils.utils_seizoen import get_season_matches, get_current_season
+
+        season_filtered_df = matches_df
+        try:
+            seasons_df = db.get_seasons()
+            if not seasons_df.empty:
+                target_season = None
+                if match_date is not None:
+                    m_date = pd.to_datetime(match_date).date()
+                    for _, s_row in seasons_df.iterrows():
+                        s_start = pd.to_datetime(s_row.get('start_datum') or s_row.get('startdatum')).date()
+                        s_end = pd.to_datetime(s_row.get('eind_datum') or s_row.get('einddatum')).date()
+                        if s_start <= m_date <= s_end:
+                            target_season = s_row
+                            break
+                else:
+                    target_season = get_current_season(seasons_df)
+                if target_season is not None:
+                    season_filtered_df = get_season_matches(matches_df, target_season)
+        except Exception:
+            season_filtered_df = matches_df
+
+        stats = get_vectorized_player_stats(season_filtered_df)
         if not stats.empty:
             match_counts = dict(zip(stats['Speler'], stats['Matches']))
 
@@ -64,7 +87,7 @@ def calculate_new_elos(selected_names, home_score, away_score, player_elos, matc
     for player in [match["Thuis_1"], match["Thuis_2"], match["Uit_1"], match["Uit_2"]]:
         if player is not None:
             # We voegen 'mock' history toe op basis van match_count om de K-factor correct te berekenen
-            count = match_counts.get(player, 0)
+            count = int(match_counts.get(player, 0))
             all_ELO_ratings[player] = [player_elos.get(player, 1000)] * (count + 1)
 
     new_elo_df = calculate_new_elo(match, all_ELO_ratings)
@@ -106,10 +129,15 @@ def check_duplicate_match(selected_names, home_score, away_score, match_datetime
     
     import pandas as pd
     dt = pd.to_datetime(match_datetime)
+    if dt.tzinfo is not None:
+        dt = dt.tz_localize(None)
     
-    # Maak een kopie om waarschuwingen te voorkomen en normaliseer timestamps
+    # Maak een kopie om waarschuwingen te voorkomen en normaliseer timestamps naar tz-naive
     matches_df_copy = matches_df.copy()
-    matches_df_copy['timestamp'] = pd.to_datetime(matches_df_copy['timestamp'])
+    ts_series = pd.to_datetime(matches_df_copy['timestamp'], errors='coerce')
+    if ts_series.dt.tz is not None:
+        ts_series = ts_series.dt.tz_localize(None)
+    matches_df_copy['timestamp'] = ts_series
     
     # Check binnen 24 uur (voor en na de ingevoerde datum/tijd)
     time_diff = (matches_df_copy['timestamp'] - dt).abs()
@@ -171,9 +199,9 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
     # AUTOMATIC SEASON RESET LOGIC: Check of dit de eerste wedstrijd van een nieuw seizoen is
     try:
         import pandas as pd
-        from utils.utils_seizoen import generate_prinsjesdag_seasons, get_season_matches
-        seasons_df = generate_prinsjesdag_seasons(matches_df)
-        if not seasons_df.empty:
+        from utils.utils_seizoen import get_season_matches
+        seasons_df = db.get_seasons()
+        if not seasons_df.empty and matches_df is not None and not matches_df.empty:
             m_date = pd.to_datetime(match_date).date()
             for _, season in seasons_df.iterrows():
                 s_start = pd.to_datetime(season.get('start_datum') or season.get('startdatum')).date()
@@ -192,7 +220,7 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
         print(f"Fout bij automatische seizoensreset check: {e}")
 
     # Bereken nieuwe ELO ratings
-    new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df)
+    new_elos = calculate_new_elos(selected_names, home_score, away_score, player_elos, matches_df, match_date=match_date)
 
     # Bereid data voor
     match_data = prepare_match_data(selected_names, home_score, away_score, match_date)
@@ -250,7 +278,7 @@ def render_input_tab(players_df, matches_df=None):
         st.warning("Er zijn nog geen spelers. Voeg eerst een speler toe via de 'Spelers' tab.")
     else:
         # Filter 'Niemand' en test-spelers uit - Case-insensitive
-        filtered_players_df = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
+        filtered_players_df = players_df[~players_df['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)].drop_duplicates(subset=['speler_naam'], keep='first')
         
         if filtered_players_df.empty:
             st.warning("Geen geldige spelers gevonden. Voeg spelers toe via de 'Spelers' tab.")
@@ -258,6 +286,7 @@ def render_input_tab(players_df, matches_df=None):
 
         player_names = sorted(filtered_players_df['speler_naam'].tolist())
         player_elos = filtered_players_df.set_index('speler_naam')['rating'].to_dict()
+
 
         klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
 

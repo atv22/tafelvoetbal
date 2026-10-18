@@ -149,7 +149,7 @@ def show_timeline_chart(matches_df):
         yaxis_title="Aantal wedstrijden",
         showlegend=False
     )
-    st.plotly_chart(fig_timeline, width='stretch', key="timeline_chart")
+    st.plotly_chart(fig_timeline, key="timeline_chart")
 
 
 def show_unique_players_bar_chart(season_matches):
@@ -182,7 +182,7 @@ def show_unique_players_bar_chart(season_matches):
         color_discrete_sequence=['#ff7f0e']
     )
     fig_players.update_layout(xaxis_title="Datum", yaxis_title="Unieke spelers")
-    st.plotly_chart(fig_players, width='stretch', key="unique_players_bar_chart")
+    st.plotly_chart(fig_players, key="unique_players_bar_chart")
 
 
 def show_winrate_bar_chart(season_matches, min_matches=3):
@@ -205,7 +205,7 @@ def show_winrate_bar_chart(season_matches, min_matches=3):
             hover_data={'Winrate': ':.1f'}
         )
         fig_winrate.update_layout(xaxis_title="Speler", yaxis_title="Winpercentage (%)")
-        st.plotly_chart(fig_winrate, width='stretch', key="winrate_bar_chart")
+        st.plotly_chart(fig_winrate, key="winrate_bar_chart")
 
 
 def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
@@ -232,7 +232,7 @@ def show_activity_vs_winrate_scatter(all_matches, key_suffix=None):
         fig_scatter.update_traces(textposition="top center")
         fig_scatter.update_layout(xaxis_title="Aantal Wedstrijden", yaxis_title="Winpercentage (%)")
         chart_key = f"activity_vs_winrate_scatter_{key_suffix}" if key_suffix else "activity_vs_winrate_scatter"
-        st.plotly_chart(fig_scatter, width='stretch', key=chart_key)
+        st.plotly_chart(fig_scatter, key=chart_key)
 
 
 def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
@@ -251,7 +251,7 @@ def show_cross_season_charts(all_matches, seasons_df, elo_df=None):
                 title="Gemiddelde Goals per Seizoen",
                 markers=True
             )
-            st.plotly_chart(fig_season_goals, width='stretch', key="cross_season_goals_chart")
+            st.plotly_chart(fig_season_goals, key="cross_season_goals_chart")
 
 
 def show_goals_bar_chart_season(season_matches):
@@ -273,7 +273,7 @@ def show_goals_bar_chart_season(season_matches):
             hover_data={'Goals': True}
         )
         fig_goals.update_layout(xaxis_title="Speler", yaxis_title="Goals")
-        st.plotly_chart(fig_goals, width='stretch', key="goals_bar_chart_season")
+        st.plotly_chart(fig_goals, key="goals_bar_chart_season")
 
 
 def create_all_time_leaderboards(all_matches):
@@ -288,6 +288,8 @@ def show_all_time_leaderboards(player_stats_df, elo_df=None):
     if player_stats_df is None or player_stats_df.empty:
         st.info("Geen data beschikbaar voor ranglijsten.")
         return
+
+    player_stats_df = player_stats_df.copy()
 
     # Data voorbereiden met Pandas
     def get_top_5(df, sort_col, display_name, format_str=None):
@@ -335,7 +337,7 @@ def show_all_time_leaderboards(player_stats_df, elo_df=None):
     
     df_win_pct = get_top_5(f3, 'Winrate', 'Win%', '{:.1f}%')
     df_gpm = get_top_5(f3, 'Goals_Per_Match', 'Goals/W', '{:.2f}')
-    df_avg_goals = get_top_5(f3, 'Goals_Per_Match', 'Gem. Goals', '{:.2f}')
+    df_goal_diff = get_top_5(f3, 'Goal_Diff', 'Doelsaldo')
 
     # Toon acht tabellen in 2 rijen van 4
     row1 = st.columns(4)
@@ -352,7 +354,7 @@ def show_all_time_leaderboards(player_stats_df, elo_df=None):
         (row2[0], "🎯 Top 5 Klinker Masters", df_klinkers),
         (row2[1], "📈 Top Win% (min. 3)", df_win_pct),
         (row2[2], "🚀 Goals per Wedstrijd (min. 3)", df_gpm),
-        (row2[3], "⚖️ Gem. Goals (min. 3)", df_avg_goals)
+        (row2[3], "⚖️ Doelsaldo (min. 3)", df_goal_diff)
     ]
 
     for col, title, df in tables_r1 + tables_r2:
@@ -406,7 +408,7 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
         if stats is not None and not stats.empty and stats['Klinkers'].sum() > 0:
             k_df = stats.sort_values('Klinkers', ascending=False).head(10)
             fig_k = px.bar(k_df, x='Speler', y='Klinkers', title="Top 10 Klinkers", color='Klinkers', color_continuous_scale='OrRd')
-            st.plotly_chart(fig_k, width='stretch', key=f"k_chart_{seizoen_naam}")
+            st.plotly_chart(fig_k, key=f"k_chart_{seizoen_naam}")
 
     # ELO ratings
     if season_elo is not None and not season_elo.empty:
@@ -414,4 +416,4 @@ def show_individual_season_analysis(season_info, season_matches, season_elo=None
         elo_top = season_elo.sort_values('rating', ascending=False).head(10).copy()
         elo_top['rating'] = elo_top['rating'].round(0).astype(int)
         fig_elo = px.bar(elo_top, x='speler_naam', y='rating', title="Top 10 ELO Ratings", color='rating', color_continuous_scale='Viridis', hover_data={'rating': True})
-        st.plotly_chart(fig_elo, width='stretch', key=f"elo_chart_{seizoen_naam}")
+        st.plotly_chart(fig_elo, key=f"elo_chart_{seizoen_naam}")

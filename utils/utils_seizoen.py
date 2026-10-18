@@ -117,10 +117,11 @@ def generate_prinsjesdag_seasons(matches_df):
                         total_goals = 0
                     avg_goals = total_goals / len(season_matches) if len(season_matches) > 0 else 0
 
+                    from utils.utils import IGNORE_PLAYERS
                     unique_players = set()
                     for _, match in season_matches.iterrows():
                         for p in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                            if p in match and pd.notna(match[p]):
+                            if p in match and pd.notna(match[p]) and str(match[p]).lower().strip() not in IGNORE_PLAYERS:
                                 unique_players.add(match[p])
 
                     if 'seizoen_naam' in season:
@@ -157,6 +158,9 @@ def generate_prinsjesdag_seasons(matches_df):
 def get_season_matches(matches_df, season_info):
     """Filter wedstrijden voor een specifiek seizoen"""
     try:
+        if matches_df is None or matches_df.empty:
+            return pd.DataFrame()
+
         # Converteer alle datums naar timezone-naive voor vergelijking
         if 'datum' in matches_df.columns:
             match_dates = pd.to_datetime(matches_df['datum'], errors='coerce')
@@ -175,16 +179,10 @@ def get_season_matches(matches_df, season_info):
 
         season_start = pd.to_datetime(season_info.get('start_datum') or season_info.get('startdatum'), errors='coerce')
         season_end = pd.to_datetime(season_info.get('eind_datum') or season_info.get('einddatum'), errors='coerce')
-        try:
-            if hasattr(season_start.dt, 'tz') and season_start.dt.tz is not None:
-                season_start = season_start.dt.tz_convert('UTC').dt.tz_localize(None)
-        except Exception:
-            pass
-        try:
-            if hasattr(season_end.dt, 'tz') and season_end.dt.tz is not None:
-                season_end = season_end.dt.tz_convert('UTC').dt.tz_localize(None)
-        except Exception:
-            pass
+        if hasattr(season_start, 'tzinfo') and season_start.tzinfo is not None:
+            season_start = season_start.tz_convert('UTC').tz_localize(None)
+        if hasattr(season_end, 'tzinfo') and season_end.tzinfo is not None:
+            season_end = season_end.tz_convert('UTC').tz_localize(None)
         
         # Filter wedstrijden binnen seizoen periode
         season_mask = (match_dates >= season_start) & (match_dates <= season_end)
@@ -199,12 +197,13 @@ def get_season_matches(matches_df, season_info):
 
 def calculate_season_stats(season_matches):
     """Bereken uitgebreide statistieken voor een seizoen"""
-    if season_matches.empty:
+    if season_matches is None or season_matches.empty:
         return {}
     
     stats = {}
     
     try:
+        from utils.utils import IGNORE_PLAYERS
         # Basis statistieken
         stats['total_matches'] = len(season_matches)
         stats['total_goals'] = season_matches['thuis_score'].sum() + season_matches['uit_score'].sum()
@@ -220,37 +219,45 @@ def calculate_season_stats(season_matches):
         home_cols = ['thuis_1', 'thuis_2']
         away_cols = ['uit_1', 'uit_2']
         for _, match in season_matches.iterrows():
-            home_players = [match.get(home_cols[0], None), match.get(home_cols[1], None)]
-            away_players = [match.get(away_cols[0], None), match.get(away_cols[1], None)]
+            home_players = [
+                p for p in [match.get(home_cols[0], None), match.get(home_cols[1], None)]
+                if p is not None and pd.notna(p) and str(p).lower().strip() not in IGNORE_PLAYERS
+            ]
+            away_players = [
+                p for p in [match.get(away_cols[0], None), match.get(away_cols[1], None)]
+                if p is not None and pd.notna(p) and str(p).lower().strip() not in IGNORE_PLAYERS
+            ]
             # Track alle spelers
-            all_players.update([p for p in home_players + away_players if p is not None])
+            all_players.update(home_players + away_players)
             # Track matches per speler
             for player in home_players + away_players:
-                if player is not None:
-                    player_matches[player] = player_matches.get(player, 0) + 1
-                    player_goals[player] = player_goals.get(player, 0)
+                player_matches[player] = player_matches.get(player, 0) + 1
+                player_goals[player] = player_goals.get(player, 0)
             # Track goals per speler
             for player in home_players:
-                if player is not None:
-                    player_goals[player] += match['thuis_score']
-                    player_wins[player] = player_wins.get(player, 0)
-                    if match['thuis_score'] > match['uit_score']:
-                        player_wins[player] += 1
+                player_goals[player] += match['thuis_score']
+                player_wins[player] = player_wins.get(player, 0)
+                if match['thuis_score'] > match['uit_score']:
+                    player_wins[player] += 1
             for player in away_players:
-                if player is not None:
-                    player_goals[player] += match['uit_score']
-                    player_wins[player] = player_wins.get(player, 0)
-                    if match['uit_score'] > match['thuis_score']:
-                        player_wins[player] += 1
+                player_goals[player] += match['uit_score']
+                player_wins[player] = player_wins.get(player, 0)
+                if match['uit_score'] > match['thuis_score']:
+                    player_wins[player] += 1
         
         stats['unique_players'] = len(all_players)
         stats['most_active_player'] = max(player_matches.items(), key=lambda x: x[1]) if player_matches else ("N/A", 0)
         stats['top_scorer'] = max(player_goals.items(), key=lambda x: x[1]) if player_goals else ("N/A", 0)
         stats['most_wins'] = max(player_wins.items(), key=lambda x: x[1]) if player_wins else ("N/A", 0)
         
-        # Datum statistieken
-        stats['first_match'] = season_matches['datum'].min()
-        stats['last_match'] = season_matches['datum'].max()
+        # Datum statistieken (ondersteun zowel 'timestamp' als 'datum')
+        date_col = 'timestamp' if 'timestamp' in season_matches.columns else ('datum' if 'datum' in season_matches.columns else None)
+        if date_col:
+            stats['first_match'] = season_matches[date_col].min()
+            stats['last_match'] = season_matches[date_col].max()
+        else:
+            stats['first_match'] = None
+            stats['last_match'] = None
         
         # Hoogste uitslag
         max_total_goals_idx = (season_matches['thuis_score'] + season_matches['uit_score']).idxmax()
@@ -286,17 +293,19 @@ def is_season_current(season_info):
     """Check of een seizoen het huidige seizoen is"""
     try:
         today = date.today()
-        season_start = pd.to_datetime(season_info['start_datum']).date()
-        season_end = pd.to_datetime(season_info['eind_datum']).date()
+        start_val = season_info.get('start_datum') if 'start_datum' in season_info else season_info.get('startdatum')
+        end_val = season_info.get('eind_datum') if 'eind_datum' in season_info else season_info.get('einddatum')
+        season_start = pd.to_datetime(start_val).date()
+        season_end = pd.to_datetime(end_val).date()
         
         return season_start <= today <= season_end
-    except:
+    except Exception:
         return False
 
 
 def get_current_season(seasons_df):
     """Vind het huidige actieve seizoen"""
-    if seasons_df.empty:
+    if seasons_df is None or seasons_df.empty:
         return None
         
     for _, season in seasons_df.iterrows():
@@ -328,7 +337,7 @@ def create_season_options(seasons_df, matches_df):
                 
                 # Check of dit het huidige seizoen is
                 if start_date <= current_date <= end_date:
-                    current_season_id = len(season_options) - 1
+                    current_season_id = idx
                     
         except Exception:
             continue  # Skip seizoenen met problemen
@@ -344,6 +353,7 @@ def create_season_options(seasons_df, matches_df):
 
 def process_all_seasons_metrics(seasons_df, matches_df):
     """Verwerk metrics voor alle seizoenen"""
+    from utils.utils import IGNORE_PLAYERS
     season_metrics = []
     
     for idx, season in seasons_df.iterrows():
@@ -360,10 +370,10 @@ def process_all_seasons_metrics(seasons_df, matches_df):
             # Unieke spelers
             unique_players = set()
             for _, match in season_matches.iterrows():
-                unique_players.update([
-                    match['thuis_1'], match['thuis_2'],
-                    match['uit_1'], match['uit_2']
-                ])
+                for col in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
+                    val = match.get(col)
+                    if pd.notna(val) and str(val).lower().strip() not in IGNORE_PLAYERS:
+                        unique_players.add(val)
             
             season_metrics.append({
                 'Seizoen': season.get('seizoen_naam', f"Seizoen {idx+1}"),

@@ -17,6 +17,8 @@ MODULES = [
     "tabs.tab_data",
     "tabs.tab_beheer",
     "tabs.tab_verzoeken",
+    "tabs.tab_commits",
+    "tabs.tab_logging",
     "tabs.tab_colofon",
 ]
 
@@ -31,7 +33,8 @@ def test_app_tabs():
     # Controleer of de tab-namen in de app overeenkomen met verwachting
     expected_tabs = [
         "🏠 Home", "📝 Invullen", "👥 Spelers", "📈 Analytics",
-        "📊 Ruwe Data", "⚙️ Beheer", "💬 Verzoeken", "ℹ️ Colofon"
+        "📊 Ruwe Data", "💬 Verzoeken", "📜 Commits", "🔍 Logging",
+        "ℹ️ Colofon", "⚙️ Beheer"
     ]
     app_path = os.path.join(os.path.dirname(__file__), "..", "app.py")
     with open(app_path, encoding="utf-8") as f:
@@ -55,3 +58,9 @@ def test_admin_subtabs():
     ]
     for subtab in expected_upload_subtabs:
         assert subtab in content, f"Upload subtab '{subtab}' niet gevonden in tab_beheer.py"
+
+def test_expected_schema():
+    import firestore_service as db
+    schema = db.expected_schema()
+    assert set(schema.keys()) == {"spelers", "uitslag", "elo", "requests"}
+

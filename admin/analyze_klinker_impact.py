@@ -144,16 +144,8 @@ def main():
     
     for match in results:
         # Check intra-team comparisons
-        # Safely access players
-        t1 = match_row['thuis_1']
-        t2 = match_row['thuis_2']
-        u1 = match_row['uit_1']
-        u2 = match_row['uit_2']
-        
-        # Re-derive teams from match_stats to be sure
-        # The keys in match_stats['players'] are accurate
-        
         match_players = match['players']
+
         
         # Group by team based on teammate mapping
         processed_players = set()

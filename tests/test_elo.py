@@ -21,8 +21,8 @@ def check_elo_per_season():
     players_df = db.get_players()
     missing_elo = []
     for _, season in seasons_df.iterrows():
-        start = pd.to_datetime(season['startdatum'])
-        end = pd.to_datetime(season['einddatum'])
+        start = pd.to_datetime(season.get('start_datum', season.get('startdatum')))
+        end = pd.to_datetime(season.get('eind_datum', season.get('einddatum')))
         season_matches = matches_df[(matches_df['timestamp'] >= start) & (matches_df['timestamp'] <= end)]
         # Spelers die in dit seizoen gespeeld hebben
         season_players = set()
@@ -64,8 +64,8 @@ def elo_overview_per_season():
         elo_hist['timestamp'] = pd.to_datetime(elo_hist['timestamp'], errors='coerce')
         elo_hist['timestamp'] = normalize_timestamp_series(elo_hist['timestamp'])
         for _, season in seasons_df.iterrows():
-            start = pd.to_datetime(season['startdatum'])
-            end = pd.to_datetime(season['einddatum'])
+            start = pd.to_datetime(season.get('start_datum', season.get('startdatum')))
+            end = pd.to_datetime(season.get('eind_datum', season.get('einddatum')))
             in_season = elo_hist[(elo_hist['timestamp'] >= start) & (elo_hist['timestamp'] <= end)]
             if not in_season.empty:
                 elo_start = in_season.iloc[0]['rating']
@@ -98,6 +98,14 @@ player_ids_to_cleanup = []
 def cleanup_test_players():
     print("\n Vooraf opruimen...")
     try:
+        df_matches = db.get_matches()
+        if not df_matches.empty and 'match_id' in df_matches.columns:
+            test_m = df_matches[df_matches['thuis_1'].isin(test_players.keys())]
+            for _, m_row in test_m.iterrows():
+                mid = m_row.get('match_id')
+                if mid:
+                    db.delete_match_by_id(str(mid))
+
         df_players = db.get_players()
         if df_players.empty:
             print(" -> Geen spelers gevonden om op te ruimen.")
@@ -114,6 +122,7 @@ def cleanup_test_players():
             print(" -> Geen overgebleven testspelers gevonden.")
     except Exception as e:
         print(f"Fout tijdens vooraf opruimen: {e}")
+
 
 def run_elo_test():
     cleanup_test_players()
@@ -247,9 +256,11 @@ def testspelers_fixture():
         speler_ids[name] = player_map[name]['speler_id']
     yield speler_ids
     # Cleanup na test, altijd uitvoeren
+    cleanup_test_players()
     for player_id in speler_ids.values():
         db.delete_player_by_id(player_id)
     player_ids_to_cleanup.clear()
+
 
 
 @pytest.mark.integration
