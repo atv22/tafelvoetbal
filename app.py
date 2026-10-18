@@ -1,4 +1,8 @@
-# Force redeploy to clear cache - 2026-10-18 (v2.6)
+"""
+Hoofd-entrypoint voor de Tafelvoetbal Competitie App (Streamlit).
+Laadt de gecachte data uit Firestore / Google Sheets en rendert de 10 hoofdtabs.
+"""
+# Force redeploy to clear cache - 2026-10-18 13:00 (v2.7)
 from datetime import datetime, timedelta
 import threading
 import time
@@ -23,7 +27,7 @@ from tabs.tab_verzoeken import render_verzoeken_tab
 setup_page()
 
 st.title("Tafelvoetbal Competitie ⚽")
-st.caption("Versie 2.6")
+st.caption("Versie 2.7 — Klik op **ℹ️ Colofon** of open de **Snelstart** hieronder voor uitleg & spelregels")
 
 # Check of ELO herberekening gepland is
 recalc_status = db.get_recalc_status()
@@ -49,7 +53,7 @@ if recalc_status and recalc_status.get("recalc_needed"):
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "2.2"
+CACHE_VERSION = "2.3"
 
 
 # Bij een nieuwe versie, leeg de cache (voorzichtiger om quota te sparen)

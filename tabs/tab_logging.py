@@ -4,6 +4,9 @@ from utils.utils import get_download_filename
 
 def render_logging_tab(df_beheer_log):
     st.header("🔍 Systeem Logging & Beheer Acties")
+    st.caption(
+        "Transparant overzicht van alle handmatige beheerdersacties (audit-log) en de technische Firestore database-operaties van de huidige sessie."
+    )
     
     st.subheader("📝 Beheer Logging (Admin acties)")
     if df_beheer_log is not None and not df_beheer_log.empty:

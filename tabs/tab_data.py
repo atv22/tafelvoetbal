@@ -4,6 +4,10 @@ from utils.utils import get_download_filename
 
 def render_data_tab(matches_df, df_elo, df_players, df_beheer_log, df_requests):
     st.header("📊 Ruwe Data uit Firestore")
+    st.caption(
+        "Bekijk en download hier de volledige brontabellen (Uitslagen, ELO Geschiedenis en Spelers) "
+        "als CSV-bestand voor eigen analyses of archivering."
+    )
 
 
     try:

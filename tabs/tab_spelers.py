@@ -11,6 +11,9 @@ from utils.utils import IGNORE_PLAYERS, add_name
 
 def render_players_tab(players_df, matches_df, seasons_df, elo_df):
     st.header("👥 Speler Beheer & Historie")
+    st.caption(
+        "Bekijk hier het historische ELO-verloop per speler of registreer een nieuwe speler voor de competitie."
+    )
 
     if players_df is None or players_df.empty:
         st.info("Nog geen spelers geregistreerd.")
@@ -105,7 +108,12 @@ def render_player_list_and_management(players_df):
     
     with col_add:
         st.write("**Nieuwe speler toevoegen:**")
-        new_player_name = st.text_input("Naam van de speler:", key="new_player_name")
+        new_player_name = st.text_input(
+            "Naam van de speler:",
+            key="new_player_name",
+            placeholder="Bijv. 'Sanne'",
+            help="Vereisten: begint met een hoofdletter, bevat alleen letters (en spaties), en is tussen de 2 en 50 tekens lang. Elke nieuwe speler start op 1000 ELO."
+        )
         if st.button("➕ Speler Toevoegen"):
             if new_player_name and new_player_name.strip():
                 add_name(new_player_name.strip())
@@ -114,7 +122,12 @@ def render_player_list_and_management(players_df):
 
     with col_del:
         st.write("**Speler verwijderen:**")
-        player_to_del = st.selectbox("Selecteer speler om te verwijderen:", [""] + sorted(players_df['speler_naam'].tolist()), key="del_player_select")
+        player_to_del = st.selectbox(
+            "Selecteer speler om te verwijderen:",
+            [""] + sorted(players_df['speler_naam'].tolist()),
+            key="del_player_select",
+            help="Let op: dit verwijdert de speler en de bijbehorende ELO-historie definitief. Wil je alleen een spelfout corrigeren? Doe dat via het tabblad ⚙️ Beheer -> ✏️ Bewerken."
+        )
         if st.button("🗑️ Verwijder Speler", type="secondary"):
             if player_to_del:
                 st.session_state["confirm_del_player"] = player_to_del

@@ -243,6 +243,10 @@ def process_match_submission(selected_names, home_score, away_score, player_elos
 def render_input_tab(players_df, matches_df=None):
     """Render de complete Input tab"""
     st.header("Tafelvoetbal Competitie ⚽ — Invullen")
+    st.caption(
+        "Registreer hier een gespeelde 2v2-wedstrijd. Kies 4 unieke spelers, "
+        "geef aan of er klinkers zijn gescoord (+15 ELO bonus per klinker) en vul de eindstand in (één team scoort 10)."
+    )
 
     # Toon waarschuwing bij mogelijke dubbele wedstrijd
     if st.session_state.get("show_duplicate_warning"):
@@ -288,7 +292,11 @@ def render_input_tab(players_df, matches_df=None):
         player_elos = filtered_players_df.set_index('speler_naam')['rating'].to_dict()
 
 
-        klink = st.radio("Zijn er klinkers gescoord?", ("Nee", "Ja"))
+        klink = st.radio(
+            "Zijn er klinkers gescoord?",
+            ("Nee", "Ja"),
+            help="Kies 'Ja' om per speler het aantal gescoorde klinkers in te vullen. Elke klinker levert direct +15 extra ELO-punten op!"
+        )
 
         selected_names = {
             'Thuis 1': {'name': None, 'klinkers': 0},
@@ -307,20 +315,42 @@ def render_input_tab(players_df, matches_df=None):
                         title,
                         player_names,
                         key=f"sel_{title}_{session_key}",
-                        index=i % len(player_names)
+                        index=i % len(player_names),
+                        help="Selecteer een unieke speler (alle 4 de spelers moeten verschillend zijn)."
                     )
 
             if klink == "Ja":
                 klinker_cols = st.columns(4)
                 for i, title in enumerate(selected_names):
                     with klinker_cols[i]:
-                        selected_names[title]['klinkers'] = st.number_input(f"Klinkers {title}", min_value=0, max_value=10, step=1, key=f"kl_{title}_{session_key}")
+                        selected_names[title]['klinkers'] = st.number_input(
+                            f"Klinkers {title}",
+                            min_value=0,
+                            max_value=10,
+                            step=1,
+                            key=f"kl_{title}_{session_key}",
+                            help="Aantal klinkers gescoord door deze speler (+15 ELO bonus per klinker)."
+                        )
 
             score_cols = st.columns(2)
             with score_cols[0]:
-                home_score = st.number_input("Score Thuis:", min_value=0, max_value=10, step=1, key=f"score_thuis_{session_key}")
+                home_score = st.number_input(
+                    "Score Thuis:",
+                    min_value=0,
+                    max_value=10,
+                    step=1,
+                    key=f"score_thuis_{session_key}",
+                    help="Eindscore van het thuisteam (0 t/m 10). Eén van beide teams moet 10 hebben."
+                )
             with score_cols[1]:
-                away_score = st.number_input("Score Uit:",   min_value=0, max_value=10, step=1, key=f"score_uit_{session_key}")
+                away_score = st.number_input(
+                    "Score Uit:",
+                    min_value=0,
+                    max_value=10,
+                    step=1,
+                    key=f"score_uit_{session_key}",
+                    help="Eindscore van het uitteam (0 t/m 10). Eén van beide teams moet 10 hebben."
+                )
 
             from utils.utils import get_nl_now
             # Huidige datum en tijd in Nederlandse tijdzone ophalen

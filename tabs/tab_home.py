@@ -236,17 +236,27 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         height=max(400, 35 * len(display_df) + 100),
         column_config={
             "Gerangschikt": None, # Forceer verbergen in Streamlit UI mocht styled.hide falen
+            "ELO": st.column_config.NumberColumn("ELO", help="Huidige ELO-rating in dit seizoen (start op 1000 bij seizoensbegin)"),
             "Trend": st.column_config.TextColumn("Trend", help="ELO verschil t.o.v. vorige wedstrijd (exclusief seizoens-resets)"),
-            "Win%": st.column_config.TextColumn("Win%", help="Winstpercentage (vanaf 3 gespeelde wedstrijden)"),
-            "Gem. Goals": st.column_config.TextColumn("Gem. Goals", help="Gemiddeld aantal goals per wedstrijd (vanaf 3 gespeelde wedstrijden)"),
+            "Gespeeld": st.column_config.NumberColumn("Gespeeld", help="Aantal gespeelde wedstrijden in dit seizoen (min. 3 nodig voor officiële rangschikking)"),
+            "Win%": st.column_config.TextColumn("Win%", help="Winstpercentage (zichtbaar vanaf 3 gespeelde wedstrijden)"),
+            "Gem. Goals": st.column_config.TextColumn("Gem. Goals", help="Gemiddeld aantal goals per wedstrijd (zichtbaar vanaf 3 gespeelde wedstrijden)"),
+            "Doelsaldo": st.column_config.NumberColumn("Doelsaldo", help="Verschil tussen doelpunten vóór en tegen in dit seizoen"),
+            "Klinkers": st.column_config.NumberColumn("Klinkers", help="Aantal gescoorde klinkers in dit seizoen (+15 ELO bonus per klinker)"),
         }
     )
+    st.caption("💡 **Uitleg ranglijst:** Spelers zijn officieel *gerangschikt* vanaf **3 gespeelde wedstrijden** in het huidige seizoen (de top 3 is groen gemarkeerd). Spelers met minder dan 3 wedstrijden worden *cursief/grijs* weergegeven.")
 
 
 
 def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
     """Render de complete Home tab"""
     st.header("🏆 ELO Ranglijst")
+
+    with st.expander("👋 Nieuw hier? Bekijk de Snelstart & Spelregels (Tutorial)", expanded=False):
+        from tabs.tab_colofon import render_quick_tutorial
+        render_quick_tutorial()
+        st.info("ℹ️ Meer weten over de wiskundige ELO-formule, alle tabbladen of veelgestelde vragen? Ga naar het tabblad **ℹ️ Colofon**.")
 
     if players_df is None or players_df.empty:
         st.info("Nog geen spelers geregistreerd. Ga naar 'Spelers' om spelers toe te voegen.")

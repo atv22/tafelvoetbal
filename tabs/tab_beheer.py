@@ -493,7 +493,21 @@ def _render_uploads(db, players_df: pd.DataFrame):
                         st.rerun()
             except Exception as e:
                 st.error(f"❌ Fout bij verwerken CSV: {e}")
-    # Seizoenen upload-tab verwijderd: seizoenen worden automatisch bepaald uit wedstrijddata
+    # Seizoenen upload-tab: leg uit hoe de automatische Prinsjesdag / 15-maart seizoenen werken
+    with upload_subtab3:
+        st.subheader("📅 Seizoensindeling (Automatisch)")
+        st.info(
+            "💡 **Geen handmatige upload nodig:** Seizoenen worden in deze app volledig automatisch "
+            "berekend op basis van de **ADR Controlejaar-systematiek** en de datums van de gespeelde wedstrijden."
+        )
+        st.markdown(
+            """
+            **Hoe werkt de automatische seizoensindeling?**
+            - **☀️ Zomerseizoen (`CJ <Jaar> Zomer`):** Loopt van **15 maart (00:00 uur)** tot en met **Prinsjesdag** (de derde dinsdag van september, 23:59:59 uur).
+            - **❄️ Winterseizoen (`CJ <Jaar> Winter`):** Loopt vanaf de nacht **na Prinsjesdag (woensdag 00:00 uur)** tot en met **14 maart van het volgende jaar (23:59:59 uur)**.
+            - **🔄 Automatische ELO-reset:** Zodra de eerste wedstrijd van een nieuw seizoen wordt geregistreerd, worden alle ELO-scores automatisch gereset naar **1000 punten**.
+            """
+        )
 
 # ---------------------------------------------------------------------------
 # Systeem beheer
@@ -598,6 +612,10 @@ def _render_system_management(db, players_df: pd.DataFrame):
 def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
     """Rendert de volledige beheer tab. Houdt de code in app.py minimaal."""
     st.header("⚙️ Beheer")
+    st.caption(
+        "Beveiligde beheeromgeving voor het synchroniseren van de Google Sheet back-up, "
+        "het corrigeren of verwijderen van wedstrijden en spelers, en het importeren van CSV-bestanden."
+    )
     if not _ensure_authentication():
         return
 
@@ -712,7 +730,13 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                             batch, ops = _commit_if_full(batch, ops + 1)
                     if ops > 0:
                         batch.commit()
-                    _log_admin_action("rename_player", f"Speler hernoemd van {speler_select} naar {nieuwe_naam}")
+                    from utils.utils_beheer_log import log_admin_action
+                    log_admin_action(
+                        action_type="rename_player",
+                        user=st.session_state.get("user", "onbekend"),
+                        details={"old_name": speler_select, "new_name": nieuwe_naam},
+                        db=db.db
+                    )
                     st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
                     db.clear_all_caches()
                     st.rerun()

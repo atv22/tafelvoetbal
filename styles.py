@@ -28,9 +28,14 @@ def setup_page():
         layout="wide",  # Gebruik volledige breedte zonder sidebar
         initial_sidebar_state="collapsed",  # Zorg dat sidebar weg is
         menu_items={
-            'Get Help': None,
-            'Report a bug': None,
-            'About': None
+            'Get Help': 'https://github.com/atv22/tafelvoetbal',
+            'Report a bug': 'https://github.com/atv22/tafelvoetbal/issues',
+            'About': (
+                "### ⚽ Tafelvoetbal Competitie App\n"
+                "Een real-time webapplicatie voor het beheren en analyseren van 2v2 tafelvoetbalcompetities "
+                "met een dynamisch ELO-ratingsysteem, automatische Controlejaar-seizoenen en Google Firestore/Sheets opslag.\n\n"
+                "**Ontwikkeld tijdens de Hackatron van oktober 2025 door:** Rick, Bernd, Dewi, Isis, Arthur & Johannes."
+            ),
         },
     )
     

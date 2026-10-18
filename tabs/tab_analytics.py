@@ -19,11 +19,16 @@ from utils.utils import IGNORE_PLAYERS
 
 def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     st.header("📅 Seizoensanalyse")
+    st.caption(
+        "Ontdek de all-time recordhouders, vergelijk het verloop van alle Controlejaar-seizoenen "
+        "(Zomer: 15 mrt – Prinsjesdag, Winter: Prinsjesdag – 15 mrt) en filter de Top-5 ranglijsten en grafieken."
+    )
     if elo_df is None:
         elo_df = get_elo_logs()
 
     # --- 1. All-time Recordhouders (Prominent bovenaan) ---
     st.subheader("🏆 All-time Recordhouders")
+    st.caption("De hoogste ELO-rating ooit bereikt op enig moment in de geschiedenis van de competitie (Peak ELO).")
     abs_top3 = get_absolute_top3_elo(elo_df)
     if abs_top3:
         cols = st.columns(len(abs_top3))
@@ -36,6 +41,7 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
     seasons_with_stats = pd.DataFrame()
     if not seasons_df.empty and matches_df is not None and not matches_df.empty:
         st.subheader("Seizoenen overzicht")
+        st.caption("Overzicht van alle gespeelde seizoenen. De seizoenswinnaar en top 3 worden bepaald op basis van de eind-ELO aan het slot van het betreffende seizoen.")
         
         # Voorbereiden extra metrics (Vectorized)
         all_matches_proc = matches_df.copy()
