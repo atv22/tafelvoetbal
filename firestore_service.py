@@ -7,7 +7,8 @@ import json
 import pandas as pd
 import uuid
 import traceback
-from datetime import datetime
+import zoneinfo
+from datetime import datetime, timedelta
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
@@ -392,17 +393,45 @@ def reconcile_data_sources(force=False):
             if m_records: _write_gsheet_records("Wedstrijden", m_records)
             if e_records: _write_gsheet_records("ELO_Logs", e_records)
 
-        # 2. Sync Spelers
+        # 2. Sync Spelers (inclusief bijgewerkte ratings & verwijderde/hernoemde spelers)
         fs_players = {p.id: p.to_dict() for p in players_ref.stream()}
         gs_players_df = _read_gsheet_fallback.__wrapped__("Spelers") if hasattr(_read_gsheet_fallback, "__wrapped__") else _read_gsheet_fallback("Spelers")
-        gs_p_ids = set(gs_players_df['speler_id'].unique()) if not gs_players_df.empty else set()
-        
-        # Firestore -> GSheet Backup (alleen missende spelers)
-        missing_p_in_gs = set(fs_players.keys()) - gs_p_ids
-        if missing_p_in_gs:
-            p_to_add = [{**fs_players[pid], 'speler_id': pid} for pid in missing_p_in_gs]
-            _write_gsheet_records("Spelers", p_to_add)
+        gs_p_ids = set(gs_players_df['speler_id'].unique()) if not gs_players_df.empty and 'speler_id' in gs_players_df.columns else set()
 
+        missing_p_in_gs = set(fs_players.keys()) - gs_p_ids
+        players_mismatch = False
+        if not gs_players_df.empty and 'speler_id' in gs_players_df.columns:
+            gs_map = {str(r['speler_id']): r for _, r in gs_players_df.iterrows()}
+            for pid, pdata in fs_players.items():
+                gs_row = gs_map.get(str(pid))
+                if gs_row is None or str(gs_row.get('speler_naam', '')) != str(pdata.get('speler_naam', '')):
+                    players_mismatch = True
+                    break
+                try:
+                    if abs(float(gs_row.get('rating', 1000)) - float(pdata.get('rating', 1000))) > 0.01:
+                        players_mismatch = True
+                        break
+                except (TypeError, ValueError):
+                    players_mismatch = True
+                    break
+            if len(gs_p_ids - set(fs_players.keys())) > 0:
+                players_mismatch = True
+
+        if missing_p_in_gs or players_mismatch:
+            sh = _get_gsheet_workbook()
+            if sh and fs_players:
+                try:
+                    ws_p = sh.worksheet("Spelers")
+                except Exception:
+                    ws_p = sh.add_worksheet(title="Spelers", rows="100", cols="10")
+                p_sync_df = pd.DataFrame([{**pdata, 'speler_id': pid} for pid, pdata in fs_players.items()])
+                pref_cols = [c for c in ['speler_id', 'speler_naam', 'rating'] if c in p_sync_df.columns]
+                rest_cols = [c for c in p_sync_df.columns if c not in pref_cols]
+                p_sync_df = p_sync_df[pref_cols + rest_cols].fillna('')
+                ws_p.clear()
+                ws_p.update(values=[p_sync_df.columns.tolist()] + p_sync_df.values.tolist(), range_name='A1')
+
+        set_offline_mode(False)
         print("[SYNC] Synchronisatie voltooid.")
         clear_all_caches()
     except Exception as e:
@@ -447,6 +476,282 @@ def clear_all_caches(only_players=False, only_matches=False, only_elo=False, onl
                 _read_gsheet_fallback.clear()
     except Exception as e:
         print(f"Fout bij cache invalidatie: {e}")
+
+# --- HULPFUNCTIES: Tijdzone, Seizoensgrenzen & ELO Replay ---
+NL_TZ = zoneinfo.ZoneInfo("Europe/Amsterdam")
+
+def _get_nl_now_aware():
+    """Geeft de huidige datum en tijd in Europe/Amsterdam met tijdzone."""
+    return datetime.now(NL_TZ)
+
+def _get_nl_now_naive():
+    """Geeft de huidige datum en tijd in Europe/Amsterdam als timezone-naive datetime."""
+    return _get_nl_now_aware().replace(tzinfo=None)
+
+def _to_nl_naive(ts):
+    """Converteert een tz-aware timestamp naar Europe/Amsterdam naive; laat naive ongewijzigd."""
+    if ts is None:
+        return None
+    t = pd.Timestamp(ts)
+    if pd.isna(t):
+        return None
+    if t.tzinfo is not None:
+        return t.tz_convert(NL_TZ).tz_localize(None).to_pydatetime()
+    return t.to_pydatetime()
+
+def _season_bounds_naive(season_start, season_end):
+    """Normaliseert seizoensgrenzen naar naive pd.Timestamp [00:00:00 .. 23:59:59.999999] zonder dag-overflow."""
+    s_start = pd.Timestamp(season_start)
+    if s_start.tzinfo is not None:
+        s_start = s_start.tz_localize(None)
+    s_end = pd.Timestamp(season_end)
+    if s_end.tzinfo is not None:
+        s_end = s_end.tz_localize(None)
+    if s_end.hour == 0 and s_end.minute == 0 and s_end.second == 0:
+        s_end = s_end.replace(hour=23, minute=59, second=59, microsecond=999999)
+    else:
+        s_end = s_end.replace(microsecond=999999)
+    return s_start, s_end
+
+def _should_update_global_player_ratings(all_matches, s_end_naive):
+    """Bepaalt of globale speler-ratings ('spelers.rating') bijgewerkt mogen worden (alleen bij het nieuwste seizoen)."""
+    if all_matches is None or all_matches.empty or 'timestamp' not in all_matches.columns:
+        return True
+    ts = normalize_timestamp_series(
+        pd.to_datetime(all_matches['timestamp'], errors='coerce', format='mixed', utc=True)
+    ).dropna()
+    if ts.empty:
+        return True
+    return not bool((ts > s_end_naive).any())
+
+def replay_season_elos(season_matches, initial_elo=1000.0, initial_elos=None, initial_matches=None):
+    """Speelt wedstrijden chronologisch af en berekent ELO-ratings, wedstrijdaantallen en ELO-log records."""
+    from utils.utils_new_elo import calculate_new_elo
+
+    player_elos = dict(initial_elos) if initial_elos is not None else {}
+    player_matches = dict(initial_matches) if initial_matches is not None else {}
+    records = []
+
+    if season_matches is None or season_matches.empty:
+        return player_elos, player_matches, records
+
+    df = season_matches.copy()
+    df['_ts_naive'] = normalize_timestamp_series(
+        pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
+    )
+    sort_cols = ['_ts_naive'] + (['match_id'] if 'match_id' in df.columns else [])
+    df = df.sort_values(sort_cols, ascending=True, na_position='last', kind='mergesort')
+
+    for idx, match in df.iterrows():
+        m_dict = {
+            "Thuis_1": match.get('thuis_1'),
+            "Thuis_2": match.get('thuis_2'),
+            "Uit_1": match.get('uit_1'),
+            "Uit_2": match.get('uit_2'),
+            "Thuis_score": match.get('thuis_score', 0),
+            "Uit_score": match.get('uit_score', 0),
+            "klinkers_thuis_1": match.get('klinkers_thuis_1', 0),
+            "klinkers_thuis_2": match.get('klinkers_thuis_2', 0),
+            "klinkers_uit_1": match.get('klinkers_uit_1', 0),
+            "klinkers_uit_2": match.get('klinkers_uit_2', 0),
+        }
+        m_players = {
+            m_dict[k]
+            for k in ("Thuis_1", "Thuis_2", "Uit_1", "Uit_2")
+            if m_dict[k] is not None and not pd.isna(m_dict[k]) and str(m_dict[k]).strip() != ""
+        }
+        if len(m_players) < 4:
+            continue
+
+        all_ratings = {
+            p: [player_elos.get(p, float(initial_elo))] * (player_matches.get(p, 0) + 1)
+            for p in m_players
+        }
+        new_df = calculate_new_elo(m_dict, all_ratings)
+        match_id = match.get('match_id', idx)
+        match_ts = match.get('timestamp')
+        for _, row in new_df.iterrows():
+            p = row['Speler']
+            r = float(row['ELO'])
+            player_elos[p] = r
+            player_matches[p] = player_matches.get(p, 0) + 1
+            records.append({
+                'speler_naam': p,
+                'rating': r,
+                'timestamp': match_ts,
+                'match_id': match_id,
+            })
+
+    return player_elos, player_matches, records
+
+def audit_season_elo(season_start, season_end, matches_df=None, elo_df=None, players_df=None):
+    """Vergelijkt (read-only) een schone ELO-replay vanaf 1000 met opgeslagen ELO-logs en spelerstabel."""
+    from utils.utils import IGNORE_PLAYERS
+
+    s_start, s_end = _season_bounds_naive(season_start, season_end)
+    if matches_df is None:
+        matches_df = get_matches()
+    if elo_df is None:
+        elo_df = get_elo_logs()
+    if players_df is None:
+        players_df = get_players()
+
+    if matches_df is None or matches_df.empty:
+        return {
+            "match_count": 0,
+            "missing_elo_logs": 0,
+            "mismatched_logs_count": 0,
+            "max_player_diff": 0.0,
+            "player_diffs": pd.DataFrame(),
+        }
+
+    m_df = matches_df.copy()
+    m_df['_ts_naive'] = normalize_timestamp_series(
+        pd.to_datetime(m_df['timestamp'], errors='coerce', format='mixed', utc=True)
+    )
+    season_matches = m_df[(m_df['_ts_naive'] >= s_start) & (m_df['_ts_naive'] <= s_end)].copy()
+    expected_elos, match_counts, expected_records = replay_season_elos(season_matches)
+
+    e_df = elo_df.copy() if elo_df is not None else pd.DataFrame()
+    season_elo = pd.DataFrame()
+    if not e_df.empty and 'timestamp' in e_df.columns:
+        e_df['_ts_naive'] = normalize_timestamp_series(
+            pd.to_datetime(e_df['timestamp'], errors='coerce', format='mixed', utc=True)
+        )
+        season_elo = e_df[(e_df['_ts_naive'] >= s_start) & (e_df['_ts_naive'] <= s_end)].copy()
+
+    missing_elo_logs = 0
+    mismatched_logs_count = 0
+    if not season_matches.empty:
+        if season_elo.empty or 'match_id' not in season_elo.columns:
+            missing_elo_logs = len(season_matches) * 4
+        else:
+            actual_map = {}
+            for _, erow in season_elo.iterrows():
+                mid = str(erow.get('match_id', ''))
+                pname = str(erow.get('speler_naam', ''))
+                if mid and mid != 'SEASON_RESET':
+                    actual_map[(mid, pname)] = float(erow.get('rating', 1000.0))
+            for rec in expected_records:
+                key = (str(rec['match_id']), str(rec['speler_naam']))
+                if key not in actual_map:
+                    missing_elo_logs += 1
+                elif abs(actual_map[key] - rec['rating']) > 0.5:
+                    mismatched_logs_count += 1
+
+    latest_season_elo = {}
+    if not season_elo.empty:
+        e_valid = season_elo.copy()
+        if 'match_id' in e_valid.columns:
+            e_valid = e_valid[e_valid['match_id'].fillna('').astype(str) != 'SEASON_RESET']
+        if not e_valid.empty:
+            sort_cols = ['_ts_naive'] + (['match_id'] if 'match_id' in e_valid.columns else [])
+            e_valid = e_valid.sort_values(sort_cols, ascending=True, na_position='first', kind='mergesort')
+            for _, erow in e_valid.drop_duplicates(subset=['speler_naam'], keep='last').iterrows():
+                latest_season_elo[str(erow['speler_naam'])] = float(erow['rating'])
+
+    player_table_map = {}
+    if players_df is not None and not players_df.empty and 'speler_naam' in players_df.columns:
+        for _, prow in players_df.iterrows():
+            player_table_map[str(prow['speler_naam'])] = float(prow.get('rating', 1000.0))
+
+    ignore_set = {p.lower().strip() for p in IGNORE_PLAYERS}
+    rows = []
+    for pname in sorted(expected_elos.keys()):
+        if str(pname).lower().strip() in ignore_set:
+            continue
+        exp_val = round(float(expected_elos[pname]), 2)
+        stored_season_val = latest_season_elo.get(pname)
+        tbl_val = player_table_map.get(pname)
+        cmp_val = stored_season_val if stored_season_val is not None else tbl_val
+        diff = round(float(cmp_val) - exp_val, 2) if cmp_val is not None else None
+        rows.append({
+            "Speler": pname,
+            "Wedstrijden": int(match_counts.get(pname, 0)),
+            "Verwachte ELO (vanaf 1000)": exp_val,
+            "Opgeslagen Seizoen-ELO": round(float(stored_season_val), 2) if stored_season_val is not None else None,
+            "Spelerstabel ELO": round(float(tbl_val), 2) if tbl_val is not None else None,
+            "Verschil": diff,
+        })
+
+    diff_df = pd.DataFrame(rows)
+    max_diff = float(diff_df["Verschil"].abs().max()) if not diff_df.empty and diff_df["Verschil"].notna().any() else 0.0
+    return {
+        "match_count": int(len(season_matches)),
+        "missing_elo_logs": int(missing_elo_logs),
+        "mismatched_logs_count": int(mismatched_logs_count),
+        "max_player_diff": round(max_diff, 2),
+        "player_diffs": diff_df,
+    }
+
+def _sync_recalculated_elo_to_gsheet(range_start, range_end, new_records, updated_player_elos=None, include_season_reset=False):
+    """Werkt best-effort de ELO_Logs (binnen [range_start, range_end]) en optioneel Spelers in Google Sheets bij."""
+    try:
+        sh = _get_gsheet_workbook()
+        if not sh:
+            return False
+
+        try:
+            ws_elo = sh.worksheet("ELO_Logs")
+            all_vals = ws_elo.get_all_values()
+            if all_vals:
+                headers = [h.strip() for h in all_vals[0]]
+                rows_df = pd.DataFrame(all_vals[1:], columns=headers) if len(all_vals) > 1 else pd.DataFrame(columns=headers)
+            else:
+                headers = ['speler_naam', 'rating', 'timestamp', 'match_id']
+                rows_df = pd.DataFrame(columns=headers)
+
+            if not rows_df.empty and 'timestamp' in rows_df.columns:
+                ts_norm = normalize_timestamp_series(
+                    pd.to_datetime(rows_df['timestamp'], errors='coerce', format='mixed', utc=True)
+                )
+                in_range = (ts_norm >= range_start) & (ts_norm <= range_end)
+                if not include_season_reset and 'match_id' in rows_df.columns:
+                    in_range = in_range & (rows_df['match_id'].astype(str).str.strip() != 'SEASON_RESET')
+                kept_df = rows_df[~in_range].copy()
+            else:
+                kept_df = rows_df.copy()
+
+            new_df = pd.DataFrame(new_records) if new_records else pd.DataFrame(columns=headers)
+            if not new_df.empty and 'timestamp' in new_df.columns:
+                new_ts = normalize_timestamp_series(
+                    pd.to_datetime(new_df['timestamp'], errors='coerce', format='mixed', utc=True)
+                )
+                new_df['timestamp'] = new_ts.dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            for h in headers:
+                if h not in new_df.columns:
+                    new_df[h] = ""
+            combined = pd.concat([kept_df[headers], new_df[headers]], ignore_index=True).fillna("")
+            ws_elo.clear()
+            ws_elo.update(values=[headers] + combined.values.tolist(), range_name='A1')
+        except Exception as e:
+            print(f"[GSHEET SYNC] Kon ELO_Logs niet bijwerken: {e}")
+
+        if updated_player_elos:
+            try:
+                ws_players = sh.worksheet("Spelers")
+                p_vals = ws_players.get_all_values()
+                if p_vals and len(p_vals) > 1:
+                    p_headers = [h.strip() for h in p_vals[0]]
+                    if 'speler_naam' in p_headers and 'rating' in p_headers:
+                        name_idx = p_headers.index('speler_naam')
+                        rating_idx = p_headers.index('rating')
+                        updated_rows = [p_headers]
+                        for row in p_vals[1:]:
+                            row_padded = list(row) + [""] * max(0, len(p_headers) - len(row))
+                            pname = row_padded[name_idx]
+                            if pname in updated_player_elos:
+                                row_padded[rating_idx] = updated_player_elos[pname]
+                            updated_rows.append(row_padded[:len(p_headers)])
+                        ws_players.clear()
+                        ws_players.update(values=updated_rows, range_name='A1')
+            except Exception as e:
+                print(f"[GSHEET SYNC] Kon Spelers niet bijwerken: {e}")
+        return True
+    except Exception as e:
+        print(f"[GSHEET SYNC] Fout bij synchronisatie na herberekening: {e}")
+        return False
 
 # --- HULPFUNCTIE: Timestamp normalisatie ---
 def normalize_timestamp_series(ts_series):
@@ -877,8 +1182,9 @@ def get_seasons():
         return datetime(year, SEASON_TRANSITION_MONTH, SEASON_TRANSITION_DAY)
 
     # Vaste jaren om te voorkomen dat de hele match historie geladen moet worden
-    min_year = 2022 
-    max_year = datetime.now().year + 1
+    now_nl = _get_nl_now_naive()
+    min_year = 2022
+    max_year = now_nl.year + 1
 
     seizoenen = []
     for y in range(min_year, max_year + 1):
@@ -888,7 +1194,7 @@ def get_seasons():
         s2, e2 = get_prinsjesdag(y), get_march15(y+1) - timedelta(seconds=1)
         seizoenen.append({'seizoen_naam': f"CJ {y} Winter", 'start_datum': s2, 'eind_datum': e2, 'aantal_wedstrijden': 0})
 
-    df_s = pd.DataFrame([s for s in seizoenen if s['start_datum'] <= datetime.now()])
+    df_s = pd.DataFrame([s for s in seizoenen if s['start_datum'] <= now_nl])
     return df_s.sort_values('start_datum').reset_index(drop=True)
 
 # DATA SCHRIJFFUNCTIES
@@ -1171,28 +1477,32 @@ def reset_all_elos(timestamp=None):
         return False
 
 def recalculate_elos_for_season(start_date, end_date):
-    """Herberekent alle ELO scores voor een seizoen."""
+    """Herberekent alle ELO scores voor een seizoen vanaf 1000 zonder latere seizoenen te overschrijven."""
     try:
-        from utils.utils_new_elo import calculate_new_elo
-        if isinstance(start_date, pd.Timestamp): start_date = start_date.date()
-        if isinstance(end_date, pd.Timestamp): end_date = end_date.date()
-        
-        all_matches = get_matches().sort_values('timestamp', ascending=True)
+        s_start, s_end = _season_bounds_naive(start_date, end_date)
+        all_matches = get_matches()
         players_df = get_players()
-        # Normaliseer timestamp voor vergelijking
-        all_matches['ts_date'] = all_matches['timestamp'].dt.date
-        mask = (all_matches['ts_date'] >= start_date) & (all_matches['ts_date'] <= end_date)
-        season_matches = all_matches[mask]
-        
-        player_elos = {name: 1000 for name in players_df['speler_naam']}
-        player_matches = {name: 0 for name in players_df['speler_naam']}
+
+        if all_matches is not None and not all_matches.empty:
+            m_df = all_matches.copy()
+            m_df['_ts_naive'] = normalize_timestamp_series(
+                pd.to_datetime(m_df['timestamp'], errors='coerce', format='mixed', utc=True)
+            )
+            season_matches = m_df[(m_df['_ts_naive'] >= s_start) & (m_df['_ts_naive'] <= s_end)].copy()
+        else:
+            season_matches = pd.DataFrame()
+
+        should_update_players = _should_update_global_player_ratings(all_matches, s_end)
+
+        player_names = players_df['speler_naam'].tolist() if players_df is not None and not players_df.empty else []
+        player_elos = {name: 1000.0 for name in player_names}
+
+        # Verwijder ALLE ELO logs in dit seizoen (exacte grenzen zonder dag-overflow)
+        start_ts_utc = s_start.tz_localize('UTC')
+        end_ts_utc = s_end.tz_localize('UTC')
+
+        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', start_ts_utc)).where(filter=FieldFilter('timestamp', '<=', end_ts_utc)).stream()
         batch = db.batch()
-        
-        # Verwijder ALLE ELO logs in dit seizoen
-        start_ts = pd.Timestamp(start_date)
-        end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        
-        old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', start_ts)).where(filter=FieldFilter('timestamp', '<=', end_ts)).stream()
         c = 0
         for doc in old_elos:
             batch.delete(doc.reference)
@@ -1201,83 +1511,78 @@ def recalculate_elos_for_season(start_date, end_date):
                 batch.commit()
                 batch = db.batch()
                 c = 0
-        if c > 0: batch.commit()
-        
+        if c > 0:
+            batch.commit()
+
         # Stap 1: Voeg voor iedereen een baseline 1000 toe aan het begin van het seizoen
         batch = db.batch()
         c = 0
-        baseline_ts = pd.Timestamp(start_date)
+        reset_records = []
         for name in player_elos.keys():
-            batch.set(elo_ref.document(), {
+            rec = {
                 'speler_naam': name,
                 'rating': 1000,
-                'timestamp': baseline_ts,
+                'timestamp': s_start,
                 'match_id': 'SEASON_RESET'
-            })
+            }
+            reset_records.append(rec)
+            batch.set(elo_ref.document(), rec)
             c += 1
             if c >= 400:
                 batch.commit()
                 batch = db.batch()
                 c = 0
-        if c > 0: batch.commit()
-        
-        # Stap 2: Bereken matches opnieuw
+        if c > 0:
+            batch.commit()
+
+        # Stap 2: Bereken matches opnieuw via replay_season_elos
+        replayed_elos, _, match_records = replay_season_elos(season_matches)
+        player_elos.update(replayed_elos)
+
         batch = db.batch()
         c = 0
-        for _, match in season_matches.iterrows():
-            m_dict = {
-                "Thuis_1": match['thuis_1'], "Thuis_2": match['thuis_2'],
-                "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
-                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score'],
-                "klinkers_thuis_1": match.get('klinkers_thuis_1', 0),
-                "klinkers_thuis_2": match.get('klinkers_thuis_2', 0),
-                "klinkers_uit_1": match.get('klinkers_uit_1', 0),
-                "klinkers_uit_2": match.get('klinkers_uit_2', 0)
-            }
-            m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
-            # Belangrijk: all_ratings moet de HUIDIGE ratings van deze spelers bevatten
-            # We voegen 'mock' history toe op basis van match_count om de K-factor correct te berekenen
-            all_ratings = {p: [player_elos.get(p, 1000)] * (player_matches.get(p, 0) + 1) for p in m_players}
-            
-            new_df = calculate_new_elo(m_dict, all_ratings)
-            for _, row in new_df.iterrows():
-                p, r = row['Speler'], row['ELO']
-                player_elos[p] = r
-                player_matches[p] = player_matches.get(p, 0) + 1
-                batch.set(elo_ref.document(), {
-                    'speler_naam': p, 
-                    'rating': r, 
-                    'timestamp': match['timestamp'], 
-                    'match_id': match['match_id']
-                })
-                c += 1
-                if c >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    c = 0
-        
-        # Update current ratings in players table to match end of season
-        name_to_id = (
-            dict(zip(players_df['speler_naam'], players_df['speler_id']))
-            if not players_df.empty and 'speler_id' in players_df.columns
-            else {}
-        )
-        for name, rating in player_elos.items():
-            pid = name_to_id.get(name)
-            if pid and not str(pid).startswith("OFFLINE_"):
-                batch.update(players_ref.document(str(pid)), {'rating': rating})
-                c += 1
-            else:
-                p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
-                if p_docs:
-                    batch.update(p_docs[0].reference, {'rating': rating})
-                    c += 1
+        for rec in match_records:
+            batch.set(elo_ref.document(), rec)
+            c += 1
             if c >= 400:
                 batch.commit()
                 batch = db.batch()
                 c = 0
 
-        if c > 0: batch.commit()
+        # Werk spelerstabel alleen bij als dit het nieuwste/huidige seizoen is
+        updated_player_map = None
+        if should_update_players:
+            updated_player_map = player_elos
+            name_to_id = (
+                dict(zip(players_df['speler_naam'], players_df['speler_id']))
+                if players_df is not None and not players_df.empty and 'speler_id' in players_df.columns
+                else {}
+            )
+            for name, rating in player_elos.items():
+                pid = name_to_id.get(name)
+                if pid and not str(pid).startswith("OFFLINE_"):
+                    batch.update(players_ref.document(str(pid)), {'rating': rating})
+                    c += 1
+                else:
+                    p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+                    if p_docs:
+                        batch.update(p_docs[0].reference, {'rating': rating})
+                        c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+
+        if c > 0:
+            batch.commit()
+
+        _sync_recalculated_elo_to_gsheet(
+            s_start,
+            s_end,
+            reset_records + match_records,
+            updated_player_elos=updated_player_map,
+            include_season_reset=True,
+        )
         clear_all_caches(only_elo=True, only_players=True)
         return True
     except Exception as e:
@@ -1299,33 +1604,70 @@ def get_recalc_status():
     return None
 
 def set_recalc_needed_flag(season_start, season_end, season_naam, modified_timestamp):
+    """Registreert een uitgestelde herberekening (ondersteunt meerdere seizoenen in een wachtrij)."""
     try:
-        import pandas as pd
         config_ref = db.collection("system_config").document("elo_recalc")
         doc = config_ref.get()
-        
-        # Bepaal de vroegste wijzigingstijdstip
+
         new_ts = pd.Timestamp(modified_timestamp)
         if new_ts.tzinfo is not None:
             new_ts = new_ts.tz_localize(None)
-            
+
+        s_start_ts = pd.Timestamp(season_start)
+        if s_start_ts.tzinfo is not None:
+            s_start_ts = s_start_ts.tz_localize(None)
+        s_end_ts = pd.Timestamp(season_end)
+        if s_end_ts.tzinfo is not None:
+            s_end_ts = s_end_ts.tz_localize(None)
+
+        pending = {}
         if doc.exists:
-            data = doc.to_dict()
+            data = doc.to_dict() or {}
             if data.get("recalc_needed"):
-                existing_ts = data.get("earliest_modified_timestamp")
-                if existing_ts:
-                    existing_ts = pd.Timestamp(existing_ts)
-                    if existing_ts.tzinfo is not None:
-                        existing_ts = existing_ts.tz_localize(None)
-                    if existing_ts < new_ts:
-                        new_ts = existing_ts
-        
+                existing_pending = data.get("pending_recalcs")
+                if isinstance(existing_pending, dict) and existing_pending:
+                    pending = {k: dict(v) for k, v in existing_pending.items() if isinstance(v, dict)}
+                elif data.get("season_naam") and data.get("earliest_modified_timestamp"):
+                    prev_name = str(data.get("season_naam"))
+                    pending[prev_name] = {
+                        "season_start": pd.Timestamp(data.get("season_start")),
+                        "season_end": pd.Timestamp(data.get("season_end")),
+                        "season_naam": prev_name,
+                        "earliest_modified_timestamp": pd.Timestamp(data.get("earliest_modified_timestamp")),
+                    }
+
+        season_key = str(season_naam)
+        if season_key in pending and pending[season_key].get("earliest_modified_timestamp"):
+            prev_ts = pd.Timestamp(pending[season_key]["earliest_modified_timestamp"])
+            if prev_ts.tzinfo is not None:
+                prev_ts = prev_ts.tz_localize(None)
+            effective_ts = min(prev_ts, new_ts)
+        else:
+            effective_ts = new_ts
+
+        pending[season_key] = {
+            "season_start": s_start_ts,
+            "season_end": s_end_ts,
+            "season_naam": season_key,
+            "earliest_modified_timestamp": effective_ts,
+        }
+
+        def _norm_naive(val):
+            t = pd.Timestamp(val)
+            return t.tz_localize(None) if t.tzinfo is not None else t
+
+        earliest_item = min(
+            pending.values(),
+            key=lambda item: (_norm_naive(item["earliest_modified_timestamp"]), _norm_naive(item["season_start"]))
+        )
+
         config_ref.set({
             "recalc_needed": True,
-            "season_start": pd.Timestamp(season_start),
-            "season_end": pd.Timestamp(season_end),
-            "season_naam": season_naam,
-            "earliest_modified_timestamp": new_ts,
+            "season_start": _norm_naive(earliest_item["season_start"]),
+            "season_end": _norm_naive(earliest_item["season_end"]),
+            "season_naam": earliest_item["season_naam"],
+            "earliest_modified_timestamp": _norm_naive(earliest_item["earliest_modified_timestamp"]),
+            "pending_recalcs": pending,
             "timestamp": pd.Timestamp.now()
         }, merge=True)
         get_recalc_status.clear()
@@ -1335,123 +1677,108 @@ def set_recalc_needed_flag(season_start, season_end, season_naam, modified_times
 def recalculate_elos_from(start_timestamp, season_start, season_end):
     """Herberekent ELO scores incrementeel vanaf een specifiek tijdstip binnen een seizoen."""
     try:
-        import pandas as pd
-        from google.cloud.firestore_v1.base_query import FieldFilter
-        from utils.utils_new_elo import calculate_new_elo
-        
-        all_matches = get_matches().sort_values('timestamp', ascending=True)
-        players_df = get_players()
-        
+        s_start, s_end = _season_bounds_naive(season_start, season_end)
+
         start_ts_pd = pd.Timestamp(start_timestamp)
         if start_ts_pd.tzinfo is not None:
             start_ts_pd = start_ts_pd.tz_localize(None)
 
-        all_matches['ts_naive'] = all_matches['timestamp'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
-        
-        season_mask = (all_matches['ts_naive'].dt.date >= pd.Timestamp(season_start).date()) & (all_matches['ts_naive'].dt.date <= pd.Timestamp(season_end).date())
-        season_matches = all_matches[season_mask]
-        
-        future_matches = season_matches[season_matches['ts_naive'] >= start_ts_pd].sort_values('ts_naive', ascending=True)
-        
-        if future_matches.empty:
-            clear_all_caches(only_elo=True, only_players=True)
-            return True
+        all_matches = get_matches()
+        players_df = get_players()
 
-        elo_df = get_elo_logs()
-        elo_df['ts_naive'] = elo_df['timestamp'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
-        
-        season_start_pd = pd.Timestamp(season_start)
-        if hasattr(season_start_pd, 'tzinfo') and season_start_pd.tzinfo is not None:
-            season_start_pd = season_start_pd.tz_localize(None)
-        
-        past_elos = elo_df[(elo_df['ts_naive'] >= season_start_pd) & (elo_df['ts_naive'] < start_ts_pd)]
-        
-        player_elos = {name: 1000 for name in players_df['speler_naam']}
-        player_matches = {name: 0 for name in players_df['speler_naam']}
-        
-        for name in player_elos.keys():
-            p_history = past_elos[past_elos['speler_naam'] == name]
-            if not p_history.empty:
-                last_record = p_history.loc[p_history['ts_naive'].idxmax()]
-                player_elos[name] = last_record['rating']
-                if 'match_id' in p_history.columns:
-                    player_matches[name] = int((p_history['match_id'] != 'SEASON_RESET').sum())
-                else:
-                    player_matches[name] = max(0, len(p_history) - 1)
-        
-        batch = db.batch()
-        
-        start_ts_utc = start_timestamp
-        end_ts_utc = pd.Timestamp(season_end)
-        if not hasattr(end_ts_utc, 'tzinfo') or end_ts_utc.tzinfo is None:
-            end_ts_utc = end_ts_utc.tz_localize('UTC')
-        end_ts_utc = end_ts_utc + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        
+        if all_matches is not None and not all_matches.empty:
+            m_df = all_matches.copy()
+            m_df['_ts_naive'] = normalize_timestamp_series(
+                pd.to_datetime(m_df['timestamp'], errors='coerce', format='mixed', utc=True)
+            )
+            season_matches = m_df[(m_df['_ts_naive'] >= s_start) & (m_df['_ts_naive'] <= s_end)].copy()
+        else:
+            season_matches = pd.DataFrame()
+
+        should_update_players = _should_update_global_player_ratings(all_matches, s_end)
+
+        # Replay wedstrijden vóór start_ts_pd in memory voor exacte K-factor & start-ratings
+        past_matches = season_matches[season_matches['_ts_naive'] < start_ts_pd] if not season_matches.empty else pd.DataFrame()
+        future_matches = season_matches[season_matches['_ts_naive'] >= start_ts_pd] if not season_matches.empty else pd.DataFrame()
+
+        past_elos, past_counts, _ = replay_season_elos(past_matches)
+        final_elos, _, new_records = replay_season_elos(
+            future_matches,
+            initial_elos=past_elos,
+            initial_matches=past_counts,
+        )
+
+        # Verwijder oude match-ELO logs vanaf start_ts_pd binnen [start_ts, s_end] (zonder dag-overflow en zonder SEASON_RESET te wissen)
+        start_ts_utc = start_ts_pd.tz_localize('UTC')
+        end_ts_utc = s_end.tz_localize('UTC')
+
         old_elos = elo_ref.where(filter=FieldFilter('timestamp', '>=', start_ts_utc)).where(filter=FieldFilter('timestamp', '<=', end_ts_utc)).stream()
+        batch = db.batch()
         c = 0
         for doc in old_elos:
+            doc_dict = doc.to_dict() or {}
+            if doc_dict.get('match_id') == 'SEASON_RESET':
+                continue
             batch.delete(doc.reference)
             c += 1
             if c >= 400:
                 batch.commit()
                 batch = db.batch()
                 c = 0
-        if c > 0: batch.commit()
-        
+        if c > 0:
+            batch.commit()
+
         batch = db.batch()
         c = 0
-        for _, match in future_matches.iterrows():
-            m_dict = {
-                "Thuis_1": match['thuis_1'], "Thuis_2": match['thuis_2'],
-                "Uit_1": match['uit_1'], "Uit_2": match['uit_2'],
-                "Thuis_score": match['thuis_score'], "Uit_score": match['uit_score'],
-                "klinkers_thuis_1": match.get('klinkers_thuis_1', 0),
-                "klinkers_thuis_2": match.get('klinkers_thuis_2', 0),
-                "klinkers_uit_1": match.get('klinkers_uit_1', 0),
-                "klinkers_uit_2": match.get('klinkers_uit_2', 0)
-            }
-            m_players = {m_dict[k] for k in ["Thuis_1", "Thuis_2", "Uit_1", "Uit_2"] if m_dict[k]}
-            
-            all_ratings = {p: [player_elos.get(p, 1000)] * (player_matches.get(p, 0) + 1) for p in m_players}
-            
-            new_df = calculate_new_elo(m_dict, all_ratings)
-            for _, row in new_df.iterrows():
-                p, r = row['Speler'], row['ELO']
-                player_elos[p] = r
-                player_matches[p] = player_matches.get(p, 0) + 1
-                batch.set(elo_ref.document(), {
-                    'speler_naam': p, 
-                    'rating': r, 
-                    'timestamp': match['timestamp'], 
-                    'match_id': match['match_id']
-                })
-                c += 1
-                if c >= 400:
-                    batch.commit()
-                    batch = db.batch()
-                    c = 0
-        
-        name_to_id = (
-            dict(zip(players_df['speler_naam'], players_df['speler_id']))
-            if not players_df.empty and 'speler_id' in players_df.columns
-            else {}
-        )
-        for name, rating in player_elos.items():
-            pid = name_to_id.get(name)
-            if pid and not str(pid).startswith("OFFLINE_"):
-                batch.update(players_ref.document(str(pid)), {'rating': rating})
-                c += 1
-            else:
-                p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
-                if p_docs:
-                    batch.update(p_docs[0].reference, {'rating': rating})
-                    c += 1
+        for rec in new_records:
+            batch.set(elo_ref.document(), rec)
+            c += 1
             if c >= 400:
                 batch.commit()
                 batch = db.batch()
                 c = 0
 
-        if c > 0: batch.commit()
+        # Werk spelers-tabel alleen bij als dit het nieuwste/huidige seizoen is
+        updated_player_map = None
+        if should_update_players and players_df is not None and not players_df.empty:
+            updated_player_map = {
+                name: final_elos.get(name, 1000.0)
+                for name in players_df['speler_naam'].tolist()
+            }
+            for p_name, r_val in final_elos.items():
+                if p_name not in updated_player_map:
+                    updated_player_map[p_name] = r_val
+
+            name_to_id = (
+                dict(zip(players_df['speler_naam'], players_df['speler_id']))
+                if 'speler_id' in players_df.columns
+                else {}
+            )
+            for name, rating in updated_player_map.items():
+                pid = name_to_id.get(name)
+                if pid and not str(pid).startswith("OFFLINE_"):
+                    batch.update(players_ref.document(str(pid)), {'rating': rating})
+                    c += 1
+                else:
+                    p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', name)).limit(1).get()
+                    if p_docs:
+                        batch.update(p_docs[0].reference, {'rating': rating})
+                        c += 1
+                if c >= 400:
+                    batch.commit()
+                    batch = db.batch()
+                    c = 0
+
+        if c > 0:
+            batch.commit()
+
+        _sync_recalculated_elo_to_gsheet(
+            start_ts_pd,
+            s_end,
+            new_records,
+            updated_player_elos=updated_player_map,
+            include_season_reset=False,
+        )
         clear_all_caches(only_elo=True, only_players=True)
         return True
     except Exception as e:
@@ -1666,71 +1993,97 @@ def delete_multiple_matches_with_elo_recalculation(match_ids):
         return False
 
 def check_and_run_scheduled_recalc():
-    """Controleert of er een ELO-herberekening gepland staat en voert deze uit na 23:00 uur."""
+    """Controleert of er een ELO-herberekening gepland staat en voert deze uit na 23:00 uur (NL-tijd)."""
     try:
-        from datetime import datetime, timedelta
-        import pandas as pd
         import google.cloud.firestore
-        
-        # We gebruiken een transactie om de controle en het claimen van de lock atomair uit te voeren
+
         transaction = db.transaction()
-        
+
         @google.cloud.firestore.transactional
         def check_and_claim_recalc(tx):
             config_ref = db.collection("system_config").document("elo_recalc")
             snapshot = config_ref.get(transaction=tx)
             if not snapshot.exists:
                 return None
-                
-            data = snapshot.to_dict()
+
+            data = snapshot.to_dict() or {}
             if not data.get("recalc_needed"):
                 return None
-                
-            # Bepaal het meest recente geplande tijdstip (vandaag om 23:00, of gisteren om 23:00)
-            now = datetime.now()
-            if now.hour >= 23:
-                last_scheduled = now.replace(hour=23, minute=0, second=0, microsecond=0)
+
+            now_aware = _get_nl_now_aware()
+            now_nl = now_aware.replace(tzinfo=None)
+            if now_nl.hour >= 23:
+                last_scheduled = now_nl.replace(hour=23, minute=0, second=0, microsecond=0)
             else:
-                last_scheduled = (now - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
-                
-            last_recalc = data.get("last_recalc_time")
-            if last_recalc:
-                last_recalc = pd.Timestamp(last_recalc).to_pydatetime()
-                if last_recalc.tzinfo is not None:
-                    last_recalc = last_recalc.replace(tzinfo=None)
-                    
+                last_scheduled = (now_nl - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
+
+            last_recalc = _to_nl_naive(data.get("last_recalc_time"))
+
             if not last_recalc or last_recalc < last_scheduled:
-                # Claim de herberekening: zet recalc_needed direct op False
                 tx.update(config_ref, {
                     "recalc_needed": False,
-                    "last_recalc_time": now
+                    "last_recalc_time": now_aware
                 })
                 return data
             return None
-            
+
         recalc_data = check_and_claim_recalc(transaction)
         if recalc_data:
             get_recalc_status.clear()
-            print(f"[RECALC] Transactie geclaimd voor seizoen {recalc_data.get('season_naam')}. Starten met herberekenen vanaf {recalc_data.get('earliest_modified_timestamp')}...")
-            success = recalculate_elos_from(
-                recalc_data.get("earliest_modified_timestamp"),
-                recalc_data.get("season_start"),
-                recalc_data.get("season_end")
-            )
+            pending_map = recalc_data.get("pending_recalcs") or {}
+            failed_pending = {}
+
+            if isinstance(pending_map, dict) and pending_map:
+                items = sorted(
+                    [v for v in pending_map.values() if isinstance(v, dict)],
+                    key=lambda x: pd.Timestamp(x.get("season_start") or x.get("earliest_modified_timestamp"))
+                )
+                for item in items:
+                    sname = str(item.get("season_naam") or "unknown")
+                    print(f"[RECALC] Transactie geclaimd voor seizoen {sname}. Starten vanaf {item.get('earliest_modified_timestamp')}...")
+                    ok = recalculate_elos_from(
+                        item.get("earliest_modified_timestamp"),
+                        item.get("season_start"),
+                        item.get("season_end"),
+                    )
+                    if not ok:
+                        failed_pending[sname] = item
+                success = len(failed_pending) == 0
+            else:
+                print(f"[RECALC] Transactie geclaimd voor seizoen {recalc_data.get('season_naam')}. Starten met herberekenen vanaf {recalc_data.get('earliest_modified_timestamp')}...")
+                success = recalculate_elos_from(
+                    recalc_data.get("earliest_modified_timestamp"),
+                    recalc_data.get("season_start"),
+                    recalc_data.get("season_end")
+                )
+
             config_ref = db.collection("system_config").document("elo_recalc")
             if success:
-                # Wis de vroegste wijzigingstijdstip nu de herberekening is gelukt
                 config_ref.update({
-                    "earliest_modified_timestamp": None
+                    "earliest_modified_timestamp": None,
+                    "pending_recalcs": {},
                 })
                 get_recalc_status.clear()
                 print("[RECALC] ELO-herberekening succesvol afgerond.")
             else:
-                # Bij fout: zet vlag terug op True zodat het later opnieuw wordt geprobeerd
-                print("[RECALC] ELO-herberekening mislukt. Vlag teruggezet naar True.")
-                config_ref.update({
-                    "recalc_needed": True
-                })
+                print("[RECALC] ELO-herberekening (deels) mislukt. Vlag teruggezet naar True.")
+                payload = {"recalc_needed": True}
+                if failed_pending:
+                    def _norm_naive(val):
+                        t = pd.Timestamp(val)
+                        return t.tz_localize(None) if t.tzinfo is not None else t
+                    earliest_fail = min(
+                        failed_pending.values(),
+                        key=lambda item: (_norm_naive(item["earliest_modified_timestamp"]), _norm_naive(item["season_start"]))
+                    )
+                    payload.update({
+                        "pending_recalcs": failed_pending,
+                        "season_start": _norm_naive(earliest_fail["season_start"]),
+                        "season_end": _norm_naive(earliest_fail["season_end"]),
+                        "season_naam": earliest_fail["season_naam"],
+                        "earliest_modified_timestamp": _norm_naive(earliest_fail["earliest_modified_timestamp"]),
+                    })
+                config_ref.update(payload)
                 get_recalc_status.clear()
     except Exception as e:
         print(f"Fout bij checken/uitvoeren geplande ELO-herberekening: {e}")

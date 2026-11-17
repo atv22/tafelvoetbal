@@ -33,19 +33,15 @@ st.caption("Versie 2.7 — Klik op **ℹ️ Colofon** of open de **Snelstart** h
 recalc_status = db.get_recalc_status()
 if recalc_status and recalc_status.get("recalc_needed"):
     st.warning("⚠️ **ELO-herberekening gepland:** Er zijn recente wijzigingen in de wedstrijden. De ELO-scores en ranglijsten worden vanavond om 23:00 uur automatisch herberekend.")
-    
-    now = datetime.now()
-    if now.hour >= 23:
-        last_scheduled = now.replace(hour=23, minute=0, second=0, microsecond=0)
+
+    now_nl = db._get_nl_now_naive()
+    if now_nl.hour >= 23:
+        last_scheduled = now_nl.replace(hour=23, minute=0, second=0, microsecond=0)
     else:
-        last_scheduled = (now - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
-        
-    last_recalc = recalc_status.get("last_recalc_time")
-    if last_recalc:
-        last_recalc = pd.Timestamp(last_recalc).to_pydatetime()
-        if last_recalc.tzinfo is not None:
-            last_recalc = last_recalc.replace(tzinfo=None)
-            
+        last_scheduled = (now_nl - timedelta(days=1)).replace(hour=23, minute=0, second=0, microsecond=0)
+
+    last_recalc = db._to_nl_naive(recalc_status.get("last_recalc_time"))
+
     if not last_recalc or last_recalc < last_scheduled:
         if "recalc_thread_started" not in st.session_state:
             threading.Thread(target=db.check_and_run_scheduled_recalc, daemon=True).start()

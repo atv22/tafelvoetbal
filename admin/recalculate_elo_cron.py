@@ -19,24 +19,47 @@ def run_cron():
         config_ref = db_service.db.collection("system_config").document("elo_recalc")
         doc = config_ref.get()
         if doc.exists:
-            data = doc.to_dict()
+            data = doc.to_dict() or {}
             if data.get("recalc_needed"):
-                print(f"Geforceerde herberekening uitvoeren voor seizoen {data.get('season_naam')} vanaf {data.get('earliest_modified_timestamp')}")
-                success = db_service.recalculate_elos_from(
-                    data.get("earliest_modified_timestamp"),
-                    data.get("season_start"),
-                    data.get("season_end")
-                )
+                pending_map = data.get("pending_recalcs") or {}
+                if isinstance(pending_map, dict) and pending_map:
+                    items = sorted(
+                        [v for v in pending_map.values() if isinstance(v, dict)],
+                        key=lambda x: pd.Timestamp(x.get("season_start") or x.get("earliest_modified_timestamp"))
+                    )
+                    failed_pending = {}
+                    for item in items:
+                        sname = str(item.get("season_naam") or "unknown")
+                        print(f"Geforceerde herberekening uitvoeren voor seizoen {sname} vanaf {item.get('earliest_modified_timestamp')}")
+                        ok = db_service.recalculate_elos_from(
+                            item.get("earliest_modified_timestamp"),
+                            item.get("season_start"),
+                            item.get("season_end")
+                        )
+                        if not ok:
+                            failed_pending[sname] = item
+                    success = len(failed_pending) == 0
+                else:
+                    print(f"Geforceerde herberekening uitvoeren voor seizoen {data.get('season_naam')} vanaf {data.get('earliest_modified_timestamp')}")
+                    success = db_service.recalculate_elos_from(
+                        data.get("earliest_modified_timestamp"),
+                        data.get("season_start"),
+                        data.get("season_end")
+                    )
+                    failed_pending = {}
+
                 if success:
-                    from datetime import datetime
                     config_ref.update({
                         "recalc_needed": False,
                         "earliest_modified_timestamp": None,
-                        "last_recalc_time": datetime.now()
+                        "pending_recalcs": {},
+                        "last_recalc_time": db_service._get_nl_now_aware()
                     })
                     print("Herberekening succesvol voltooid.")
                 else:
-                    print("Herberekening mislukt.")
+                    if failed_pending:
+                        config_ref.update({"pending_recalcs": failed_pending})
+                    print("Herberekening (deels) mislukt.")
             else:
                 print("Geen herberekening nodig (recalc_needed is False).")
         else:
