@@ -2,11 +2,10 @@
 Hoofd-entrypoint voor de Tafelvoetbal Competitie App (Streamlit).
 Laadt de gecachte data uit Firestore / Google Sheets en rendert de 10 hoofdtabs.
 """
-# Force redeploy to clear cache - 2026-10-18 13:00 (v2.7)
-from datetime import datetime, timedelta
+# Force redeploy to clear cache - 2026-11-17 (v2.8)
+from datetime import timedelta
 import threading
 import time
-import pandas as pd
 import streamlit as st
 
 import firestore_service as db  # Use Firestore
@@ -26,8 +25,16 @@ from tabs.tab_verzoeken import render_verzoeken_tab
 
 setup_page()
 
-st.title("Tafelvoetbal Competitie ⚽")
-st.caption("Versie 2.7 — Klik op **ℹ️ Colofon** of open de **Snelstart** hieronder voor uitleg & spelregels")
+col_title, col_refresh = st.columns([6, 1])
+with col_title:
+    st.title("Tafelvoetbal Competitie ⚽")
+    st.caption("Versie 2.8 — Klik op **ℹ️ Colofon** of open de **Snelstart** hieronder voor uitleg & spelregels")
+with col_refresh:
+    st.write("")
+    if st.button("🔄 Ververs", key="header_refresh_btn", help="Ververs data en leeg caches"):
+        db.clear_all_caches()
+        st.cache_data.clear()
+        st.rerun()
 
 # Check of ELO herberekening gepland is
 recalc_status = db.get_recalc_status()
@@ -49,7 +56,7 @@ if recalc_status and recalc_status.get("recalc_needed"):
 
 # --- Data Loading (Cached) ---
 # Versie-parameter om cache geforceerd te kunnen resetten bij logica-wijzigingen
-CACHE_VERSION = "2.3"
+CACHE_VERSION = "2.4"
 
 
 # Bij een nieuwe versie, leeg de cache (voorzichtiger om quota te sparen)
@@ -76,13 +83,6 @@ def load_all_data(version):
 
 
 
-
-# --- Sidebar met Refresh optie ---
-with st.sidebar:
-    if st.button("🔄 Refresh Data"):
-        st.cache_data.clear()
-        st.rerun()
-    st.divider()
 
 # --- Initialize data ---
 players_df, matches_df, seasons_df, elo_df, beheer_log_df, requests_df = load_all_data(CACHE_VERSION)

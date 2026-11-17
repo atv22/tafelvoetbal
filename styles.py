@@ -128,19 +128,14 @@ def _get_custom_css():
     /* ===== MOBILE VIEWPORT EN TOUCH OPTIMALISATIE ===== */
     * {{
         -webkit-tap-highlight-color: transparent;
+    }}
+
+    .stButton > button,
+    .stTabs [data-baseweb="tab"],
+    .stTabs [role="tab"] {{
         -webkit-touch-callout: none;
         -webkit-user-select: none;
-        -khtml-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
         user-select: none;
-    }}
-    
-    input, textarea, select {{
-        -webkit-user-select: text;
-        -moz-user-select: text;
-        -ms-user-select: text;
-        user-select: text;
     }}
     
     html {{
@@ -710,6 +705,23 @@ def _get_custom_css():
     /* ===== SPINNER ===== */
     .stSpinner > div {{
         border-top-color: {COLORS['primary_pink']} !important;
+    }}
+
+    /* ===== REDUCED MOTION TOEGANKELIJKHEID ===== */
+    @media (prefers-reduced-motion: reduce) {{
+        [data-testid="stAppViewContainer"]::before {{
+            animation: none !important;
+        }}
+        .stTabs [data-baseweb="tab"],
+        .stTabs [role="tab"],
+        .stButton > button {{
+            transition: none !important;
+        }}
+        .stTabs [data-baseweb="tab"]:hover,
+        .stTabs [role="tab"]:hover,
+        .stButton > button:hover {{
+            transform: none !important;
+        }}
     }}
 </style>
 """
