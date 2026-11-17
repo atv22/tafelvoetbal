@@ -44,7 +44,7 @@ Om binnen de gratis limieten (quota) van Google Cloud Firestore te blijven én a
 
 ### 📝 Slimme Wedstrijdregistratie
 - **2v2 Invoer:** Kies 4 unieke spelers (Thuis 1 & 2 vs. Uit 1 & 2) en voer de eindstand in (één team scoort 10 doelpunten, het andere 0 t/m 9).
-- **Klinkers & ELO-bonus:** Registreer direct gescoorde klinkers per speler (+15 ELO-bonus per klinker).
+- **Klinkers & ELO-bonus:** Registreer direct gescoorde klinkers per speler (+15 ELO-bonus per klinker; het totaal aantal klinkers per team kan niet hoger zijn dan het aantal teamdoelpunten).
 - **Duplicaatdetectie:** Waarschuwt automatisch als dezelfde teams en score al binnen 24 uur zijn geregistreerd, om dubbele invoer te voorkomen.
 - **10-0 Feestje:** Bij een *whitewash* (10-0 of 0-10) vliegen de ballonnen over het scherm! 🎈
 
@@ -77,10 +77,10 @@ $$\text{Nieuwe ELO} = \text{Oude ELO} + K \times \text{Impact} \times (\text{Res
    $$\text{Impact} = 2 + \left(\frac{\log_{10}(\Delta \text{score} + 1)}{\log_{10}(10)}\right)^3 = 2 + \left(\log_{10}(\Delta \text{score} + 1)\right)^3$$
    *(Bij 10-9 is het verschil 1 en de impact $\approx 2.03$; bij 10-0 is het verschil 10 en de impact $\approx 3.13$.)*
 4. **Dynamische K-factor ($K$):**
-   Nieuwe spelers stijgen en dalen sneller zodat ze snel hun juiste niveau bereiken. Naarmate een speler meer wedstrijden ($N$) in het huidige seizoen speelt, stabiliseert de K-factor:
-   $$K = \frac{50}{1 + N / 300}$$
+   Nieuwe spelers stijgen en dalen sneller zodat ze snel hun juiste niveau bereiken. Naarmate een speler meer wedstrijden ($N$) eerder in het huidige seizoen heeft gespeeld, stabiliseert de K-factor (de start-rating van 1000 telt daarbij mee als eerste punt in de historie):
+   $$K = \frac{50}{1 + (N + 1) / 300}$$
 5. **Klinker-bonus:**
-   Elke gescoorde **klinker** levert direct **+15 ELO-punten** op voor de betreffende speler, ongeacht winst of verlies.
+   Elke gescoorde **klinker** levert direct **+15 ELO-punten** op voor de betreffende speler, ongeacht winst of verlies. Per team geldt als validatieregel dat het totaal aantal klinkers niet hoger mag zijn dan de teamscore.
 
 ---
 
@@ -93,7 +93,7 @@ De competitie volgt de officiële **ADR Controlejaar-systematiek** (15 maart t/m
 | **☀️ Zomerseizoen** (`CJ <Jaar> Zomer`) | **15 maart** (00:00 uur) | **Woensdag na Prinsjesdag** (dinsdag 23:59:59) |
 | **❄️ Winterseizoen** (`CJ <Jaar> Winter`) | **Woensdag na Prinsjesdag** (00:00 uur, direct na de 3e dinsdag van sept.) | **14 maart** volgend jaar (23:59:59) |
 
-> **🔄 Automatische Seizoensreset:** Zodra de allereerste wedstrijd van een nieuw seizoen wordt ingevoerd, detecteert de app dit automatisch en worden alle speler-ELO's gereset naar **1000 punten**. Historische prestaties en *Peak ELO's* blijven volledig bewaard in het tabblad **📈 Analytics**.
+> **🔄 Automatische Seizoensreset & 1000-baseline:** Zodra de allereerste wedstrijd van een nieuw seizoen wordt ingevoerd, detecteert de app dit automatisch en worden alle speler-ELO's gereset naar **1000 punten**. Daarnaast garandeert het invoersysteem dat elke speler in zijn/haar eerste wedstrijd van een seizoen altijd op **1000 punten** start. Historische prestaties en *Peak ELO's* blijven volledig bewaard in het tabblad **📈 Analytics**.
 
 ---
 
@@ -210,10 +210,12 @@ pytest
 
 ## 🛠️ Beheer & Admin Scripts
 
-Voor dagelijks beheer biedt het tabblad **⚙️ Beheer** in de app (beveiligd met wachtwoord) functies om:
+Voor dagelijks beheer biedt het tabblad **⚙️ Beheer** in de app (beveiligd met wachtwoord via `ADMIN_PASSWORD` in secrets/omgevingsvariabelen en voorzien van tweestaps-bevestigingen bij verwijderacties) functies om:
 - Google Sheets en Firestore handmatig te synchroniseren;
+- Per seizoen een read-only **🧮 ELO-Integriteitscheck** uit te voeren en (indien nodig) het seizoen om 23:00 uur of direct te herberekenen;
+- Het Firestore-schema te inspecteren;
 - Wedstrijden te bewerken of te verwijderen (met automatische ELO-herberekening om 23:00 uur);
-- Spelersnamen in de gehele historie te corrigeren;
+- Spelersnamen in Firestore én Google Sheets te corrigeren;
 - Historische data via CSV te importeren.
 
 Voor zwaardere database-operaties (zoals het samenvoegen van dubbele spelers, het forceren van een ELO-herberekening via cron, of het exporteren van alle collecties) zijn er standalone scripts beschikbaar in de map [`admin/`](admin/README.md). Bekijk [`admin/README.md`](admin/README.md) voor een volledig overzicht.

@@ -20,7 +20,7 @@ def render_quick_tutorial():
         #### 2️⃣ Speel een potje (2 tegen 2) & voer de uitslag in
         * Ga na jullie wedstrijd naar het tabblad **📝 Invullen**.
         * Selecteer de **4 unieke spelers** (*Thuis 1 & 2* tegen *Uit 1 & 2*).
-        * Zijn er **klinkers** gescoord? Zet *"Zijn er klinkers gescoord?"* eerst op **Ja** en vul per speler het aantal klinkers in (**+15 ELO bonus** per klinker!).
+        * Zijn er **klinkers** gescoord? Zet *"Zijn er klinkers gescoord?"* eerst op **Ja** en vul per speler het aantal klinkers in (**+15 ELO bonus** per klinker; het aantal klinkers per team kan maximaal gelijk zijn aan de teamscore).
         * Vul de eindstand in: een potje gaat altijd tot de **10 doelpunten** (één team heeft **10**, het andere team **0 t/m 9**).
         * Klik op **Verstuur Uitslag**. *(Bij een 10-0 overwinning trakteert de app op ballonnen! 🎈)*
 
@@ -79,7 +79,7 @@ def render_colofon_tab():
             | **📜 Commits** | Volg de laatste technische updates, bugfixes en nieuwe features in een vertaald overzicht van de Git-wijzigingshistorie. |
             | **🔍 Logging** | Transparant logboek van alle uitgevoerde **beheerdersacties** en de technische database-operaties van de huidige sessie. |
             | **ℹ️ Colofon** | Deze pagina! Met de **Snelstart-tutorial**, handleiding, wiskundige uitleg van het ELO-systeem en informatie over het ontwikkelteam. |
-            | **⚙️ Beheer** | Beveiligde omgeving voor beheerders om wedstrijden te corrigeren/verwijderen, spelersnamen te wijzigen, CSV's te importeren en Google Sheets te synchroniseren. |
+            | **⚙️ Beheer** | Beveiligde omgeving voor beheerders om wedstrijden te corrigeren/verwijderen, spelersnamen te wijzigen, een **ELO-integriteitscheck** uit te voeren, CSV's te importeren en Google Sheets te synchroniseren. |
 
             ---
 
@@ -121,11 +121,11 @@ def render_colofon_tab():
                $$\\text{Impact} = 2 + \\left(\\frac{\\log_{10}(\\Delta + 1)}{\\log_{10}(10)}\\right)^3$$
                *(Bij 10-9 is de impact $\\approx 2.03$; bij 10-5 is de impact $\\approx 2.47$; bij 10-0 is de impact $\\approx 3.13$.)*
             4. **Dynamische K-factor ($K$):**
-               De aanpassingsfactor $K$ bepaalt hoe snel je rating beweegt op basis van het aantal gespeelde wedstrijden ($N$) in het huidige seizoen:
-               $$K = \\frac{50}{1 + N / 300}$$
-               *Nieuwe spelers ($N=0 \\Rightarrow K=50$) stijgen of dalen sneller om vlot hun echte niveau te bereiken; naarmate je meer speelt, wordt je ELO stabieler.*
+               De aanpassingsfactor $K$ bepaalt hoe snel je rating beweegt op basis van het aantal eerder gespeelde wedstrijden ($N$) in het huidige seizoen (waarbij je start-rating van 1000 als eerste punt in de historie meetelt):
+               $$K = \\frac{50}{1 + (N + 1) / 300}$$
+               *Nieuwe spelers in een seizoen ($N=0 \\Rightarrow K \\approx 49{,}83$) stijgen of dalen sneller om vlot hun echte niveau te bereiken; naarmate je meer speelt, wordt je ELO stabieler.*
             5. **Klinkers Bonus:**
-               Elke gescoorde klinker geeft een directe individuele bonus van **+15 ELO-punten**, ongeacht of je team de wedstrijd wint of verliest.
+               Elke gescoorde klinker geeft een directe individuele bonus van **+15 ELO-punten**, ongeacht of je team de wedstrijd wint of verliest (totaal aantal klinkers per team $\\le$ aantal teamdoelpunten).
 
             ---
 
@@ -137,7 +137,7 @@ def render_colofon_tab():
             * **❄️ Winterseizoen (`CJ <Jaar> Winter`):** Start in de nacht **na Prinsjesdag (woensdag 00:00 uur)** en loopt tot en met **14 maart van het volgende jaar (23:59:59 uur)**.
 
             **🔄 Automatische Seizoensreset:**
-            Zodra de allereerste wedstrijd van een nieuw seizoen wordt ingevoerd, zet het systeem de ELO-rating van alle spelers automatisch terug naar **1000 punten**. Zo begint iedereen elk halfjaar met gelijke kansen op de seizoenswinst, terwijl je all-time records (*Peak ELO*) bewaard blijven onder **📈 Analytics**!
+            Zodra de allereerste wedstrijd van een nieuw seizoen wordt ingevoerd, zet het systeem de ELO-rating van alle spelers automatisch terug naar **1000 punten** (en ook spelers die later instromen starten in hun eerste seizoenswedstrijd op 1000). Zo begint iedereen elk halfjaar met gelijke kansen op de seizoenswinst, terwijl je all-time records (*Peak ELO*) bewaard blijven onder **📈 Analytics**!
             """
         )
 

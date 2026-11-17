@@ -26,7 +26,7 @@ Deze map (`admin/`) bevat zelfstandige Python-scripts voor beheerders om de Fire
 
 ### 2. 🧮 ELO-Herberekening & Seizoensonderhoud
 
-Wanneer er via het tabblad **⚙️ Beheer** in de app een wedstrijd wordt verwijderd of aangepast, zet de app een vlag (`recalc_needed = True` in `system_config/elo_recalc`). Normaal gesproken voert de app deze herberekening automatisch uit na **23:00 uur**. Met onderstaande tools kun je dit proces handmatig aansturen:
+Wanneer er via het tabblad **⚙️ Beheer** in de app een wedstrijd wordt verwijderd of aangepast, zet de app een vlag (`recalc_needed = True` in `system_config/elo_recalc`, inclusief multi-seizoen wachtrij `pending_recalcs`). Normaal gesproken voert de app deze herberekening automatisch uit na **23:00 uur (NL-tijd)**. Daarnaast kunnen beheerders in **⚙️ Beheer** direct de **🧮 ELO-Integriteitscheck & Seizoen Herberekening** draaien om een seizoen read-only te controleren en (indien nodig) in te plannen of direct te herberekenen (waarbij alleen het nieuwste seizoen de spelerstabel bijwerkt). Met onderstaande tools kun je dit proces ook handmatig vanaf de command-line aansturen:
 
 | Script | Gebruik & Beschrijving |
 | :--- | :--- |
@@ -50,7 +50,8 @@ Wanneer er via het tabblad **⚙️ Beheer** in de app een wedstrijd wordt verwi
 ## ⚠️ Richtlijnen voor Veilig Beheer
 
 1. **Maak altijd eerst een export:** Voer vóór grote herberekeningen of speler-merges altijd eerst `python admin/export_all_firestore_to_csv.py` uit zodat je een lokale snapshot hebt.
-2. **Eenvoudige naamswijziging vs. Samenvoegen (Merge):**
-   - Wil je alleen een typfout in een naam herstellen naar een naam die **nog niet bestaat**? Dat kan direct in de app via **⚙️ Beheer → ✏️ Bewerken**.
+2. **Beheerderswachtwoord configureren:** Stel `ADMIN_PASSWORD` in via `.streamlit/secrets.toml` of als omgevingsvariabele (`ADMIN_PASSWORD`) voordat je de app publiek inzet.
+3. **Eenvoudige naamswijziging vs. Samenvoegen (Merge):**
+   - Wil je alleen een typfout in een naam herstellen naar een naam die **nog niet bestaat**? Dat kan direct in de app via **⚙️ Beheer → ✏️ Bewerken** (werkt nu zowel Firestore als Google Sheets bij).
    - Bestaan er **twee aparte spelers** die eigenlijk dezelfde persoon zijn? Gebruik dan `python admin/merge_players.py` zodat hun volledige wedstrijd- en ELO-historie netjes wordt samengevoegd.
-3. **Let op Firestore Quota:** Het volledig wissen en opnieuw opbouwen van alle ELO-logs over meerdere jaren kost veel Firestore-writes. Gebruik daarom bij voorkeur de incrementele herberekening (`recalculate_elo_cron.py --force`) die alleen herberekent vanaf de vroegst gewijzigde wedstrijd binnen het betreffende seizoen.
+4. **Let op Firestore Quota:** Het volledig wissen en opnieuw opbouwen van alle ELO-logs over meerdere jaren kost veel Firestore-writes. Gebruik daarom bij voorkeur de incrementele herberekening (`recalculate_elo_cron.py --force`) die alleen herberekent vanaf de vroegst gewijzigde wedstrijd binnen het betreffende seizoen.
