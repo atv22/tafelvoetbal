@@ -1376,6 +1376,123 @@ def delete_player_by_id(player_id):
         print(f"Fout bij verwijderen: {e}")
         return False
 
+
+def rename_player(old_name: str, new_name: str) -> tuple[bool, str]:
+    """Hernoemt een speler in Firestore (spelers, elo, uitslag) én best-effort in Google Sheets."""
+    from utils.utils import IGNORE_PLAYERS
+
+    clean_new = (new_name or "").strip()
+    if not clean_new:
+        return False, "Nieuwe naam mag niet leeg zijn."
+    if clean_new == old_name:
+        return False, "De naam is ongewijzigd."
+    if len(clean_new) < 2 or len(clean_new) > 50:
+        return False, "De lengte van de naam moet tussen de 2 en 50 tekens liggen."
+    if not clean_new[0].isupper():
+        return False, "De eerste letter van de naam moet een hoofdletter zijn."
+    if not all(c.isalpha() or c in " -'" for c in clean_new):
+        return False, "De naam mag alleen letters (en eventueel spaties, streepjes of apostrof) bevatten."
+    if clean_new.lower().strip() in IGNORE_PLAYERS:
+        return False, f"De naam '{clean_new}' is gereserveerd en kan niet gebruikt worden."
+
+    def _norm(val):
+        return str(val).replace(" ", "").lower()
+
+    try:
+        players_df = get_players()
+        if players_df is not None and not players_df.empty and 'speler_naam' in players_df.columns:
+            for existing in players_df['speler_naam'].astype(str).tolist():
+                if existing != old_name and _norm(existing) == _norm(clean_new):
+                    return False, f"Er bestaat al een speler met de naam '{existing}'. Gebruik 'admin/merge_players.py' om spelers samen te voegen."
+    except Exception:
+        pass
+
+    log_firestore_op("WRITE", "spelers", "rename_player", 1)
+    try:
+        batch = db.batch()
+        ops = 0
+
+        def _commit_if_full(b, count):
+            if count >= 400:
+                b.commit()
+                return db.batch(), 0
+            return b, count
+
+        for doc in players_ref.where(filter=FieldFilter('speler_naam', '==', old_name)).stream():
+            batch.update(doc.reference, {'speler_naam': clean_new})
+            batch, ops = _commit_if_full(batch, ops + 1)
+
+        for doc in elo_ref.where(filter=FieldFilter('speler_naam', '==', old_name)).stream():
+            batch.update(doc.reference, {'speler_naam': clean_new})
+            batch, ops = _commit_if_full(batch, ops + 1)
+
+        for field in ('thuis_1', 'thuis_2', 'uit_1', 'uit_2'):
+            for doc in matches_ref.where(filter=FieldFilter(field, '==', old_name)).stream():
+                batch.update(doc.reference, {field: clean_new})
+                batch, ops = _commit_if_full(batch, ops + 1)
+
+        if ops > 0:
+            batch.commit()
+    except Exception as e:
+        print(f"Fout bij hernoemen van speler in Firestore: {e}")
+        return False, f"Fout bij hernoemen in database: {e}"
+
+    # Best-effort sync naar Google Sheets zodat hernoemde namen niet als spook-rijen terugkomen
+    try:
+        sh = _get_gsheet_workbook()
+        if sh:
+            sheet_col_map = [
+                ("Spelers", ["speler_naam"]),
+                ("ELO_Logs", ["speler_naam"]),
+                ("Wedstrijden", ["thuis_1", "thuis_2", "uit_1", "uit_2"]),
+            ]
+            for sname, cols in sheet_col_map:
+                try:
+                    ws = sh.worksheet(sname)
+                    vals = ws.get_all_values()
+                    if not vals or len(vals) < 2:
+                        continue
+                    headers = [h.strip() for h in vals[0]]
+                    target_indices = [headers.index(c) for c in cols if c in headers]
+                    if not target_indices:
+                        continue
+                    changed = False
+                    new_rows = [vals[0]]
+                    for row in vals[1:]:
+                        r_copy = list(row)
+                        for idx in target_indices:
+                            if idx < len(r_copy) and r_copy[idx] == old_name:
+                                r_copy[idx] = clean_new
+                                changed = True
+                        new_rows.append(r_copy)
+                    if changed:
+                        ws.clear()
+                        ws.update(values=new_rows, range_name='A1')
+                except Exception as gs_err:
+                    print(f"[GSHEET RENAME] Fout bij bijwerken van {sname}: {gs_err}")
+    except Exception as e:
+        print(f"[GSHEET RENAME] Fout bij openen workbook: {e}")
+
+    # Werk in-memory store direct bij
+    try:
+        store = init_firestore_listeners()
+        for pdata in store.get("players", {}).values():
+            if isinstance(pdata, dict) and pdata.get("speler_naam") == old_name:
+                pdata["speler_naam"] = clean_new
+        for edata in store.get("elo", {}).values():
+            if isinstance(edata, dict) and edata.get("speler_naam") == old_name:
+                edata["speler_naam"] = clean_new
+        for mdata in store.get("matches", {}).values():
+            if isinstance(mdata, dict):
+                for field in ("thuis_1", "thuis_2", "uit_1", "uit_2"):
+                    if mdata.get(field) == old_name:
+                        mdata[field] = clean_new
+    except Exception:
+        pass
+
+    clear_all_caches()
+    return True, f"Naam van '{old_name}' aangepast naar '{clean_new}'."
+
 def import_matches(matches_list):
     """Importeert een lijst met wedstrijden in Firestore."""
     try:

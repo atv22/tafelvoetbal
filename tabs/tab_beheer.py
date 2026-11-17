@@ -1,5 +1,7 @@
 from __future__ import annotations
 import datetime
+import hmac
+import os
 import time
 import pandas as pd
 import streamlit as st
@@ -7,7 +9,19 @@ import streamlit as st
 # Typing hints (optional lightweight)
 from typing import Optional
 
-PASSWORD = "Klinker"  # TODO: verplaats naar secrets of env variabele
+
+def _get_admin_password() -> str:
+    """Haalt het beheerderswachtwoord op uit env, Streamlit secrets of fallback."""
+    env_pw = os.environ.get("ADMIN_PASSWORD")
+    if env_pw:
+        return str(env_pw)
+    try:
+        if hasattr(st, "secrets") and "ADMIN_PASSWORD" in st.secrets:
+            return str(st.secrets["ADMIN_PASSWORD"])
+    except Exception:
+        pass
+    return "Klinker"
+
 
 # ---------------------------------------------------------------------------
 # Helper: Authenticatie
@@ -23,12 +37,14 @@ def _ensure_authentication() -> bool:
 
     st.subheader("Login vereist")
     password = st.text_input("Voer wachtwoord in", type="password")
-    if password == PASSWORD:
-        st.session_state.authenticated = True
-        st.success("Ingelogd – laden...")
-        st.rerun()
-    elif password:
-        st.error("Ongeldig wachtwoord.")
+    if password:
+        expected = _get_admin_password()
+        if hmac.compare_digest(password.encode("utf-8"), expected.encode("utf-8")):
+            st.session_state.authenticated = True
+            st.success("Ingelogd – laden...")
+            st.rerun()
+        else:
+            st.error("Ongeldig wachtwoord.")
     return False
 
 # ---------------------------------------------------------------------------
@@ -37,17 +53,15 @@ def _ensure_authentication() -> bool:
 def _render_match_delete(db, matches_df: pd.DataFrame):
     st.write("**Wedstrijd(en) verwijderen**")
     st.info("💡 Wedstrijden worden direct verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend om database-limieten te sparen.")
-    
+
+    if matches_df is None or matches_df.empty:
+        st.info("Geen wedstrijden om te verwijderen.")
+        return
+
     matches_display_df = matches_df.copy()
-    # Detect home/away columns
-    if not matches_display_df.empty:
-        match_row = matches_display_df.iloc[0]
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-    else:
-        home_cols = ['thuis_1', 'thuis_2']
-        away_cols = ['uit_1', 'uit_2']
-    
+    home_cols = ['thuis_1', 'thuis_2']
+    away_cols = ['uit_1', 'uit_2']
+
     matches_display_df["display"] = matches_display_df.apply(
         lambda row: f"{pd.to_datetime(row.get('timestamp')).strftime('%d-%m-%Y %H:%M') if row.get('timestamp') else 'Geen tijd'} - "
         f"{row.get(home_cols[0], 'N/A')}/{row.get(home_cols[1], 'N/A')} vs {row.get(away_cols[0], 'N/A')}/{row.get(away_cols[1], 'N/A')}: "
@@ -64,27 +78,44 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
     if st.button("Verwijder geselecteerde wedstrijd", key="delete_single"):
         match_row = matches_display_df[matches_display_df["display"] == match_to_delete]
         if not match_row.empty:
-            match_id = match_row.iloc[0]["match_id"]
-            with st.spinner("Wedstrijd wordt verwijderd..."):
-                try:
-                    success = db.delete_match_with_elo_recalculation(match_id)
-                    action_type = "delete_match_with_elo_recalculation"
-                except Exception as e:
-                    st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
-                    with st.expander("Toon technische details"):
-                        st.code(str(e.details) if hasattr(e, 'details') else str(e))
-                    return
-                if success:
-                    from utils.utils_beheer_log import log_admin_action
-                    log_admin_action(
-                        action_type=action_type,
-                        user=st.session_state.get("user", "onbekend"),
-                        details={"match_id": match_id, "display": match_to_delete},
-                        db=db.db
-                    )
-                    st.success("Wedstrijd succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
-                    time.sleep(1.5)
-                    st.rerun()
+            st.session_state["confirm_delete_single_match"] = {
+                "match_id": match_row.iloc[0]["match_id"],
+                "display": match_to_delete,
+            }
+
+    pending_single = st.session_state.get("confirm_delete_single_match")
+    if pending_single:
+        st.warning(f"⚠️ Weet je zeker dat je deze wedstrijd definitief wilt verwijderen?\n\n`{pending_single['display']}`")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Ja, verwijder wedstrijd definitief", key="confirm_delete_single_btn", type="primary"):
+                match_id = pending_single["match_id"]
+                display_txt = pending_single["display"]
+                st.session_state.pop("confirm_delete_single_match", None)
+                with st.spinner("Wedstrijd wordt verwijderd..."):
+                    try:
+                        success = db.delete_match_with_elo_recalculation(match_id)
+                        action_type = "delete_match_with_elo_recalculation"
+                    except Exception as e:
+                        st.error("Database niet bereikbaar: mogelijk budgetlimiet bereikt.")
+                        with st.expander("Toon technische details"):
+                            st.code(str(e.details) if hasattr(e, 'details') else str(e))
+                        return
+                    if success:
+                        from utils.utils_beheer_log import log_admin_action
+                        log_admin_action(
+                            action_type=action_type,
+                            user=st.session_state.get("user", "beheerder"),
+                            details={"match_id": match_id, "display": display_txt},
+                            db=db.db
+                        )
+                        st.success("Wedstrijd succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
+                        time.sleep(1.5)
+                        st.rerun()
+        with c2:
+            if st.button("❌ Annuleren", key="cancel_delete_single_btn"):
+                st.session_state.pop("confirm_delete_single_match", None)
+                st.rerun()
 
     st.write("**Meerdere wedstrijden verwijderen:**")
     matches_to_delete = st.multiselect(
@@ -95,29 +126,43 @@ def _render_match_delete(db, matches_df: pd.DataFrame):
     if matches_to_delete and st.button(
         "Verwijder geselecteerde wedstrijden", key="delete_multiple"
     ):
-        with st.spinner(f"Bezig met verwijderen van {len(matches_to_delete)} wedstrijden..."):
-            match_ids = []
-            for match_display in matches_to_delete:
-                match_row = matches_display_df[matches_display_df["display"] == match_display]
-                if not match_row.empty:
-                    match_ids.append(match_row.iloc[0]["match_id"])
-            if match_ids:
-                try:
-                    success = db.delete_multiple_matches_with_elo_recalculation(match_ids)
-                except Exception as e:
-                    st.error(f"Fout bij verwijderen: {e}")
-                    return
-                if success:
-                    from utils.utils_beheer_log import log_admin_action
-                    log_admin_action(
-                        action_type="delete_multiple_matches_with_elo_recalculation",
-                        user=st.session_state.get("user", "onbekend"),
-                        details={"match_ids": match_ids},
-                        db=db.db
-                    )
-                    st.success(f"{len(match_ids)} wedstrijden succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
-                    time.sleep(1.5)
-                    st.rerun()
+        match_ids = []
+        for match_display in matches_to_delete:
+            match_row = matches_display_df[matches_display_df["display"] == match_display]
+            if not match_row.empty:
+                match_ids.append(match_row.iloc[0]["match_id"])
+        if match_ids:
+            st.session_state["confirm_delete_multi_matches"] = match_ids
+
+    pending_multi = st.session_state.get("confirm_delete_multi_matches")
+    if pending_multi:
+        st.warning(f"⚠️ Weet je zeker dat je **{len(pending_multi)} wedstrijden** definitief wilt verwijderen?")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button(f"✅ Ja, verwijder {len(pending_multi)} wedstrijden definitief", key="confirm_delete_multi_btn", type="primary"):
+                match_ids = list(pending_multi)
+                st.session_state.pop("confirm_delete_multi_matches", None)
+                with st.spinner(f"Bezig met verwijderen van {len(match_ids)} wedstrijden..."):
+                    try:
+                        success = db.delete_multiple_matches_with_elo_recalculation(match_ids)
+                    except Exception as e:
+                        st.error(f"Fout bij verwijderen: {e}")
+                        return
+                    if success:
+                        from utils.utils_beheer_log import log_admin_action
+                        log_admin_action(
+                            action_type="delete_multiple_matches_with_elo_recalculation",
+                            user=st.session_state.get("user", "beheerder"),
+                            details={"match_ids": match_ids},
+                            db=db.db
+                        )
+                        st.success(f"{len(match_ids)} wedstrijden succesvol verwijderd. De ELO-scores worden vanavond om 23:00 uur automatisch herberekend.")
+                        time.sleep(1.5)
+                        st.rerun()
+        with c2:
+            if st.button("❌ Annuleren", key="cancel_delete_multi_btn"):
+                st.session_state.pop("confirm_delete_multi_matches", None)
+                st.rerun()
 
 # ---------------------------------------------------------------------------
 # Wedstrijd bewerken
@@ -232,6 +277,12 @@ def _render_match_edit(db, matches_df: pd.DataFrame, players_df: pd.DataFrame):
                 return
             if len({new_thuis_1, new_thuis_2, new_uit_1, new_uit_2}) < 4:
                 st.error("Selecteer vier unieke spelers.")
+                return
+            if (new_klinkers_thuis_1 + new_klinkers_thuis_2) > new_thuis_score:
+                st.error("Totaal aantal klinkers van het thuisteam kan niet hoger zijn dan de thuisscore.")
+                return
+            if (new_klinkers_uit_1 + new_klinkers_uit_2) > new_uit_score:
+                st.error("Totaal aantal klinkers van het uitteam kan niet hoger zijn dan de uitscore.")
                 return
             updated = {
                 "thuis_1": new_thuis_1,
@@ -391,6 +442,17 @@ def _render_uploads(db, players_df: pd.DataFrame):
                         validation_errors.append(f"Rij {row_idx+1}: Ongeldige score combinatie {t_score}-{u_score}")
                     if len(set(p)) != 4:
                         validation_errors.append(f"Rij {row_idx+1}: Niet alle spelers zijn uniek")
+                    try:
+                        kt1 = int(float(row.get("klinkers_thuis_1", 0) or 0))
+                        kt2 = int(float(row.get("klinkers_thuis_2", 0) or 0))
+                        ku1 = int(float(row.get("klinkers_uit_1", 0) or 0))
+                        ku2 = int(float(row.get("klinkers_uit_2", 0) or 0))
+                        if min(kt1, kt2, ku1, ku2) < 0:
+                            validation_errors.append(f"Rij {row_idx+1}: Negatief aantal klinkers is niet toegestaan")
+                        elif (kt1 + kt2) > int(t_score) or (ku1 + ku2) > int(u_score):
+                            validation_errors.append(f"Rij {row_idx+1}: Aantal klinkers is hoger dan teamscore")
+                    except (ValueError, TypeError):
+                        validation_errors.append(f"Rij {row_idx+1}: Ongeldige klinkerwaarde")
                 if validation_errors:
                     st.error("❌ Validatie fouten gevonden:")
                     for err in validation_errors[:10]:
@@ -510,101 +572,172 @@ def _render_uploads(db, players_df: pd.DataFrame):
         )
 
 # ---------------------------------------------------------------------------
-# Systeem beheer
+# ELO Integriteitscheck & Database Inspectie
 # ---------------------------------------------------------------------------
-def _render_system_management(db, players_df: pd.DataFrame):
-    st.header("⚙️ Systeem Beheer")
-    st.subheader("ELO Rating Beheer")
-    # Optie voor complete ELO reset verwijderd om onbedoelde zware acties te voorkomen.
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    # Optie voor seizoensherberekening verwijderd. Gebruik scripts in 'admin' folder.
-    st.markdown("<hr>", unsafe_allow_html=True)
-        # Opmerking: complete ELO reset UI is verwijderd om onbedoelde zware acties te voorkomen.
-    
-    
-    st.subheader("Speler Verwijderen")
-    if players_df.empty:
-        st.info("Geen spelers om te beheren.")
-    else:
-        names = players_df["speler_naam"].tolist()
-        ids = players_df["speler_id"].tolist()
-        mapping = {n: i for n, i in zip(names, ids)}
-        player_to_delete = st.selectbox(
-            "Selecteer een speler om te verwijderen", options=sorted(names)
+def _render_elo_audit_panel(db, matches_df: pd.DataFrame):
+    """Toont een read-only ELO-integriteitscheck en opties om een seizoen te herberekenen."""
+    with st.expander("🧮 ELO-Integriteitscheck & Seizoen Herberekening", expanded=False):
+        st.caption(
+            "Controleer per seizoen (read-only) of de opgeslagen ELO-scores overeenkomen met een schone "
+            "berekening vanaf 1000 punten en herbereken het seizoen indien nodig."
         )
-        if st.button(f"Verwijder {player_to_delete} Permanent"):
-            pid = mapping.get(player_to_delete)
-            if pid:
-                with st.spinner(
-                    f"Bezig met verwijderen van {player_to_delete}..."
-                ):
-                    if db.delete_player_by_id(pid):
-                        st.success(
-                            f"{player_to_delete} en alle bijbehorende data is verwijderd."
+        seasons_df = db.get_seasons()
+        if seasons_df is None or seasons_df.empty:
+            st.info("Geen seizoenen gevonden.")
+            return
+
+        season_names = seasons_df["seizoen_naam"].tolist()
+        selected_season_name = st.selectbox(
+            "Selecteer seizoen voor controle",
+            options=season_names,
+            index=len(season_names) - 1,
+            key="admin_elo_audit_season",
+        )
+        s_row = seasons_df[seasons_df["seizoen_naam"] == selected_season_name].iloc[0]
+        s_start = s_row.get("start_datum") or s_row.get("startdatum")
+        s_end = s_row.get("eind_datum") or s_row.get("einddatum")
+
+        if st.button("🔍 Controleer ELO-berekening", key="btn_run_elo_audit"):
+            with st.spinner(f"ELO-integriteit van {selected_season_name} controleren..."):
+                audit_res = db.audit_season_elo(s_start, s_end, matches_df=matches_df)
+                st.session_state["elo_audit_result"] = {
+                    "season": selected_season_name,
+                    "result": audit_res,
+                }
+
+        cached_audit = st.session_state.get("elo_audit_result")
+        if cached_audit and cached_audit.get("season") == selected_season_name:
+            res = cached_audit["result"]
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Wedstrijden", res["match_count"])
+            c2.metric("Ontbrekende ELO-logs", res["missing_elo_logs"])
+            c3.metric("Afwijkende log-entries", res["mismatched_logs_count"])
+            c4.metric("Max. speler-verschil", f"{res['max_player_diff']:.2f}")
+
+            diff_df = res.get("player_diffs")
+            if diff_df is not None and not diff_df.empty:
+                st.dataframe(diff_df, hide_index=True, width='stretch')
+
+            if res["missing_elo_logs"] == 0 and res["mismatched_logs_count"] == 0 and res["max_player_diff"] <= 0.5:
+                st.success("✅ Alle ELO-ratings in dit seizoen kloppen exact met de herberekening vanaf 1000.")
+            else:
+                st.warning(
+                    "⚠️ Er zijn afwijkingen gevonden t.o.v. een schone seizoensberekening vanaf 1000. "
+                    "Je kunt dit seizoen inplannen voor vanavond 23:00 uur of direct herberekenen."
+                )
+
+        col_sched, col_now = st.columns(2)
+        with col_sched:
+            if st.button("🕒 Plan herberekening voor 23:00 uur", key="btn_schedule_season_recalc"):
+                st.session_state["confirm_schedule_season_recalc"] = selected_season_name
+        with col_now:
+            if st.button("⚡ Herbereken seizoen nu (direct)", key="btn_direct_season_recalc"):
+                st.session_state["confirm_direct_season_recalc"] = selected_season_name
+
+        if st.session_state.get("confirm_schedule_season_recalc") == selected_season_name:
+            st.info(f"Weet je zeker dat je **{selected_season_name}** wilt inplannen voor ELO-herberekening om 23:00 uur?")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Ja, plan in", key="confirm_schedule_recalc_yes", type="primary"):
+                    db.set_recalc_needed_flag(s_start, s_end, selected_season_name, s_start)
+                    from utils.utils_beheer_log import log_admin_action
+                    log_admin_action(
+                        action_type="schedule_season_elo_recalc",
+                        user=st.session_state.get("user", "beheerder"),
+                        details={"season_naam": selected_season_name},
+                        db=db.db,
+                    )
+                    st.session_state.pop("confirm_schedule_season_recalc", None)
+                    st.success(f"Herberekening voor '{selected_season_name}' ingepland voor 23:00 uur.")
+                    time.sleep(1)
+                    st.rerun()
+            with c2:
+                if st.button("❌ Annuleren", key="confirm_schedule_recalc_no"):
+                    st.session_state.pop("confirm_schedule_season_recalc", None)
+                    st.rerun()
+
+        if st.session_state.get("confirm_direct_season_recalc") == selected_season_name:
+            st.warning(
+                f"⚠️ Let op: directe herberekening van **{selected_season_name}** overschrijft alle ELO-logs van dit seizoen "
+                "(en werkt speler-ratings bij als dit het nieuwste seizoen is)."
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Ja, herbereken direct", key="confirm_direct_recalc_yes", type="primary"):
+                    with st.spinner(f"Bezig met herberekenen van {selected_season_name}..."):
+                        ok = db.recalculate_elos_for_season(s_start, s_end)
+                    if ok:
+                        from utils.utils_beheer_log import log_admin_action
+                        log_admin_action(
+                            action_type="recalculate_elos_for_season",
+                            user=st.session_state.get("user", "beheerder"),
+                            details={"season_naam": selected_season_name},
+                            db=db.db,
                         )
+                        st.session_state.pop("confirm_direct_season_recalc", None)
+                        st.session_state.pop("elo_audit_result", None)
+                        st.success(f"Seizoen '{selected_season_name}' succesvol herberekend!")
+                        time.sleep(1.5)
                         st.rerun()
                     else:
-                        st.error("Kon speler niet verwijderen.")
-            else:
-                st.error("Kon de speler ID niet vinden.")
-    st.markdown("<hr>", unsafe_allow_html=True)
-    # Seizoen Verwijderen UI verwijderd. Gebruik scripts in 'admin' voor seizoensbeheer.
-    st.markdown("<hr>", unsafe_allow_html=True)
-    # Overige Database Cleanup - 'Verwijder alle Requests' optie verwijderd
+                        st.error("Herberekening mislukt.")
+            with c2:
+                if st.button("❌ Annuleren", key="confirm_direct_recalc_no"):
+                    st.session_state.pop("confirm_direct_season_recalc", None)
+                    st.rerun()
 
-    # Database Inspectie & Schema Vergelijking
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("🔎 Database Inspectie & Schema")
-    st.caption("Bekijk welke collecties en velden in Firestore aanwezig zijn en vergelijk met wat de app verwacht.")
 
-    if st.button("Analyseer Firestore schema"):
-        with st.spinner("Firestore wordt geïnspecteerd..."):
-            try:
-                expected = db.expected_schema()
-                actual = db.inspect_collections(max_docs=250)
+def _render_schema_inspection_panel(db):
+    """Toont een on-demand vergelijking tussen verwacht schema en Firestore steekproef."""
+    with st.expander("🔎 Database Inspectie & Schema", expanded=False):
+        st.caption("Bekijk welke collecties en velden in Firestore aanwezig zijn en vergelijk met wat de app verwacht.")
+        if st.button("Analyseer Firestore schema", key="btn_analyze_schema"):
+            with st.spinner("Firestore wordt geïnspecteerd..."):
+                try:
+                    expected = db.expected_schema()
+                    actual = db.inspect_collections(max_docs=250)
 
-                for coll in ["spelers", "uitslag", "elo", "requests"]:
-                    st.markdown(f"**Collectie: `{coll}`**")
-                    exp = expected.get(coll, {})
-                    act = actual.get(coll, {"fields": [], "sample_size": 0, "examples": []})
+                    for coll in ["spelers", "uitslag", "elo", "requests"]:
+                        st.markdown(f"**Collectie: `{coll}`**")
+                        exp = expected.get(coll, {})
+                        act = actual.get(coll, {"fields": [], "sample_size": 0, "examples": []})
 
-                    exp_required = exp.get("required", set())
-                    exp_optional = exp.get("optional", set())
-                    exp_derived = exp.get("derived_only_in_app", set())
-                    act_fields = set(act.get("fields", []))
+                        exp_required = exp.get("required", set())
+                        exp_optional = exp.get("optional", set())
+                        exp_derived = exp.get("derived_only_in_app", set())
+                        act_fields = set(act.get("fields", []))
 
-                    missing = sorted(list((exp_required | exp_optional) - act_fields))
-                    unexpected = sorted(list(act_fields - (exp_required | exp_optional)))
+                        missing = sorted(list((exp_required | exp_optional) - act_fields))
+                        unexpected = sorted(list(act_fields - (exp_required | exp_optional)))
 
-                    colA, colB, colC = st.columns(3)
-                    with colA:
-                        st.write("Verwacht (required):")
-                        st.code(", ".join(sorted(list(exp_required))) or "—")
-                    with colB:
-                        st.write("Verwacht (optioneel):")
-                        st.code(", ".join(sorted(list(exp_optional))) or "—")
-                    with colC:
-                        st.write("Alleen in app (afgeleid):")
-                        st.code(", ".join(sorted(list(exp_derived))) or "—")
+                        colA, colB, colC = st.columns(3)
+                        with colA:
+                            st.write("Verwacht (required):")
+                            st.code(", ".join(sorted(list(exp_required))) or "—")
+                        with colB:
+                            st.write("Verwacht (optioneel):")
+                            st.code(", ".join(sorted(list(exp_optional))) or "—")
+                        with colC:
+                            st.write("Alleen in app (afgeleid):")
+                            st.code(", ".join(sorted(list(exp_derived))) or "—")
 
-                    st.write("Aangetroffen velden (sample):")
-                    st.code(", ".join(sorted(list(act_fields))) or "—")
+                        st.write("Aangetroffen velden (sample):")
+                        st.code(", ".join(sorted(list(act_fields))) or "—")
 
-                    info_cols = st.columns(2)
-                    with info_cols[0]:
-                        st.write("Ontbrekend t.o.v. verwachting:")
-                        st.code(", ".join(missing) or "—")
-                    with info_cols[1]:
-                        st.write("Onverwacht (bestaat niet in app):")
-                        st.code(", ".join(unexpected) or "—")
+                        info_cols = st.columns(2)
+                        with info_cols[0]:
+                            st.write("Ontbrekend t.o.v. verwachting:")
+                            st.code(", ".join(missing) or "—")
+                        with info_cols[1]:
+                            st.write("Onverwacht (bestaat niet in app):")
+                            st.code(", ".join(unexpected) or "—")
 
-                    if act.get("examples"):
-                        st.write("Voorbeelden (max 5):")
-                        st.dataframe(pd.DataFrame(act["examples"]), width='stretch')
-                    st.markdown("---")
-            except Exception as e:
-                st.error(f"Schema inspectie mislukt: {e}")
+                        if act.get("examples"):
+                            st.write("Voorbeelden (max 5):")
+                            st.dataframe(pd.DataFrame(act["examples"]), width='stretch')
+                        st.markdown("---")
+                except Exception as e:
+                    st.error(f"Schema inspectie mislukt: {e}")
 
 # ---------------------------------------------------------------------------
 # Hoofd entry
@@ -631,20 +764,19 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
                 st.rerun()
             except Exception as e:
                 st.error(f"Synchronisatie mislukt: {e}")
+
+    _render_elo_audit_panel(db, matches_df)
+    _render_schema_inspection_panel(db)
     st.divider()
 
     # Hoofd tabs in beheer
     tab_verwijderen, tab_bewerken, tab_upload = st.tabs([
         "🗑️ Verwijderen", "✏️ Bewerken", "📁 Upload"])
 
-
-    # 'ELO beheer' is verplaatst naar admin scripts; UI verwijderd to prevent heavy operations.
-
     with tab_verwijderen:
         st.header("🗑️ Verwijderen")
         st.subheader("🗑️ Wedstrijden verwijderen")
         _render_match_delete(db, matches_df)
-
 
         st.markdown("<hr>", unsafe_allow_html=True)
         st.subheader("🗑️ Speler Verwijderen")
@@ -660,20 +792,35 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
             if st.button(f"Verwijder {player_to_delete} Permanent", key="delete_player_perm"):
                 pid = mapping.get(player_to_delete)
                 if pid:
-                    with st.spinner(
-                        f"Bezig met verwijderen van {player_to_delete}..."
-                    ):
-                        if db.delete_player_by_id(pid):
-                            st.success(
-                                f"{player_to_delete} en alle bijbehorende data is verwijderd."
-                            )
-                            st.rerun()
-                        else:
-                            st.error("Kon speler niet verwijderen.")
+                    st.session_state["confirm_delete_player_admin"] = (pid, player_to_delete)
                 else:
                     st.error("Kon de speler ID niet vinden.")
 
-        # Seizoen verwijderen optie verwijderd
+            pending_p = st.session_state.get("confirm_delete_player_admin")
+            if pending_p and pending_p[1] == player_to_delete:
+                pid, pname = pending_p
+                st.warning(f"⚠️ Weet je zeker dat je **{pname}** en alle bijbehorende ELO-historie definitief wilt verwijderen?")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button(f"✅ Ja, verwijder {pname} definitief", key="confirm_delete_player_admin_yes", type="primary"):
+                        st.session_state.pop("confirm_delete_player_admin", None)
+                        with st.spinner(f"Bezig met verwijderen van {pname}..."):
+                            if db.delete_player_by_id(pid):
+                                from utils.utils_beheer_log import log_admin_action
+                                log_admin_action(
+                                    action_type="delete_player",
+                                    user=st.session_state.get("user", "beheerder"),
+                                    details={"player_id": pid, "speler_naam": pname},
+                                    db=db.db,
+                                )
+                                st.success(f"{pname} en alle bijbehorende data is verwijderd.")
+                                st.rerun()
+                            else:
+                                st.error("Kon speler niet verwijderen.")
+                with c2:
+                    if st.button("❌ Annuleren", key="confirm_delete_player_admin_no"):
+                        st.session_state.pop("confirm_delete_player_admin", None)
+                        st.rerun()
 
     with tab_bewerken:
         st.header("✏️ Bewerken")
@@ -692,60 +839,22 @@ def render_admin_tab(db, players_df: pd.DataFrame, matches_df: pd.DataFrame):
             speler_select = st.selectbox("Selecteer speler om naam aan te passen", sorted(spelers_df['speler_naam'].tolist()))
             nieuwe_naam_raw = st.text_input("Nieuwe naam", value=speler_select)
             if st.button("Pas naam aan"):
-                nieuwe_naam = nieuwe_naam_raw.strip() if nieuwe_naam_raw else ""
-                existing_names_lower = [str(n).lower() for n in spelers_df['speler_naam'].tolist() if n != speler_select]
-                if not nieuwe_naam:
-                    st.error("Nieuwe naam mag niet leeg zijn.")
-                elif nieuwe_naam == speler_select:
-                    st.info("De naam is ongewijzigd.")
-                elif nieuwe_naam.lower() in existing_names_lower:
-                    st.error(f"Er bestaat al een speler met de naam '{nieuwe_naam}'. Gebruik 'admin/merge_players.py' om spelers samen te voegen.")
-                else:
-                    from firestore_service import players_ref, elo_ref, matches_ref
-                    from google.cloud.firestore_v1.base_query import FieldFilter
-                    batch = db.db.batch()
-                    ops = 0
-
-                    def _commit_if_full(b, count):
-                        if count >= 400:
-                            b.commit()
-                            return db.db.batch(), 0
-                        return b, count
-
-                    # 1. Speler document
-                    speler_docs = list(players_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-                    for doc in speler_docs:
-                        batch.update(doc.reference, {'speler_naam': nieuwe_naam})
-                        batch, ops = _commit_if_full(batch, ops + 1)
-                    # 2. ELO documenten
-                    elo_docs = list(elo_ref.where(filter=FieldFilter('speler_naam', '==', speler_select)).stream())
-                    for doc in elo_docs:
-                        batch.update(doc.reference, {'speler_naam': nieuwe_naam})
-                        batch, ops = _commit_if_full(batch, ops + 1)
-                    # 3. Wedstrijden
-                    for field in ['thuis_1', 'thuis_2', 'uit_1', 'uit_2']:
-                        match_docs = list(matches_ref.where(filter=FieldFilter(field, '==', speler_select)).stream())
-                        for doc in match_docs:
-                            batch.update(doc.reference, {field: nieuwe_naam})
-                            batch, ops = _commit_if_full(batch, ops + 1)
-                    if ops > 0:
-                        batch.commit()
+                ok, msg = db.rename_player(speler_select, nieuwe_naam_raw)
+                if ok:
                     from utils.utils_beheer_log import log_admin_action
                     log_admin_action(
                         action_type="rename_player",
-                        user=st.session_state.get("user", "onbekend"),
-                        details={"old_name": speler_select, "new_name": nieuwe_naam},
+                        user=st.session_state.get("user", "beheerder"),
+                        details={"old_name": speler_select, "new_name": nieuwe_naam_raw.strip()},
                         db=db.db
                     )
-                    st.success(f"Naam van '{speler_select}' aangepast naar '{nieuwe_naam}'. Alle data is bijgewerkt.")
-                    db.clear_all_caches()
+                    st.success(f"{msg} Alle data (inclusief back-up) is bijgewerkt.")
                     st.rerun()
+                else:
+                    st.error(msg)
 
     with tab_upload:
         st.header("📁 Upload")
         if matches_df is None or matches_df.empty:
             st.info("💡 Geen wedstrijden gevonden. Upload historische data om te beginnen!")
         _render_uploads(db, players_df)
-
-
-    # De inspectie-subtab is verplaatst naar admin/inspectie.py als zelfstandig script.
