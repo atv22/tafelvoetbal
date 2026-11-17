@@ -218,8 +218,12 @@ def _read_gsheet_fallback(sheet_name):
         df.columns = [c.lower() for c in df.columns]
         
         if not df.empty:
-            numeric_cols = ['rating', 'thuis_score', 'uit_score', 
-                            'klinkers_thuis_1', 'klinkers_thuis_2', 
+            if 'rating' in df.columns:
+                df['rating'] = df['rating'].astype(str).str.replace(',', '.', regex=False)
+                df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
+
+            numeric_cols = ['thuis_score', 'uit_score',
+                            'klinkers_thuis_1', 'klinkers_thuis_2',
                             'klinkers_uit_1', 'klinkers_uit_2',
                             'score thuis', 'score uit']
             for col in numeric_cols:
@@ -229,7 +233,7 @@ def _read_gsheet_fallback(sheet_name):
             ts_cols = ['timestamp']
             for col in ts_cols:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    df[col] = pd.to_datetime(df[col], errors='coerce', format='mixed')
 
             set_offline_mode(True)
             LAST_FALLBACK_ERROR = None
@@ -263,8 +267,20 @@ def _write_gsheet_records(sheet_name, data_dicts):
             row = []
             for h in headers:
                 val = d.get(h, "")
+                if val is None:
+                    val = ""
+                elif val is SERVER_TIMESTAMP or type(val).__name__ == 'Sentinel':
+                    val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                elif not isinstance(val, (list, dict, tuple, set)):
+                    try:
+                        if pd.isna(val):
+                            val = ""
+                    except (TypeError, ValueError):
+                        pass
                 if isinstance(val, (pd.Timestamp, datetime)):
                     val = val.strftime('%Y-%m-%d %H:%M:%S')
+                elif hasattr(val, 'item') and callable(val.item):
+                    val = val.item()
                 row.append(val)
             rows.append(row)
         
@@ -650,7 +666,7 @@ def _build_matches_df(last_updated):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
             
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
     
     # Enforce column order
@@ -658,7 +674,8 @@ def _build_matches_df(last_updated):
     other_cols = [c for c in df.columns if c not in MATCH_COLUMNS]
     df = df[existing_cols + other_cols]
     
-    df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+    sort_cols = ['timestamp'] + (['match_id'] if 'match_id' in df.columns else [])
+    df = df.sort_values(sort_cols, ascending=False, na_position='last', kind='mergesort').reset_index(drop=True)
     set_offline_mode(False)
     return df
 
@@ -697,17 +714,66 @@ def _build_elo_logs_df(last_updated):
 
     df = pd.DataFrame(elos)
     if 'rating' in df.columns:
-        df['rating'] = df['rating'].astype(str).str.replace(',', '.')
+        df['rating'] = df['rating'].astype(str).str.replace(',', '.', regex=False)
         df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(1000)
-        
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+
+    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
     df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-    
+
+    # Backfill ontbrekende (NaT) timestamps uit store["matches"] via match_id
+    if not df.empty and 'match_id' in df.columns and df['timestamp'].isna().any() and store.get("matches"):
+        raw_m_ts = {
+            str(mid): m.get('timestamp')
+            for mid, m in store["matches"].items()
+            if isinstance(m, dict) and m.get('timestamp') is not None
+        }
+        if raw_m_ts:
+            m_series = pd.to_datetime(pd.Series(raw_m_ts), errors='coerce', format='mixed', utc=True)
+            m_series = normalize_timestamp_series(m_series).dropna()
+            match_ts_map = m_series.to_dict()
+            missing_mask = df['timestamp'].isna()
+            df.loc[missing_mask, 'timestamp'] = df.loc[missing_mask, 'match_id'].astype(str).map(match_ts_map)
+
+    # Filter spook-rijen weg (bijv. oude spelersnaam in GSheet ELO_Logs na naamswijziging in Firestore)
+    if not df.empty and 'match_id' in df.columns and 'speler_naam' in df.columns and store.get("matches"):
+        valid_match_players = {}
+        for mid, m in store["matches"].items():
+            if isinstance(m, dict):
+                players_set = {
+                    str(m.get(col, '')).strip().lower()
+                    for col in ('thuis_1', 'thuis_2', 'uit_1', 'uit_2')
+                    if m.get(col) is not None and str(m.get(col, '')).strip() != ''
+                }
+                if players_set:
+                    valid_match_players[str(mid)] = players_set
+        if valid_match_players:
+            keep_mask = [
+                True if (
+                    pd.isna(mid)
+                    or str(mid).strip() in ('', 'SEASON_RESET')
+                    or str(mid) not in valid_match_players
+                )
+                else (str(pname).strip().lower() in valid_match_players[str(mid)])
+                for mid, pname in zip(df['match_id'], df['speler_naam'])
+            ]
+            df = df[keep_mask]
+
     # Verwijder duplicaten (overlap tussen GSheet history en Firestore on_snapshot)
+    # Behoud verschillende seizoensresets (SEASON_RESET) en losse logs zonder match_id
     if not df.empty and 'match_id' in df.columns and 'speler_naam' in df.columns:
-        df = df.drop_duplicates(subset=['match_id', 'speler_naam'], keep='last')
-        
-    df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+        mid_str = df['match_id'].fillna('').astype(str).str.strip()
+        is_match_row = (mid_str != '') & (mid_str != 'SEASON_RESET')
+        is_reset_row = (mid_str == 'SEASON_RESET')
+        is_other_row = (mid_str == '')
+
+        df_match = df[is_match_row].drop_duplicates(subset=['match_id', 'speler_naam'], keep='last')
+        df_reset = df[is_reset_row].drop_duplicates(subset=['match_id', 'speler_naam', 'timestamp'], keep='last')
+        df_other = df[is_other_row]
+        df = pd.concat([df_match, df_reset, df_other], ignore_index=True)
+
+    sort_cols = ['timestamp'] + [c for c in ['match_id', 'speler_naam'] if c in df.columns]
+    asc = [False] + ([False] if 'match_id' in df.columns else []) + ([True] if 'speler_naam' in df.columns else [])
+    df = df.sort_values(sort_cols, ascending=asc, na_position='last', kind='mergesort').reset_index(drop=True)
     set_offline_mode(False)
     return df
 
@@ -726,19 +792,21 @@ def get_elo_logs():
 @st.cache_data
 def _build_requests_df(last_updated):
     store = init_firestore_listeners()
-    req_list = list(store["requests"].values())
+    req_list = [dict(d) for d in store["requests"].values() if isinstance(d, dict)]
     for d in req_list:
-        if 'Timestamp' in d:
+        if 'Timestamp' in d and 'timestamp' not in d:
             d['timestamp'] = d.pop('Timestamp')
-            
+        elif 'Timestamp' in d:
+            d.pop('Timestamp')
+
     if not req_list:
         return _read_gsheet_fallback("Verzoeken")
     
     df = pd.DataFrame(req_list)
     if not df.empty and 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
         df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+        df = df.sort_values("timestamp", ascending=False, na_position='last').reset_index(drop=True)
         
     set_offline_mode(False)
     return df
@@ -761,9 +829,9 @@ def _build_beheer_log_df(last_updated):
     
     df = pd.DataFrame(log_list)
     if not df.empty and 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
         df['timestamp'] = normalize_timestamp_series(df['timestamp'])
-        df = df.sort_values("timestamp", ascending=False).reset_index(drop=True)
+        df = df.sort_values("timestamp", ascending=False, na_position='last').reset_index(drop=True)
     
     if not df.empty:
         df.columns = [c.lower() for c in df.columns]
@@ -856,50 +924,77 @@ def add_request(text):
         return "Error: Database offline en GSheet schrijven mislukt."
 
 @handle_firestore_exceptions
-def add_match_and_update_elo(match_data, elo_updates):
+def add_match_and_update_elo(match_data, elo_updates, update_current_rating=True):
     log_firestore_op("WRITE", "uitslag", "add_match", 1)
     log_firestore_op("WRITE", "elo", "add_match_elo", len(elo_updates))
     ts = match_data.get('timestamp') or pd.Timestamp.now()
     if hasattr(ts, 'to_pydatetime'):
         ts = ts.to_pydatetime()
+
+    final_match_data = {
+        'timestamp': ts,
+        'thuis_1': match_data.get('thuis_1'),
+        'thuis_2': match_data.get('thuis_2'),
+        'thuis_score': match_data.get('thuis_score'),
+        'uit_1': match_data.get('uit_1'),
+        'uit_2': match_data.get('uit_2'),
+        'uit_score': match_data.get('uit_score'),
+        'klinkers_thuis_1': match_data.get('klinkers_thuis_1', 0),
+        'klinkers_thuis_2': match_data.get('klinkers_thuis_2', 0),
+        'klinkers_uit_1': match_data.get('klinkers_uit_1', 0),
+        'klinkers_uit_2': match_data.get('klinkers_uit_2', 0)
+    }
+
+    name_to_id = {}
+    if update_current_rating:
+        try:
+            p_df = get_players()
+            if p_df is not None and not p_df.empty and 'speler_naam' in p_df.columns and 'speler_id' in p_df.columns:
+                for _, prow in p_df.iterrows():
+                    pid = prow.get('speler_id')
+                    pname = prow.get('speler_naam')
+                    if pname and pid and not str(pid).startswith("OFFLINE_"):
+                        name_to_id[str(pname)] = str(pid)
+        except Exception:
+            name_to_id = {}
+
     try:
         batch = db.batch()
         new_match_ref = matches_ref.document()
         match_id = new_match_ref.id
-        
-        # Geordende dict voor Firestore (Python 3.7+ behoudt volgorde)
-        final_match_data = {
-            'match_id': match_id,
-            'timestamp': ts,
-            'thuis_1': match_data.get('thuis_1'),
-            'thuis_2': match_data.get('thuis_2'),
-            'thuis_score': match_data.get('thuis_score'),
-            'uit_1': match_data.get('uit_1'),
-            'uit_2': match_data.get('uit_2'),
-            'uit_score': match_data.get('uit_score'),
-            'klinkers_thuis_1': match_data.get('klinkers_thuis_1', 0),
-            'klinkers_thuis_2': match_data.get('klinkers_thuis_2', 0),
-            'klinkers_uit_1': match_data.get('klinkers_uit_1', 0),
-            'klinkers_uit_2': match_data.get('klinkers_uit_2', 0)
-        }
-        
+        final_match_data['match_id'] = match_id
         batch.set(new_match_ref, final_match_data)
 
         for naam, elo in elo_updates:
             batch.set(elo_ref.document(), {'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id})
-            p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', naam)).limit(1).get()
-            if p_docs: batch.update(p_docs[0].reference, {'rating': elo})
+            if update_current_rating:
+                pid = name_to_id.get(str(naam))
+                if pid:
+                    batch.update(players_ref.document(pid), {'rating': elo})
+                else:
+                    p_docs = players_ref.where(filter=FieldFilter('speler_naam', '==', naam)).limit(1).get()
+                    if p_docs:
+                        batch.update(p_docs[0].reference, {'rating': elo})
 
         batch.commit()
-        clear_all_caches(only_matches=True, only_elo=True)
+        clear_all_caches(only_players=bool(update_current_rating), only_matches=True, only_elo=True)
         return True
     except Exception:
         match_id = f"OFFLINE_{uuid.uuid4().hex[:10]}"
-        m_success = _write_gsheet_record("Wedstrijden", {**match_data, 'timestamp': ts, 'match_id': match_id})
+        final_match_data['match_id'] = match_id
+        m_success = _write_gsheet_record("Wedstrijden", final_match_data)
         if m_success:
             elo_records = [{'speler_naam': naam, 'rating': elo, 'timestamp': ts, 'match_id': match_id} for naam, elo in elo_updates]
             _write_gsheet_records("ELO_Logs", elo_records)
-            clear_all_caches(only_matches=True, only_elo=True)
+            try:
+                store = init_firestore_listeners()
+                store["matches"][match_id] = dict(final_match_data)
+                for rec in elo_records:
+                    store["elo"][f"{match_id}_{rec['speler_naam']}"] = dict(rec)
+            except Exception:
+                pass
+            set_offline_mode(True)
+            clear_all_caches(only_players=bool(update_current_rating), only_matches=True, only_elo=True)
             return True
         return False
 
@@ -1685,7 +1780,7 @@ def inspect_collections(max_docs=250):
     mapping = {
         "spelers": ("players", players_ref),
         "uitslag": ("matches", matches_ref),
-        "elo": ("elo_logs", elo_ref),
+        "elo": ("elo", elo_ref),
         "requests": ("requests", requests_ref),
     }
     results = {}
