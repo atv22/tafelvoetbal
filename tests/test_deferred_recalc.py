@@ -210,3 +210,47 @@ def test_check_duplicate_match():
     # Test D: Zelfde spelers binnen 24 uur, maar met een ANDERE score (moet False retourneren)
     assert check_duplicate_match(selected_names, 10, 8, input_ts_a, matches_df) is False
 
+
+def test_multi_season_recalc_queue(monkeypatch):
+    """Wijzigingen in meerdere seizoenen blijven behouden en worden chronologisch herberekend."""
+    db.set_recalc_needed_flag(
+        pd.Timestamp("2026-03-15 00:00:00"),
+        pd.Timestamp("2026-09-15 23:59:59"),
+        "CJ 2026 Zomer",
+        pd.Timestamp("2026-08-01 12:00:00"),
+    )
+    db.set_recalc_needed_flag(
+        pd.Timestamp("2026-09-16 00:00:00"),
+        pd.Timestamp("2027-03-14 23:59:59"),
+        "CJ 2026 Winter",
+        pd.Timestamp("2026-10-05 14:00:00"),
+    )
+
+    status = db.get_recalc_status()
+    assert status is not None
+    assert status.get("recalc_needed") is True
+    pending = status.get("pending_recalcs", {})
+    assert set(pending.keys()) == {"CJ 2026 Zomer", "CJ 2026 Winter"}
+
+    config_ref = db.db.collection("system_config").document("elo_recalc")
+    config_ref.update({"last_recalc_time": datetime.now() - timedelta(days=2)})
+
+    called = []
+
+    def mock_recalc(ts, start, end):
+        called.append((pd.Timestamp(ts), pd.Timestamp(start), pd.Timestamp(end)))
+        return True
+
+    monkeypatch.setattr(db, "recalculate_elos_from", mock_recalc)
+    db.check_and_run_scheduled_recalc()
+
+    assert len(called) == 2
+    assert called[0][0] == pd.Timestamp("2026-08-01 12:00:00")
+    assert called[1][0] == pd.Timestamp("2026-10-05 14:00:00")
+
+    final_state = config_ref.get().to_dict()
+    assert final_state.get("recalc_needed") is False
+    assert final_state.get("earliest_modified_timestamp") is None
+    assert final_state.get("pending_recalcs") == {}
+
+
