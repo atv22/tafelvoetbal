@@ -61,16 +61,22 @@ def calculate_stats(players, matches, elo_df=None, season_start=None, season_end
             s_end = pd.to_datetime(season_end)
             if s_end.tzinfo is not None: s_end = s_end.tz_localize(None)
             
-            elo_ts = pd.to_datetime(elo_df['timestamp'])
-            if elo_ts.dt.tz is not None: elo_ts = elo_ts.dt.tz_localize(None)
-            
+            elo_ts = db.normalize_timestamp_series(
+                pd.to_datetime(elo_df['timestamp'], errors='coerce', format='mixed', utc=True)
+            )
             # Haal logs voor deze speler in dit seizoen
-            p_elo_logs = elo_df[(elo_df['speler_naam'].str.lower() == p_name.lower()) & 
-                                (elo_ts >= s_start) & 
+            p_elo_logs = elo_df[(elo_df['speler_naam'].str.lower() == p_name.lower()) &
+                                (elo_ts >= s_start) &
                                 (elo_ts <= s_end)]
             if not p_elo_logs.empty:
-                # elo_df is gesorteerd aflopend op timestamp, dus de eerste (index 0) is de laatste van het seizoen
-                rating_value = p_elo_logs.iloc[0]['rating']
+                p_valid = p_elo_logs
+                if 'match_id' in p_valid.columns:
+                    non_reset = p_valid[p_valid['match_id'].fillna('').astype(str) != 'SEASON_RESET']
+                    if not non_reset.empty:
+                        p_valid = non_reset
+                p_valid = p_valid.assign(_ts_sort=elo_ts.loc[p_valid.index])
+                sort_c = ['_ts_sort'] + (['match_id'] if 'match_id' in p_valid.columns else [])
+                rating_value = p_valid.sort_values(sort_c, ascending=True, na_position='first', kind='mergesort').iloc[-1]['rating']
         else:
             # Fallback naar huidige all-time rating als we geen seizoensinfo hebben
             rating_value = player.get('rating', 1000)
@@ -88,33 +94,70 @@ def calculate_stats(players, matches, elo_df=None, season_start=None, season_end
 
 
 @st.cache_data
-def calculate_elo_trends(elo_df):
-    """Bereken het verschil in ELO per speler op basis van de laatste 2 verschillende wedstrijden"""
+def calculate_elo_trends(elo_df, season_start=None, season_end=None):
+    """Bereken het verschil in ELO per speler op basis van de laatste wedstrijd (binnen seizoen indien opgegeven)."""
     if elo_df is None or elo_df.empty:
         return {}
-    
+
     trends = {}
     df = elo_df.copy()
-    
-    # Filter SEASON_RESET logs uit voor de trend, anders krijg je enorme sprongen
-    if 'match_id' in df.columns:
-        df = df[df['match_id'] != 'SEASON_RESET']
-        
     df['speler_naam'] = df['speler_naam'].astype(str)
-    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-    
-    # Sorteer op tijd (zet NaT helemaal vooraan zodat ze als oudste tellen)
-    df = df.sort_values(['timestamp'], ascending=[True], na_position='first')
-    
-    for speler, group in df.groupby('speler_naam'):
-        if len(group) >= 2:
-            ratings = group['rating'].tolist()
-            last_elo = ratings[-1]
-            prev_elo = ratings[-2]
-            trends[speler] = int(round(last_elo - prev_elo))
+    df['_ts_naive'] = db.normalize_timestamp_series(
+        pd.to_datetime(df['timestamp'], errors='coerce', format='mixed', utc=True)
+    )
+
+    has_mid = 'match_id' in df.columns
+    if has_mid:
+        mid_str = df['match_id'].fillna('').astype(str).str.strip()
+        is_reset = mid_str == 'SEASON_RESET'
+        is_match = (mid_str != '') & (~is_reset)
+    else:
+        is_reset = pd.Series(False, index=df.index)
+        is_match = pd.Series(True, index=df.index)
+
+    s_start = None
+    if season_start is not None and season_end is not None:
+        s_start, s_end = db._season_bounds_naive(season_start, season_end)
+        in_season = (df['_ts_naive'] >= s_start) & (df['_ts_naive'] <= s_end)
+        season_match_df = df[is_match & in_season].copy()
+        season_reset_df = df[is_reset & in_season].copy()
+        pre_season_match_df = df[is_match & (df['_ts_naive'] < s_start)].copy()
+    else:
+        season_match_df = df[is_match].copy()
+        season_reset_df = df[is_reset].copy()
+        pre_season_match_df = pd.DataFrame()
+
+    sort_cols = ['_ts_naive'] + (['match_id'] if has_mid else [])
+    season_match_df = season_match_df.sort_values(sort_cols, ascending=True, na_position='first', kind='mergesort')
+
+    reset_map = {}
+    if not season_reset_df.empty:
+        season_reset_df = season_reset_df.sort_values(['_ts_naive'], ascending=True, na_position='first', kind='mergesort')
+        for _, rrow in season_reset_df.drop_duplicates(subset=['speler_naam'], keep='last').iterrows():
+            reset_map[rrow['speler_naam']] = float(rrow['rating'])
+
+    pre_last_map = {}
+    if not pre_season_match_df.empty:
+        pre_season_match_df = pre_season_match_df.sort_values(sort_cols, ascending=True, na_position='first', kind='mergesort')
+        for _, prow in pre_season_match_df.drop_duplicates(subset=['speler_naam'], keep='last').iterrows():
+            pre_last_map[prow['speler_naam']] = float(prow['rating'])
+
+    for speler, group in season_match_df.groupby('speler_naam'):
+        ratings = group['rating'].tolist()
+        if len(ratings) >= 2:
+            trends[speler] = int(round(float(ratings[-1]) - float(ratings[-2])))
+        elif len(ratings) == 1 and s_start is not None:
+            r0 = float(ratings[0])
+            if speler in reset_map:
+                prev = reset_map[speler]
+            elif speler not in pre_last_map or (850.0 <= r0 <= 1150.0):
+                prev = 1000.0
+            else:
+                prev = pre_last_map[speler]
+            trends[speler] = int(round(r0 - prev))
         else:
             trends[speler] = 0
-            
+
     return trends
 
 
@@ -126,9 +169,13 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         return
 
     if current_season is not None:
-        match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
-        season_start = pd.to_datetime(current_season.get('start_datum', current_season.get('startdatum')))
-        season_end = pd.to_datetime(current_season.get('eind_datum', current_season.get('einddatum')))
+        match_dates = db.normalize_timestamp_series(
+            pd.to_datetime(matches_df['timestamp'], errors='coerce', format='mixed', utc=True)
+        )
+        season_start, season_end = db._season_bounds_naive(
+            current_season.get('start_datum', current_season.get('startdatum')),
+            current_season.get('eind_datum', current_season.get('einddatum'))
+        )
         season_matches = matches_df[(match_dates >= season_start) & (match_dates <= season_end)]
 
         season_players = set()
@@ -156,8 +203,8 @@ def show_elo_rankings(players_df, matches_df, elo_df=None, current_season=None):
         st.info("Geen geldige spelers gevonden in dit seizoen.")
         return
 
-    # Trend berekenen (numeriek)
-    trends = calculate_elo_trends(elo_df)
+    # Trend berekenen (numeriek binnen het huidige seizoen)
+    trends = calculate_elo_trends(elo_df, season_start, season_end)
     stats_df['Trend'] = stats_df['Speler'].map(lambda x: int(round(trends.get(x, 0))))
 
         
@@ -274,11 +321,7 @@ def render_home_tab(players_df, matches_df, seasons_df=None, elo_df=None):
         end_dt = pd.to_datetime(huidig_seizoen.get('eind_datum', huidig_seizoen.get('einddatum')))
         
         st.info(f"📅 **Huidig Seizoen:** {huidig_seizoen['seizoen_naam']} ({start_dt.strftime('%d-%m-%Y')} t/m {end_dt.strftime('%d-%m-%Y')})")
-        
-        # Filter matches voor weergave van Top 3
-        match_dates = pd.to_datetime(matches_df['timestamp']).dt.tz_localize(None)
-        season_matches = matches_df[(match_dates >= start_dt) & (match_dates <= end_dt)]
-        
+
         # Ranglijst tonen
         show_elo_rankings(players_df, matches_df, elo_df, huidig_seizoen)
         

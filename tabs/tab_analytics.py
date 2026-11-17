@@ -61,7 +61,8 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             match_count = len(s_matches)
             
             # Sla lege historische seizoenen zonder wedstrijden over (behalve als het het huidige seizoen is)
-            now_naive = pd.Timestamp.now()
+            from utils.utils import get_nl_now
+            now_naive = pd.Timestamp(get_nl_now().replace(tzinfo=None))
             is_current = start <= now_naive <= end
             if match_count == 0 and not is_current:
                 continue
@@ -148,14 +149,13 @@ def render_seizoenen_tab(matches_df, players_df, seasons_df, elo_df=None):
             season_end = pd.to_datetime(season_row[end_col], utc=True)
             season_start = normalize_timestamp_series(pd.Series([season_start])).iloc[0]
             season_end = normalize_timestamp_series(pd.Series([season_end])).iloc[0]
-            ts = filtered_matches['timestamp']
-            if hasattr(ts.dt, 'tz') and ts.dt.tz is not None:
-                filtered_matches['timestamp'] = normalize_timestamp_series(ts)
+            ts = pd.to_datetime(filtered_matches['timestamp'], errors='coerce', format='mixed', utc=True)
+            filtered_matches['timestamp'] = normalize_timestamp_series(ts)
             filtered_matches = filtered_matches[(filtered_matches['timestamp'] >= season_start) & (filtered_matches['timestamp'] <= season_end)]
             if not filtered_elo_df.empty and 'timestamp' in filtered_elo_df.columns:
-                elo_ts = pd.to_datetime(filtered_elo_df['timestamp'], errors='coerce')
-                if hasattr(elo_ts.dt, 'tz') and elo_ts.dt.tz is not None:
-                    elo_ts = normalize_timestamp_series(elo_ts)
+                elo_ts = normalize_timestamp_series(
+                    pd.to_datetime(filtered_elo_df['timestamp'], errors='coerce', format='mixed', utc=True)
+                )
                 filtered_elo_df = filtered_elo_df[(elo_ts >= season_start) & (elo_ts <= season_end)]
 
     # --- 4. Analyse resultaten ---

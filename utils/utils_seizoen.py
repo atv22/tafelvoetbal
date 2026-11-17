@@ -3,7 +3,13 @@ Seizoen utilities voor de tafelvoetbal app - Prinsjesdag gebaseerd systeem
 """
 import pandas as pd
 import streamlit as st
+import zoneinfo
 from datetime import date, timedelta, datetime
+
+
+def _get_nl_today():
+    """Geeft de huidige datum in Europe/Amsterdam."""
+    return datetime.now(zoneinfo.ZoneInfo("Europe/Amsterdam")).date()
 
 
 def get_prinsjesdag(year):
@@ -30,7 +36,7 @@ def generate_prinsjesdag_seasons(matches_df):
     prinsjesdag_seasons = []
 
     try:
-        current_year = date.today().year
+        current_year = _get_nl_today().year
 
         # Bepaal jaar bereik
         if not matches_df.empty:
@@ -98,8 +104,12 @@ def generate_prinsjesdag_seasons(matches_df):
                     except Exception:
                         pass
 
-                    season_start_tz_naive = pd.to_datetime(season.get('start_datum') or season.get('start_datum'), errors='coerce')
-                    season_end_tz_naive = pd.to_datetime(season.get('eind_datum') or season.get('eind_datum'), errors='coerce')
+                    season_start_tz_naive = pd.to_datetime(season.get('start_datum') or season.get('startdatum'), errors='coerce')
+                    season_end_tz_naive = pd.to_datetime(season.get('eind_datum') or season.get('einddatum'), errors='coerce')
+                    if getattr(season_start_tz_naive, 'tzinfo', None) is not None:
+                        season_start_tz_naive = season_start_tz_naive.tz_localize(None)
+                    if getattr(season_end_tz_naive, 'tzinfo', None) is not None:
+                        season_end_tz_naive = season_end_tz_naive.tz_localize(None)
                     season_matches = matches_df[
                         (match_dates_tz_naive >= season_start_tz_naive) &
                         (match_dates_tz_naive <= season_end_tz_naive)
@@ -108,7 +118,7 @@ def generate_prinsjesdag_seasons(matches_df):
                     if len(season_matches) == 0:
                         continue
 
-                    if season_start_tz_naive.date() > date.today():
+                    if season_start_tz_naive.date() > _get_nl_today():
                         continue
 
                     if 'thuis_score' in season_matches.columns and 'uit_score' in season_matches.columns:
@@ -163,9 +173,9 @@ def get_season_matches(matches_df, season_info):
 
         # Converteer alle datums naar timezone-naive voor vergelijking
         if 'datum' in matches_df.columns:
-            match_dates = pd.to_datetime(matches_df['datum'], errors='coerce')
+            match_dates = pd.to_datetime(matches_df['datum'], errors='coerce', format='mixed', utc=True)
         elif 'timestamp' in matches_df.columns:
-            match_dates = pd.to_datetime(matches_df['timestamp'], errors='coerce')
+            match_dates = pd.to_datetime(matches_df['timestamp'], errors='coerce', format='mixed', utc=True)
         else:
             match_dates = pd.Series([], dtype='datetime64[ns]')
 
@@ -183,6 +193,8 @@ def get_season_matches(matches_df, season_info):
             season_start = season_start.tz_convert('UTC').tz_localize(None)
         if hasattr(season_end, 'tzinfo') and season_end.tzinfo is not None:
             season_end = season_end.tz_convert('UTC').tz_localize(None)
+        if pd.notna(season_end) and season_end.hour == 0 and season_end.minute == 0 and season_end.second == 0:
+            season_end = season_end.replace(hour=23, minute=59, second=59, microsecond=999999)
         
         # Filter wedstrijden binnen seizoen periode
         season_mask = (match_dates >= season_start) & (match_dates <= season_end)
@@ -292,7 +304,7 @@ def format_season_period(season_info):
 def is_season_current(season_info):
     """Check of een seizoen het huidige seizoen is"""
     try:
-        today = date.today()
+        today = _get_nl_today()
         start_val = season_info.get('start_datum') if 'start_datum' in season_info else season_info.get('startdatum')
         end_val = season_info.get('eind_datum') if 'eind_datum' in season_info else season_info.get('einddatum')
         season_start = pd.to_datetime(start_val).date()
@@ -318,7 +330,7 @@ def get_current_season(seasons_df):
 def create_season_options(seasons_df, matches_df):
     """Maak seizoen opties voor selectbox met match counts"""
     season_options = []
-    current_date = date.today()
+    current_date = _get_nl_today()
     current_season_id = None
     
     for idx, season in seasons_df.iterrows():

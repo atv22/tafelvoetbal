@@ -108,27 +108,35 @@ def get_absolute_top3_elo(elo_df):
 def get_season_top3_elo(elo_df, seizoen_matches):
     """
     Bepaal de top 3 spelers met hoogste laatst bekende ELO aan het einde van het seizoen.
+    Geeft prioriteit aan gekwalificeerde spelers (min. 3 gespeelde wedstrijden in het seizoen).
     """
     if elo_df is None or elo_df.empty or seizoen_matches is None or seizoen_matches.empty:
         return []
-    
-    # Bepaal alle match_ids in het seizoen
+
     match_ids_in_season = set(seizoen_matches['match_id']) if 'match_id' in seizoen_matches.columns else set()
-    
-    # Filter ELO-logs op matches in seizoen
     elo_season = elo_df[elo_df['match_id'].isin(match_ids_in_season)].copy()
-    
-    # Filter 'Niemand' en test-spelers uit
     elo_season = elo_season[~elo_season['speler_naam'].str.lower().str.strip().isin(IGNORE_PLAYERS)]
-    
+
     if elo_season.empty:
         return []
-    
-    # Pak per speler de laatste ELO in het seizoen
-    # Gebruik utc=True om ValueError met tz-aware datums te voorkomen
-    elo_season['timestamp'] = pd.to_datetime(elo_season['timestamp'], utc=True).dt.tz_localize(None)
-    latest_elo = elo_season.sort_values('timestamp').groupby('speler_naam').last().reset_index()
-    top3 = latest_elo.sort_values('rating', ascending=False).head(3)
+
+    elo_season['timestamp'] = pd.to_datetime(elo_season['timestamp'], errors='coerce', format='mixed', utc=True).dt.tz_localize(None)
+    sort_cols = ['timestamp'] + (['match_id'] if 'match_id' in elo_season.columns else [])
+    elo_season = elo_season.sort_values(sort_cols, ascending=True, na_position='first', kind='mergesort')
+    latest_elo = elo_season.drop_duplicates(subset=['speler_naam'], keep='last').copy()
+
+    stats = get_vectorized_player_stats(seizoen_matches)
+    qualified = set()
+    if stats is not None and not stats.empty:
+        qualified = set(stats[stats['Matches'] >= 3]['Speler'].astype(str).tolist())
+
+    latest_elo['_qualified'] = latest_elo['speler_naam'].astype(str).isin(qualified)
+    if int(latest_elo['_qualified'].sum()) >= 3:
+        pool = latest_elo[latest_elo['_qualified']]
+        top3 = pool.sort_values('rating', ascending=False).head(3)
+    else:
+        top3 = latest_elo.sort_values(['_qualified', 'rating'], ascending=[False, False]).head(3)
+
     return list(zip(top3['speler_naam'], top3['rating']))
 
 
