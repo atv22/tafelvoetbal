@@ -71,12 +71,6 @@ def sync_to_sheets():
                 print(f"Geen data gevonden voor {sheet_name}, overslaan.")
                 continue
             
-            # Timestamp conversie naar string voor Sheets (voorkomt JSON serialisatie errors)
-            df = df.copy()
-            for col in df.columns:
-                if pd.api.types.is_datetime64_any_dtype(df[col]):
-                    df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-            
             # Zorg dat de worksheet bestaat
             try:
                 worksheet = sh.worksheet(sheet_name)
@@ -84,15 +78,9 @@ def sync_to_sheets():
                 worksheet = sh.add_worksheet(title=sheet_name, rows="100", cols="20")
                 print(f"Nieuw tabblad '{sheet_name}' aangemaakt.")
             
-            # Leegmaken
-            worksheet.clear()
-            
-            # Dataframe naar lijst van lijsten (inclusief header)
-            # We vullen NaNs met lege strings
-            data = [df.columns.values.tolist()] + df.fillna('').values.tolist()
-            
-            # Update de sheet
-            worksheet.update(values=data, range_name='A1')
+            # Serialiseer en vervang veilig (wist geen data bij serialisatie- of API-fout)
+            data = db_service._df_to_gsheet_rows(df)
+            db_service._safe_replace_worksheet(worksheet, data)
             print(f"Succesvol {len(df)} rijen gesynchroniseerd naar '{sheet_name}'.")
 
             

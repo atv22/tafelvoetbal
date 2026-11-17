@@ -4,6 +4,7 @@ import os
 import google.cloud.firestore
 from google.oauth2 import service_account
 import json
+import math
 import pandas as pd
 import uuid
 import traceback
@@ -244,6 +245,97 @@ def _read_gsheet_fallback(sheet_name):
         print(f"[GSHEET FALLBACK] Fout bij lezen van {sheet_name}: {e}")
         return pd.DataFrame()
 
+def _rowcol_to_a1(row, col):
+    """Zet 1-gebaseerde rij- en kolomnummers om naar een A1-celreferentie."""
+    letters = ""
+    c = int(col)
+    while c > 0:
+        c, rem = divmod(c - 1, 26)
+        letters = chr(65 + rem) + letters
+    return f"{letters}{int(row)}"
+
+def _sanitize_gsheet_cell(val):
+    """Maakt een celwaarde veilig voor JSON-serialisatie richting Google Sheets."""
+    if val is None:
+        return ""
+    if val is SERVER_TIMESTAMP or type(val).__name__ == 'Sentinel':
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if isinstance(val, (list, tuple, set)):
+        items = [_sanitize_gsheet_cell(x) for x in val]
+        return ", ".join(str(x) for x in items if x is not None and str(x) != "")
+    if isinstance(val, dict):
+        clean_dict = {str(k): _sanitize_gsheet_cell(v) for k, v in val.items()}
+        return json.dumps(clean_dict, ensure_ascii=False, default=str)
+    try:
+        if pd.isna(val):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, (pd.Timestamp, datetime)):
+        return val.strftime('%Y-%m-%d %H:%M:%S')
+    if hasattr(val, 'item') and callable(val.item):
+        val = val.item()
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return ""
+    if not isinstance(val, (str, int, float, bool)):
+        return str(val)
+    return val
+
+def _df_to_gsheet_rows(df):
+    """Converteert een DataFrame inclusief headers naar Google Sheets-veilige rijen."""
+    headers = [str(c) for c in df.columns.tolist()]
+    rows = [headers]
+    for row in df.itertuples(index=False, name=None):
+        rows.append([_sanitize_gsheet_cell(v) for v in row])
+    return rows
+
+def _build_players_sync_df(fs_players, updated_player_elos=None):
+    """Stelt een geordend Spelers-DataFrame samen vanuit Firestore spelersdata voor Google Sheets."""
+    rows_data = []
+    for pid, pdata in fs_players.items():
+        row_d = {**(pdata or {}), 'speler_id': pid}
+        if updated_player_elos:
+            pname = str(row_d.get('speler_naam', ''))
+            if pname in updated_player_elos:
+                row_d['rating'] = updated_player_elos[pname]
+        rows_data.append(row_d)
+    p_sync_df = pd.DataFrame(rows_data)
+    pref_cols = [c for c in ['speler_id', 'speler_naam', 'rating'] if c in p_sync_df.columns]
+    rest_cols = [c for c in p_sync_df.columns if c not in pref_cols]
+    return p_sync_df[pref_cols + rest_cols]
+
+def _safe_replace_worksheet(ws, rows_with_header, existing_vals=None):
+    """Vervangt worksheet-inhoud veilig zonder eerst te wissen (voorkomt dataverlies bij fouten)."""
+    clean_rows = [
+        [_sanitize_gsheet_cell(v) for v in row]
+        for row in (rows_with_header or [])
+    ]
+    if not clean_rows:
+        return True
+
+    if existing_vals is None:
+        try:
+            existing_vals = ws.get_all_values()
+        except Exception:
+            existing_vals = []
+
+    old_rows = len(existing_vals)
+    old_cols = max((len(r) for r in existing_vals), default=0)
+
+    ws.update(values=clean_rows, range_name='A1')
+
+    new_rows = len(clean_rows)
+    new_cols = max((len(r) for r in clean_rows), default=0)
+    clear_ranges = []
+    if old_rows > new_rows and max(old_cols, new_cols) > 0:
+        end_col = max(old_cols, new_cols)
+        clear_ranges.append(f"{_rowcol_to_a1(new_rows + 1, 1)}:{_rowcol_to_a1(old_rows, end_col)}")
+    if old_cols > new_cols and new_rows > 0:
+        clear_ranges.append(f"{_rowcol_to_a1(1, new_cols + 1)}:{_rowcol_to_a1(new_rows, old_cols)}")
+    if clear_ranges and hasattr(ws, 'batch_clear'):
+        ws.batch_clear(clear_ranges)
+    return True
+
 def _write_gsheet_records(sheet_name, data_dicts):
     """Schrijft meerdere records naar Google Sheets."""
     if not data_dicts: return True
@@ -261,29 +353,11 @@ def _write_gsheet_records(sheet_name, data_dicts):
         headers = worksheet.row_values(1)
         if not headers:
             headers = list(data_dicts[0].keys())
-            worksheet.append_row(headers)
+            worksheet.append_row([str(h) for h in headers])
         
         rows = []
         for d in data_dicts:
-            row = []
-            for h in headers:
-                val = d.get(h, "")
-                if val is None:
-                    val = ""
-                elif val is SERVER_TIMESTAMP or type(val).__name__ == 'Sentinel':
-                    val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                elif not isinstance(val, (list, dict, tuple, set)):
-                    try:
-                        if pd.isna(val):
-                            val = ""
-                    except (TypeError, ValueError):
-                        pass
-                if isinstance(val, (pd.Timestamp, datetime)):
-                    val = val.strftime('%Y-%m-%d %H:%M:%S')
-                elif hasattr(val, 'item') and callable(val.item):
-                    val = val.item()
-                row.append(val)
-            rows.append(row)
+            rows.append([_sanitize_gsheet_cell(d.get(h, "")) for h in headers])
         
         worksheet.append_rows(rows)
         return True
@@ -318,8 +392,7 @@ def _delete_gsheet_record(sheet_name, key_col, value):
                 rows_to_keep.append(row)
         
         if len(rows_to_keep) < len(all_values):
-            worksheet.clear()
-            worksheet.update(values=rows_to_keep, range_name='A1')
+            _safe_replace_worksheet(worksheet, rows_to_keep, existing_vals=all_values)
         return True
     except Exception as e:
         print(f"[GSHEET DELETE] Fout bij verwijderen uit {sheet_name}: {e}")
@@ -399,7 +472,7 @@ def reconcile_data_sources(force=False):
         gs_p_ids = set(gs_players_df['speler_id'].unique()) if not gs_players_df.empty and 'speler_id' in gs_players_df.columns else set()
 
         missing_p_in_gs = set(fs_players.keys()) - gs_p_ids
-        players_mismatch = False
+        players_mismatch = gs_players_df.empty and bool(fs_players)
         if not gs_players_df.empty and 'speler_id' in gs_players_df.columns:
             gs_map = {str(r['speler_id']): r for _, r in gs_players_df.iterrows()}
             for pid, pdata in fs_players.items():
@@ -424,12 +497,8 @@ def reconcile_data_sources(force=False):
                     ws_p = sh.worksheet("Spelers")
                 except Exception:
                     ws_p = sh.add_worksheet(title="Spelers", rows="100", cols="10")
-                p_sync_df = pd.DataFrame([{**pdata, 'speler_id': pid} for pid, pdata in fs_players.items()])
-                pref_cols = [c for c in ['speler_id', 'speler_naam', 'rating'] if c in p_sync_df.columns]
-                rest_cols = [c for c in p_sync_df.columns if c not in pref_cols]
-                p_sync_df = p_sync_df[pref_cols + rest_cols].fillna('')
-                ws_p.clear()
-                ws_p.update(values=[p_sync_df.columns.tolist()] + p_sync_df.values.tolist(), range_name='A1')
+                p_sync_df = _build_players_sync_df(fs_players)
+                _safe_replace_worksheet(ws_p, _df_to_gsheet_rows(p_sync_df))
 
         set_offline_mode(False)
         print("[SYNC] Synchronisatie voltooid.")
@@ -722,16 +791,19 @@ def _sync_recalculated_elo_to_gsheet(range_start, range_end, new_records, update
             for h in headers:
                 if h not in new_df.columns:
                     new_df[h] = ""
-            combined = pd.concat([kept_df[headers], new_df[headers]], ignore_index=True).fillna("")
-            ws_elo.clear()
-            ws_elo.update(values=[headers] + combined.values.tolist(), range_name='A1')
+            combined = pd.concat([kept_df[headers], new_df[headers]], ignore_index=True)
+            _safe_replace_worksheet(ws_elo, _df_to_gsheet_rows(combined[headers]), existing_vals=all_vals)
         except Exception as e:
             print(f"[GSHEET SYNC] Kon ELO_Logs niet bijwerken: {e}")
 
         if updated_player_elos:
             try:
-                ws_players = sh.worksheet("Spelers")
+                try:
+                    ws_players = sh.worksheet("Spelers")
+                except Exception:
+                    ws_players = sh.add_worksheet(title="Spelers", rows="100", cols="10")
                 p_vals = ws_players.get_all_values()
+                rebuilt = False
                 if p_vals and len(p_vals) > 1:
                     p_headers = [h.strip() for h in p_vals[0]]
                     if 'speler_naam' in p_headers and 'rating' in p_headers:
@@ -744,8 +816,13 @@ def _sync_recalculated_elo_to_gsheet(range_start, range_end, new_records, update
                             if pname in updated_player_elos:
                                 row_padded[rating_idx] = updated_player_elos[pname]
                             updated_rows.append(row_padded[:len(p_headers)])
-                        ws_players.clear()
-                        ws_players.update(values=updated_rows, range_name='A1')
+                        _safe_replace_worksheet(ws_players, updated_rows, existing_vals=p_vals)
+                        rebuilt = True
+                if not rebuilt:
+                    fs_players = {p.id: p.to_dict() for p in players_ref.stream()}
+                    if fs_players:
+                        p_sync_df = _build_players_sync_df(fs_players, updated_player_elos=updated_player_elos)
+                        _safe_replace_worksheet(ws_players, _df_to_gsheet_rows(p_sync_df), existing_vals=p_vals)
             except Exception as e:
                 print(f"[GSHEET SYNC] Kon Spelers niet bijwerken: {e}")
         return True
@@ -1466,8 +1543,7 @@ def rename_player(old_name: str, new_name: str) -> tuple[bool, str]:
                                 changed = True
                         new_rows.append(r_copy)
                     if changed:
-                        ws.clear()
-                        ws.update(values=new_rows, range_name='A1')
+                        _safe_replace_worksheet(ws, new_rows, existing_vals=vals)
                 except Exception as gs_err:
                     print(f"[GSHEET RENAME] Fout bij bijwerken van {sname}: {gs_err}")
     except Exception as e:

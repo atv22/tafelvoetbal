@@ -11,6 +11,15 @@ from utils.utils_seizoen import get_current_season, generate_prinsjesdag_seasons
 from utils.utils import IGNORE_PLAYERS
 from analytics import get_vectorized_player_stats
 
+def _parse_elo_int(rating_value, default=1000):
+    """Zet een ELO-waarde veilig om naar een afgerond geheel getal."""
+    try:
+        if rating_value is None or rating_value == '' or pd.isna(rating_value):
+            return default
+        return int(round(float(str(rating_value).replace(',', '.'))))
+    except (ValueError, TypeError):
+        return default
+
 @st.cache_data
 def calculate_stats(players, matches, elo_df=None, season_start=None, season_end=None):
     """Bereken statistieken voor alle spelers met vectorized Pandas operations"""
@@ -20,7 +29,7 @@ def calculate_stats(players, matches, elo_df=None, season_start=None, season_end
         for _, player in players.iterrows():
             stats_list.append({
                 'Speler': player.get('speler_naam', ''),
-                'ELO': int(player.get('rating', 1000)),
+                'ELO': _parse_elo_int(player.get('rating', 1000)),
                 'Gespeeld': 0, 'Voor': 0, 'Tegen': 0, 'Doelsaldo': 0, 'Klinkers': 0, 'Win%': 0.0, 'Gem. Goals': 0.0
             })
         return pd.DataFrame(stats_list)
@@ -81,12 +90,7 @@ def calculate_stats(players, matches, elo_df=None, season_start=None, season_end
             # Fallback naar huidige all-time rating als we geen seizoensinfo hebben
             rating_value = player.get('rating', 1000)
             
-        if pd.isna(rating_value) or rating_value == '':
-            rating_value = 1000
-        try:
-            stats['ELO'] = int(float(str(rating_value).replace(',', '.')))
-        except (ValueError, TypeError):
-            stats['ELO'] = 1000
+        stats['ELO'] = _parse_elo_int(rating_value)
             
         stats_list.append(stats)
         

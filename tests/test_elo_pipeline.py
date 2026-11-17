@@ -439,3 +439,114 @@ def test_process_match_submission_timestamp_dedup_and_deferred_reset(monkeypatch
     assert ok2 is True
     assert added_calls[0][0]['timestamp'] == pd.Timestamp('2026-09-20 12:00:01').to_pydatetime()
 
+
+def test_gsheet_sanitization_handles_lists_timestamps_and_preserves_sheet_on_error():
+    import json
+    import numpy as np
+
+    df = pd.DataFrame([
+        {
+            'speler_id': 'p1',
+            'speler_naam': 'Léon',
+            'rating': np.float64(1035.66),
+            'aliassen': ['Léon', 'Lee'],
+            'meta': {'a': 1},
+            'ts': pd.Timestamp('2026-09-16 00:00:00', tz='UTC'),
+        },
+        {
+            'speler_id': 'p2',
+            'speler_naam': 'Johannes',
+            'rating': np.nan,
+            'aliassen': [],
+            'meta': None,
+            'ts': pd.NaT,
+        },
+    ])
+    rows = db._df_to_gsheet_rows(df)
+    # Strikte JSON-serialiseerbaarheid zonder geneste lijsten of NaN
+    dumped = json.dumps(rows, allow_nan=False)
+    assert '"L\\u00e9on, Lee"' in dumped or '"Léon, Lee"' in dumped
+    assert rows[1] == ['p1', 'Léon', 1035.66, 'Léon, Lee', '{"a": 1}', '2026-09-16 00:00:00']
+    assert rows[2] == ['p2', 'Johannes', '', '', '', '']
+
+    class FakeWorksheet:
+        def __init__(self, initial_rows, fail_on_update=False):
+            self.rows = initial_rows
+            self.fail_on_update = fail_on_update
+            self.clear_called = False
+            self.batch_cleared = []
+
+        def get_all_values(self):
+            return list(self.rows)
+
+        def clear(self):
+            self.clear_called = True
+
+        def update(self, values=None, range_name='A1'):
+            if self.fail_on_update:
+                raise RuntimeError("API 400")
+            self.rows = values
+
+        def batch_clear(self, ranges):
+            self.batch_cleared.extend(ranges)
+
+    # Bij foutieve update mag oude inhoud nooit gewist worden
+    ws_fail = FakeWorksheet([['a', 'b'], ['1', '2']], fail_on_update=True)
+    with pytest.raises(RuntimeError):
+        db._safe_replace_worksheet(ws_fail, [['x', 'y'], ['3', '4']])
+    assert ws_fail.clear_called is False
+    assert ws_fail.batch_cleared == []
+    assert ws_fail.rows == [['a', 'b'], ['1', '2']]
+
+    # Bij krimpende update (5x4 -> 3x3) worden overtollige rijen en kolommen achteraf opgeruimd
+    ws_shrink = FakeWorksheet([['a', 'b', 'c', 'd']] * 5, fail_on_update=False)
+    ok = db._safe_replace_worksheet(ws_shrink, [['h1', 'h2', 'h3'], ['1', '2', '3'], ['4', '5', '6']])
+    assert ok is True
+    assert ws_shrink.clear_called is False
+    assert ws_shrink.batch_cleared == ['A4:D5', 'D1:D3']
+
+
+def test_home_calculate_stats_rounds_elo_consistently():
+    from tabs.tab_home import calculate_stats
+
+    players_df = pd.DataFrame([
+        {'speler_naam': 'Johannes', 'rating': 1035.66},
+        {'speler_naam': 'Bernd', 'rating': 1031.70},
+        {'speler_naam': 'Sander', 'rating': 1065.45},
+    ])
+    # 1) Fallback zonder wedstrijden rondt correct af naar dichtstbijzijnde integer
+    fallback_stats = calculate_stats(players_df, pd.DataFrame())
+    fb_map = dict(zip(fallback_stats['Speler'], fallback_stats['ELO']))
+    assert fb_map['Johannes'] == 1036
+    assert fb_map['Bernd'] == 1032
+    assert fb_map['Sander'] == 1065
+
+    # 2) Seizoens-ELO uit elo_df rondt ook af (1035.66 -> 1036, 1031.70 -> 1032)
+    matches_df = pd.DataFrame([
+        {
+            'match_id': 'w1',
+            'timestamp': pd.Timestamp('2026-09-20 12:00:00'),
+            'thuis_1': 'Johannes', 'thuis_2': 'Bernd',
+            'uit_1': 'Sander', 'uit_2': 'Laura',
+            'thuis_score': 10, 'uit_score': 6,
+            'klinkers_thuis_1': 0, 'klinkers_thuis_2': 0, 'klinkers_uit_1': 0, 'klinkers_uit_2': 0,
+        }
+    ])
+    elo_df = pd.DataFrame([
+        {'match_id': 'w1', 'speler_naam': 'Johannes', 'rating': 1035.66, 'timestamp': pd.Timestamp('2026-09-20 12:00:00')},
+        {'match_id': 'w1', 'speler_naam': 'Bernd', 'rating': 1031.70, 'timestamp': pd.Timestamp('2026-09-20 12:00:00')},
+        {'match_id': 'w1', 'speler_naam': 'Sander', 'rating': 1065.45, 'timestamp': pd.Timestamp('2026-09-20 12:00:00')},
+    ])
+    season_stats = calculate_stats(
+        players_df,
+        matches_df,
+        elo_df=elo_df,
+        season_start=pd.Timestamp('2026-09-16 00:00:00'),
+        season_end=pd.Timestamp('2027-03-14 23:59:59'),
+    )
+    season_map = dict(zip(season_stats['Speler'], season_stats['ELO']))
+    assert season_map['Johannes'] == 1036
+    assert season_map['Bernd'] == 1032
+    assert season_map['Sander'] == 1065
+
+
