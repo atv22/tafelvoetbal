@@ -10,8 +10,6 @@ import zoneinfo
 import streamlit as st
 import firestore_service as db  # Use Firestore service
 
-K_FACTOR = 32
-
 # Lijst van spelers die we niet willen tonen in statistieken/ranglijsten (system players of test players)
 IGNORE_PLAYERS = [
     'niemandin', 'niemanduit', 'niemand', 'none', '', ' ',
